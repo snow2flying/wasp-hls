@@ -186,6 +186,33 @@ impl SourceBuffer {
         jsRemoveBuffer(self.id, 0., f64::INFINITY);
     }
 
+    /// SourceBuffers maintain a queue of planned operations such as push and remove to media
+    /// buffers.
+    ///
+    /// In some rare scenarios, we could be left in a situation where all previously scheduled
+    /// operations are cancelled, such as when one of them fails.
+    /// This method allows to empty that SourceBuffer's queue in such situations.
+    pub(super) fn clear_queue(&mut self) {
+        Logger::info(&format!(
+            "Buffer {} ({}): clearing queue.",
+            self.id, self.typ
+        ));
+        self.queue.clear();
+    }
+
+    /// Cancel the current operation and every remaining queued operation.
+    ///
+    /// This should be used when the underlying `SourceBuffer` has failed one
+    /// operation, making the rest of the planned queue unreliable.
+    ///
+    /// Contrary to `on_operation_end`, this intentionally does not trigger any
+    /// success-oriented side effects such as reflushes.
+    pub(super) fn cancel_current_operations(&mut self) -> Option<SourceBufferQueueElement> {
+        let current = self.queue.pop_front();
+        self.clear_queue();
+        current
+    }
+
     /// Indicate to this `SourceBuffer` that the last chronological segment has been pushed.
     pub(super) fn announce_last_segment_pushed(&mut self) {
         self.last_segment_pushed = true;

@@ -230,19 +230,24 @@ impl SegmentInventory {
         self.inventory = vec![];
     }
 
-    /// Once a segment has been succesfully pushed, you should call `validate_segment` with the
-    /// current `TimeRanges` object from the corresponding MSE `SourceBuffer` and the
-    /// `id` of the segment that has been pushed as arguments, to allow the `SegmentInventory` to
-    /// check the initial place of that segment in the buffer.
+    /// Once a segment push operation has finished, call this method with the
+    /// current `TimeRanges` object from the corresponding MSE `SourceBuffer`
+    /// and the `id` of the segment that had been announced before the push.
     ///
-    /// We talk here about a "correction" because the expected start and end of the segment can be
-    /// a little different from what the lower-level buffer advertise, this is what we're computing
-    /// here.
-    pub(super) fn validate_segment(
+    /// This allows the `SegmentInventory` to reconcile that announced segment
+    /// with the buffered ranges actually reported by the browser, whether the
+    /// push operation succeeded entirely or failed after partially appending
+    /// media data.
+    ///
+    /// We talk here about a "correction" because the expected start and end of
+    /// the segment can be a little different from what the lower-level buffer
+    /// advertises, this is what we're computing here.
+    pub(super) fn reconcile_push_result(
         &mut self,
         seg_id: u64,
         buffered: &JsTimeRanges,
         media_offset: f64,
+        success: bool,
     ) {
         self.synchronize(buffered, media_offset);
         let seg_idx = self
@@ -279,12 +284,21 @@ impl SegmentInventory {
                 });
 
         if media_range.is_none() {
-            let seg = self.inventory.get_mut(seg_idx).unwrap();
-            Logger::warn(&format!(
-                "SI: Buffered range of pushed segment not found (s:{}, e:{})",
-                seg.start, seg.end
-            ));
-            seg.validated = true;
+            let seg = self.inventory.get(seg_idx).unwrap();
+            if success {
+                Logger::warn(&format!(
+                    "SI: Buffered range of pushed segment not found (s:{}, e:{})",
+                    seg.start, seg.end
+                ));
+                let seg = self.inventory.get_mut(seg_idx).unwrap();
+                seg.validated = true;
+            } else {
+                Logger::info(&format!(
+                    "SI: Failed pushed {} segment not found in buffered ranges, removing it from inventory (s:{}, e:{})",
+                    self.media_type, seg.start, seg.end
+                ));
+                self.inventory.remove(seg_idx);
+            }
             return;
         }
         let (media_range_start, media_range_end) = media_range.unwrap();
@@ -393,15 +407,34 @@ impl SegmentInventory {
         let seg = self.inventory.get_mut(seg_idx).unwrap();
         seg.start += start_correction;
         seg.end += end_correction;
-        seg.last_buffered_start = seg.start;
-        seg.last_buffered_end = seg.end;
-        seg.validated = true;
 
         if f64::abs(start_correction) >= 0.05 || f64::abs(end_correction) >= 0.05 {
             Logger::debug(&format!(
                 "SI: corrected {} segment (s:{}, e:{}, cs:{}, ce:{})",
                 self.media_type, seg.start, seg.end, start_correction, end_correction
             ));
+        }
+
+        seg.validated = true;
+        seg.last_buffered_start = seg.start;
+        seg.last_buffered_end = seg.end;
+        if !success {
+            // Push operation failed, let's base ourselves on the current
+            // announced buffered time ranges here.
+            //
+            // In cases where the push operation succeeded, we don't synchronize
+            // right at validation time because there's a very small risk that
+            // the buffered time range is not up-to-date, in which case we might
+            // falsely consider it as garbage-collected by the browser.
+            // Having the same problem when the push operation failed is less
+            // problematic: reloading the segment in such rare conditions is not
+            // that much of an issue - and we would consequently prefer having
+            // the real buffered range sooner.
+            //
+            // TODO This might maybe be improved, as we still want the
+            // `SegmentInventory` to reflect as much as possible the real
+            // buffered time ranges, even when the operation failed.
+            self.synchronize(buffered, media_offset);
         }
     }
 
@@ -710,6 +743,7 @@ impl SegmentInventory {
 
                 if range_end <= curr_seg.last_buffered_start {
                     // That range is before the current segment
+                    // Go to the next range directly
                     return;
                 }
 

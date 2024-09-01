@@ -1,6 +1,19 @@
 import assertNever from "./assertNever";
 import logger from "./logger";
 
+/**
+ * Error raised for queued SourceBuffer operations that were never attempted
+ * because a previous SourceBuffer operation already failed.
+ */
+export class SourceBufferOperationCancelledError extends Error {
+  constructor() {
+    super(
+      "Queued SourceBuffer operation cancelled because a previous operation failed",
+    );
+    this.name = "SourceBufferOperationCancelledError";
+  }
+}
+
 /** List the "operations" a `QueuedSourceBuffer` might perform. */
 export enum SourceBufferOperation {
   /** Pushing new data to the `SourceBuffer`. */
@@ -226,6 +239,12 @@ export default class QueuedSourceBuffer {
 
     if (this._pendingTask !== null) {
       this._pendingTask.reject(error);
+    }
+    this._pendingTask = null;
+    const cancellationError = new SourceBufferOperationCancelledError();
+    while (this._queue.length > 0) {
+      const nextElement = this._queue.shift();
+      nextElement?.reject(cancellationError);
     }
   }
 
