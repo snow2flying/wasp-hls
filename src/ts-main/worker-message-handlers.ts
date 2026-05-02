@@ -692,7 +692,12 @@ export function onRebufferingEndedMessage(
     PLAYBACK_OBSERVATION_INTERVAL_REGULAR,
   );
   if (mediaElement.playbackRate === 0 && contentMetadata.wantedSpeed !== 0) {
-    mediaElement.playbackRate = contentMetadata.wantedSpeed;
+    try {
+      mediaElement.playbackRate = contentMetadata.wantedSpeed;
+    } catch (err) {
+      const error = err instanceof Error ? err : "Unknown Error";
+      logger.error("Unexpected error while changing the playback rate:", error);
+    }
   }
   if (contentMetadata.isRebuffering) {
     contentMetadata.isRebuffering = false;
