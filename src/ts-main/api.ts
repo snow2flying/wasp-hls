@@ -653,6 +653,8 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
    * Update the wanted playback speed, `1` meaning "regular" playback, `2`
    * meaning two times faster, `0.5` meaning playing at half the speed etc.
    *
+   * `speed` has to be a finite number.
+   *
    * @param {number} speed
    */
   public setSpeed(speed: number): void {
@@ -686,6 +688,9 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
       this.__contentMetadata__.mediaSourceId === null
     ) {
       throw new Error("No content is loaded");
+    }
+    if (!Number.isFinite(speed)) {
+      throw new RangeError("Invalid playback speed: expected a finite number.");
     }
 
     this.__contentMetadata__.wantedSpeed = speed;

@@ -53,7 +53,16 @@ impl Dispatcher {
         if let Some(pl_store) = self.playlist_store.as_mut() {
             let bandwidth = self.adaptive_selector.get_estimate();
             Logger::debug(&format!("Core: New bandwidth estimate: {}", bandwidth));
-            let actually_used_bandwidth = bandwidth / self.media_element_ref.wanted_speed();
+            let speed = self.media_element_ref.wanted_speed();
+            let actually_used_bandwidth = if speed.is_finite() && speed > 0.0 {
+                bandwidth / speed
+            } else {
+                // TODO: Revisit ABR behavior for non-positive playback rates if reverse playback
+                // becomes a first-class use case. The current pipeline remains forward-oriented,
+                // so negative rates should not currently alter bandwidth scaling. Non-finite
+                // rates are also ignored here defensively to avoid poisoning ABR decisions.
+                bandwidth
+            };
             let update = pl_store.update_curr_bandwidth(actually_used_bandwidth);
             self.handle_variant_update(update, false);
         }
