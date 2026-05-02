@@ -13,7 +13,7 @@ pub enum LoggerLevel {
     Debug = 4,
 }
 
-/// TODO Explore other logging functions implementations.
+// TODO Explore other logging functions implementations.
 
 pub struct Logger {}
 

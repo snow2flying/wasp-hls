@@ -651,7 +651,7 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
 
   /**
    * Update the wanted playback speed, `1` meaning "regular" playback, `2`
-   * meaning two times faster `0.5` meaning playing at half the speed etc.
+   * meaning two times faster, `0.5` meaning playing at half the speed etc.
    *
    * @param {number} speed
    */
@@ -700,7 +700,8 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
 
   /**
    * Returns the wanted playback speed, `1` meaning "regular" playback, `2`
-   * meaning two times faster `0.5` meaning playing at half the speed etc.
+   * meaning two times faster, `0.5` meaning playing at half the speed etc.
+   *
    * @returns {number}
    */
   public getSpeed(): number {

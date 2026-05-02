@@ -129,7 +129,7 @@ impl SourceBuffer {
     /// # Arguments
     ///
     /// * `data` - Actual data AND metadata on the segment you want to push. See
-    /// `MediaSegmentPushData` documentation for more information.
+    ///   `MediaSegmentPushData` documentation for more information.
     ///
     /// * `parse_time_info` - If set to `true`, the segment's data will be read before pushing it
     ///   to try recuperate its timing information. If it has been parsed with success, it will
@@ -160,10 +160,10 @@ impl SourceBuffer {
     /// # Arguments
     ///
     /// * `start` - Start time, in seconds, of the range of time which should be removed from the
-    /// `SourceBuffer`.
+    ///   `SourceBuffer`.
     ///
     /// * `end` - End time, in seconds, of the range of time which should be removed from the
-    /// `SourceBuffer`.
+    ///   `SourceBuffer`.
     pub(super) fn remove_buffer(&mut self, start: f64, end: f64) {
         self.was_used = true;
         self.queue

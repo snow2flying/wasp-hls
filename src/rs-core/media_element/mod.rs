@@ -56,10 +56,10 @@ pub(crate) struct MediaElementReference {
     audio_buffer: Option<source_buffers::SourceBuffer>,
 
     /// The wanted playback rate:
-    /// 1. == playback at "normal" speed
-    /// 2. == playback at two times the normal speed
-    /// -1. == playback in reverse direction but at normal speed
-    /// and so on
+    ///   - `1.` == playback at "normal" speed
+    ///   - `2.` == playback at two times the normal speed
+    ///   - `-1.` == playback in reverse direction but at normal speed
+    ///   - and so on
     wanted_speed: f64,
 
     /// Inventory of buffered segments present in the audio buffer.

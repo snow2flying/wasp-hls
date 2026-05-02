@@ -384,8 +384,9 @@ impl PlaylistStore {
     ///   - The given `MediaPlaylistPermanentId` is linked to some media which isn't linked to
     ///     a MediaPlaylist. In that condition, it is the MediaPlaylist linked to its Variant
     ///     stream that should be done.
+    ///
     /// Both are probably an error as a `MediaPlaylistPermanentId` should always identify a
-    /// `MediaPlaylist` .
+    /// `MediaPlaylist`.
     pub(crate) fn media_playlist_url(&self, wanted_id: &MediaPlaylistPermanentId) -> Option<&Url> {
         self.playlist.media_playlist_url(wanted_id)
     }

@@ -372,8 +372,9 @@ impl MultivariantPlaylist {
     ///   - The given `MediaPlaylistPermanentId` is linked to some media which isn't linked to
     ///     a MediaPlaylist. In that condition, it is the MediaPlaylist linked to its Variant
     ///     stream that should be done.
+    ///
     /// Both are probably an error as a `MediaPlaylistPermanentId` should always identify a
-    /// `MediaPlaylist` .
+    /// `MediaPlaylist`.
     pub(crate) fn media_playlist_url(&self, wanted_id: &MediaPlaylistPermanentId) -> Option<&Url> {
         match wanted_id.location() {
             MediaPlaylistUrlLocation::Variant => Some(self.variant(wanted_id.id())?.url()),
