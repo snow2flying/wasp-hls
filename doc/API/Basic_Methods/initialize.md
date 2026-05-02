@@ -24,18 +24,15 @@ const initializationPromise = player.initialize({
 ```
 
 - **arguments**:
-
   1. initObject `Object`: The properties required for initialization.
 
      This object should have the following properties present:
-
      - _workerUrl_ (`string`): URL to the Worker file, that you have hosted.
 
      - _wasmUrl_ (`string`): URL to the WebAssembly file, that you have
        hosted.
 
      It has one additional optional property:
-
      - _initialBandwidth_ (`number|undefined`): An initial bandwidth estimate,
        in bits per second, which will be relied on initially when starting to
        load the first content. If `undefined` or not set, the `WaspHlsPlayer`

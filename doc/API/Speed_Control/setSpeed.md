@@ -27,5 +27,4 @@ player.setSpeed(newSpeed);
 ```
 
 - **arguments**:
-
   1. _newSpeed_ `number`: The new playback speed to set.

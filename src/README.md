@@ -111,7 +111,6 @@ top to bottom:
   the user experience.
 
   The corresponding code runs in:
-
   - the `./ts-worker/` directory for the TypeScript part of the code
     (compiled into JavaScript once the library is built).
   - the `./rs-core/` directory for the Rust part of the code (compiled
@@ -136,7 +135,6 @@ top to bottom:
   code written in TypeScript, which is then compiled to JavaScript.
 
   That code is present in the following directories:
-
   - `./ts-main/` for the code running in the main thread, such as the
     API
   - `./ts-worker/` for the code running on the WebWorker

@@ -56,7 +56,6 @@ const player = new WaspHlsPlayer(videoElement, configObject);
 ```
 
 - **arguments**:
-
   1. _videoElement_ `HTMLVideoElement`: The `<video />` element on the page on
      which the content will play.
 

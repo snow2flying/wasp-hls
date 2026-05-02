@@ -50,7 +50,6 @@ player.setAudioTrack(trackId);
 ```
 
 - **arguments**:
-
   1. _trackId_ `number|null`: The wanted track's `id` property (see
      [`getAudioTrackList` method](./getAudioTrackList.md) and `audioTrackListUpdate`
      [event](../Player_Events.md).

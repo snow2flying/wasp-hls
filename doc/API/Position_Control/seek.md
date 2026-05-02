@@ -35,6 +35,5 @@ player.seek(newPosition);
 ```
 
 - **arguments**:
-
   1. _newPosition_ `string`: The new position to "seek" to, in playlist time in
      seconds.

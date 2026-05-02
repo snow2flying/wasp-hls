@@ -54,7 +54,6 @@ player.lockVariant(variantId);
 ```
 
 - **arguments**:
-
   1. _variantId_ `number`: The wanted variant's `id` property (see
      [`getVariantList` method](./getVariantList.md) and `variantListUpdate`
      [event](../Player_Events.md).

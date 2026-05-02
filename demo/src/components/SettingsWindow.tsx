@@ -6,7 +6,11 @@ import AudioTrackSetting from "./AudioTrackSetting";
 import SpeedSetting from "./SpeedSetting";
 import VariantSetting from "./VariantSetting";
 
-function SettingsWindow({ player }: { player: WaspHlsPlayer }): React.JSX.Element {
+function SettingsWindow({
+  player,
+}: {
+  player: WaspHlsPlayer;
+}): React.JSX.Element {
   const [speed, setSpeed] = React.useState(player.getSpeed());
   const [isAutoVariant, setIsAutoVariant] = React.useState(
     player.getLockedVariant() === null,

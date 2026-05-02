@@ -42,7 +42,6 @@ player.updateConfig(configUpdate);
 ```
 
 - **argument**:
-
   1. _configUpdate_ `Object`: Updates to combine with the previous configuration
      object. All properties unset or set to `undefined` will be let as they
      were before.

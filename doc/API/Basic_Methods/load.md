@@ -18,7 +18,6 @@ player.load(url, {
 ```
 
 - **arguments**:
-
   1. _url_ `string`: Url to the Multivariant Playlist of the content you want to
      play.
 
@@ -26,7 +25,6 @@ player.load(url, {
      loaded.
 
      Can contain the following keys:
-
      - `startType` (`number`|`object`|`undefined`): indicate a preferred
        starting position. See [the documentation page on loading a
        content](../Loading_a_content.md) for more information
