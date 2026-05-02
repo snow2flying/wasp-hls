@@ -15,7 +15,7 @@ export default React.memo(function ContentBar({
   player: WaspHlsPlayer;
   onSettingsClick: () => void;
   isSettingsOpened: boolean;
-}): JSX.Element {
+}): React.JSX.Element {
   const nameEltId = React.useId();
   const [url, setUrl] = React.useState<string>(
     "https://storage.googleapis.com/shaka-demo-assets/angel-one-hls/hls.m3u8",
@@ -90,7 +90,6 @@ export default React.memo(function ContentBar({
 });
 
 const DEFAULT_CONTENT_LIST = [
-  /* eslint-disable max-len */
   {
     name: "Angel One (fmp4, multi-audio, multi-variants)",
     url: "https://storage.googleapis.com/shaka-demo-assets/angel-one-hls/hls.m3u8",
@@ -103,7 +102,6 @@ const DEFAULT_CONTENT_LIST = [
     name: "HLS Bitmovin (fmp4, multi-variants, 4s segments)",
     url: "https://bitdash-a.akamaihd.net/content/MI201109210084_1/m3u8s-fmp4/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.m3u8",
   },
-  /* eslint-enable max-len */
 ];
 
 function ContentList({
@@ -149,11 +147,10 @@ function DownArrow({
 }: {
   onClick: () => void;
   isOpened: boolean;
-}): JSX.Element {
+}): React.JSX.Element {
   const className = isOpened
     ? "content-list-arrow active"
     : "content-list-arrow";
-  /* eslint-disable max-len */
   return (
     <span className="down-arrow-wrapper">
       <svg
@@ -172,7 +169,6 @@ function DownArrow({
         </g>
       </svg>
     </span>
-    /* eslint-enable max-len */
   );
 }
 
@@ -182,9 +178,8 @@ function SettingsButton({
 }: {
   onClick: () => void;
   isOpened: boolean;
-}): JSX.Element {
+}): React.JSX.Element {
   const className = isOpened ? "settings-button active" : "settings-button";
-  /* eslint-disable max-len */
   return (
     <span className="settings-btn-wrapper">
       <svg className={className} onClick={onClick} viewBox="0 -0.5 21 21">
@@ -198,5 +193,4 @@ function SettingsButton({
       </svg>
     </span>
   );
-  /* eslint-enable max-len */
 }

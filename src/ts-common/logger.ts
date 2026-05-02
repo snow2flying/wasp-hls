@@ -65,7 +65,6 @@ export class Logger extends EventEmitter<LoggerEvents> {
       level < 0 || level > LoggerLevel.Debug ? LoggerLevel.None : level;
     this._currentLevel = actualLevel;
 
-    /* eslint-disable no-invalid-this */
     /* eslint-disable no-console */
     this.error =
       actualLevel >= LoggerLevel.Error ? console.error.bind(console) : noop;
@@ -76,7 +75,6 @@ export class Logger extends EventEmitter<LoggerEvents> {
     this.debug =
       actualLevel >= LoggerLevel.Debug ? console.debug.bind(console) : noop;
     /* eslint-enable no-console */
-    /* eslint-enable no-invalid-this */
 
     this.trigger("onLogLevelChange", actualLevel);
   }

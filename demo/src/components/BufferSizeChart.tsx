@@ -63,7 +63,7 @@ function BufferSizeChart({
   data,
 }: {
   data: Array<{ date: number; value: number }>;
-}): JSX.Element {
+}): React.JSX.Element {
   const canvasEl = useRef<HTMLCanvasElement>(null);
   const canvasCtx = useRef<CanvasRenderingContext2D | null>(null);
   const currentMaxSize = useRef<number>(MINIMUM_MAX_BUFFER_SIZE);

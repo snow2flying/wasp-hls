@@ -8,9 +8,8 @@ export default React.memo(function FullScreenButton({
   disabled: boolean;
   isFullScreen: boolean;
   onClick: () => void;
-}): JSX.Element {
+}): React.JSX.Element {
   // Shamefully copied from some other website
-  /* eslint-disable max-len */
   const svg = isFullScreen ? (
     <svg width="100%" height="100%" viewBox="0 0 20 20" x="0px" y="0px">
       <g>
@@ -24,7 +23,6 @@ export default React.memo(function FullScreenButton({
       </g>
     </svg>
   );
-  /* eslint-enable max-len */
   return (
     <button
       disabled={disabled}

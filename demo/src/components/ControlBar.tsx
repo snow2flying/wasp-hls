@@ -39,7 +39,7 @@ export default React.memo(function ControlBar({
 
   // TODO it's weird to have a reference to the control bar's parent
   playerContainerRef: React.MutableRefObject<HTMLDivElement | null>;
-}): JSX.Element {
+}): React.JSX.Element {
   const [volume, setVolume] = React.useState(player.videoElement.volume);
   const [position, setPosition] = React.useState<number | undefined>(undefined);
   const [minimumPosition, setMinimumPosition] = React.useState(0);

@@ -9,10 +9,9 @@ export default React.memo(function VolumeButton({
   onClick: () => void;
   volume: number;
   onVolumeChange: (volume: number) => void;
-}): JSX.Element {
+}): React.JSX.Element {
   let volumeSvg;
 
-  /* eslint-disable max-len */
   if (volume === 0) {
     // No Volume
     volumeSvg = (
@@ -40,7 +39,6 @@ export default React.memo(function VolumeButton({
       </svg>
     );
   }
-  /* eslint-enable max-len */
 
   return (
     <div className="volume-container">

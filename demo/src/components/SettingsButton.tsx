@@ -6,9 +6,8 @@ export default React.memo(function SettingsButton({
 }: {
   disabled: boolean;
   onClick: () => void;
-}): JSX.Element {
+}): React.JSX.Element {
   // Shamefully copied from some other website
-  /* eslint-disable max-len */
   return (
     <button
       disabled={disabled}
@@ -37,5 +36,4 @@ export default React.memo(function SettingsButton({
       </svg>
     </button>
   );
-  /* eslint-enable max-len */
 });

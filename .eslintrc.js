@@ -108,6 +108,7 @@ module.exports = {
     "@typescript-eslint/no-this-alias": "error",
     // Might be enabled in the future, for now this is too much work:
     "@typescript-eslint/no-unsafe-enum-comparison": ["off"],
+    "@typescript-eslint/no-duplicate-type-constituents": "off",
     "@typescript-eslint/no-unnecessary-boolean-literal-compare": "error",
     "@typescript-eslint/no-unnecessary-qualifier": "error",
     "@typescript-eslint/no-unnecessary-type-arguments": "error",

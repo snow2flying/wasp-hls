@@ -8,9 +8,8 @@ export default React.memo(function PlayButton({
   disabled: boolean;
   isPaused: boolean;
   onClick: () => void;
-}): JSX.Element {
+}): React.JSX.Element {
   // Shamefully copied from some other website
-  /* eslint-disable max-len */
   const svg = isPaused ? (
     <svg width="100%" height="100%" viewBox="0 0 20 20" x="0px" y="0px">
       <g>

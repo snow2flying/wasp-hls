@@ -14,7 +14,7 @@ export default React.memo(function VideoPlayer({
   player,
 }: {
   player: WaspHlsPlayer;
-}): JSX.Element {
+}): React.JSX.Element {
   const playerContainerRef = React.useRef<HTMLDivElement | null>(null);
   const [isInFullScreenMode, setIsInFullscreenMode] =
     React.useState(isFullscreen());

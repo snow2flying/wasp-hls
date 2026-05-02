@@ -14,7 +14,7 @@ function SpeedSetting({
 }: {
   speed: number;
   updateSpeed: (newSpeed: number) => void;
-}): JSX.Element {
+}): React.JSX.Element {
   const onSelectChange = React.useCallback(
     (evt: React.SyntheticEvent<HTMLSelectElement>) => {
       const index = +(evt.target as HTMLSelectElement).value;

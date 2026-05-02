@@ -5,8 +5,8 @@ import PlayerContainer from "./PlayerContainer.jsx";
 /** Unique identifier for each new PlayerContainer */
 let currentPlayerId = 1;
 
-export default function PlayerContainersWrapper(): JSX.Element {
-  const [players, setPlayers] = React.useState<JSX.Element[]>([]);
+export default function PlayerContainersWrapper(): React.JSX.Element {
+  const [players, setPlayers] = React.useState<React.JSX.Element[]>([]);
 
   const createPlayerContainer = React.useCallback((id: number) => {
     const newContainer = <PlayerContainer key={id} onClose={onClose} />;
@@ -20,7 +20,7 @@ export default function PlayerContainersWrapper(): JSX.Element {
     return onClose;
 
     function onClose(): void {
-      setPlayers((prevPlayers: JSX.Element[]) => {
+      setPlayers((prevPlayers: React.JSX.Element[]) => {
         const indexOf = prevPlayers.indexOf(newContainer);
         if (indexOf >= 0) {
           const newPlayers = prevPlayers.slice();

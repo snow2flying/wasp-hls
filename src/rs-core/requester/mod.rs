@@ -686,7 +686,7 @@ impl Requester {
         pos: usize,
         reason: RequestErrorReason,
         status: Option<u32>,
-    ) -> RetryResult {
+    ) -> RetryResult<'_> {
         let req = self.pending_segment_requests.get(pos).unwrap();
         let max_retry = self.config.segment_request_max_retry;
         if max_retry >= 0 && req.attempts_failed >= (max_retry as u32) {
@@ -730,7 +730,7 @@ impl Requester {
         reason: RequestErrorReason,
         status: Option<u32>,
         max_retry: i32,
-    ) -> RetryResult {
+    ) -> RetryResult<'_> {
         let req = self.pending_playlist_requests.get(pos).unwrap();
         if max_retry >= 0 && req.attempts_failed >= (max_retry as u32) {
             Logger::info(&format!(
@@ -779,7 +779,7 @@ impl Requester {
         request_id: RequestId,
         reason: RequestErrorReason,
         status: Option<u32>,
-    ) -> RetryResult {
+    ) -> RetryResult<'_> {
         let pos = self
             .pending_playlist_requests
             .iter_mut()

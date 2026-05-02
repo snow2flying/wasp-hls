@@ -2,7 +2,7 @@
   "compilerOptions": {
     "allowJs": true,
     "target": "es2020",
-    "lib": ["es2017", "WebWorker"],
+    "lib": ["es2020", "esnext", "WebWorker"],
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": false,
@@ -13,7 +13,7 @@
     "strictPropertyInitialization": true,
     "noUnusedParameters": true,
     "noUnusedLocals": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "typeRoots": ["./node_modules/@types", "./mse-in-worker.d.ts"]
   },
   "include": ["./*.ts", "./**/*.ts", "../ts-common/**/*.ts"]

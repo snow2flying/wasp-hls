@@ -12,7 +12,7 @@ export default React.memo(function ContentBar({
   player,
 }: {
   player: WaspHlsPlayer;
-}): JSX.Element {
+}): React.JSX.Element {
   return (
     <div className="settings">
       <SettingsTitle />
@@ -109,8 +109,8 @@ function NumberSetting({
 }: {
   configKey: keyof WaspHlsPlayerConfig;
   player: WaspHlsPlayer;
-  description: JSX.Element;
-}): JSX.Element {
+  description: React.JSX.Element;
+}): React.JSX.Element {
   const [canApply, setCanApply] = React.useState<boolean>(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const onApply = React.useCallback(() => {
@@ -160,7 +160,7 @@ function NumberSetting({
   );
 }
 
-function SettingsTitle(): JSX.Element {
+function SettingsTitle(): React.JSX.Element {
   return (
     <div className="settings-title">
       <div className="settings-title-text">Config</div>

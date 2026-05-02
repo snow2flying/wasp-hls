@@ -16,7 +16,7 @@ export default React.memo(function VolumeBar({
 }: {
   volume: number;
   onVolumeChange: (volume: number) => void;
-}): JSX.Element {
+}): React.JSX.Element {
   const element = React.useRef<HTMLDivElement>(null);
 
   const getMouseVolume = React.useCallback((event: { clientX: number }) => {

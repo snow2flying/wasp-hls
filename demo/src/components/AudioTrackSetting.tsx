@@ -14,7 +14,7 @@ function AudioTrackSetting({
   audioTrackList: AudioTrackInfo[];
   isAuto: boolean;
   updateAudioTrack: (t: AudioTrackInfo) => void;
-}): JSX.Element | null {
+}): React.JSX.Element | null {
   const onSelectChange = React.useCallback(
     (evt: React.SyntheticEvent<HTMLSelectElement>) => {
       if (audioTrackList.length <= 1) {

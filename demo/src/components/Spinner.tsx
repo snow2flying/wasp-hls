@@ -1,7 +1,6 @@
 import * as React from "react";
 
-export default React.memo(function Spinner(): JSX.Element {
-  /* eslint-disable max-len */
+export default React.memo(function Spinner(): React.JSX.Element {
   return (
     <svg
       width="24"
@@ -16,5 +15,4 @@ export default React.memo(function Spinner(): JSX.Element {
       />
     </svg>
   );
-  /* eslint-enable max-len */
 });

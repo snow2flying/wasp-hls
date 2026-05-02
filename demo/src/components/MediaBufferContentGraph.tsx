@@ -98,7 +98,7 @@ export default function BufferContentGraph({
 }: {
   videoElement: HTMLMediaElement;
   player: WaspHlsPlayer;
-}): JSX.Element {
+}): React.JSX.Element {
   const [position, setPosition] = useState<number | undefined>(undefined);
   const [minimumPosition, setMinimumPosition] = useState<number | undefined>(
     undefined,

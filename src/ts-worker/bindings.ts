@@ -941,10 +941,11 @@ export function appendBuffer(
     // TODO Check if mp4 first
     timeInfo = getTimeInformationFromMp4(segment, timescale);
   }
+  const transferableSegment = new Uint8Array(segment);
   try {
     if (sourceBufferObj.sourceBuffer !== null) {
       sourceBufferObj.sourceBuffer
-        .push(segment)
+        .push(transferableSegment)
         .then(() => {
           try {
             const timeRange = sourceBufferObj.sourceBuffer.getBufferedRanges();
@@ -982,7 +983,7 @@ export function appendBuffer(
           }
         });
     } else {
-      const buffer = segment.buffer;
+      const buffer = transferableSegment.buffer;
       postMessageToMain(
         {
           type: WorkerMessageType.AppendBuffer,

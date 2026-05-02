@@ -22,7 +22,7 @@ export default React.memo(function ProgressBar({
   bufferGap: number;
   minimumPosition: number;
   maximumPosition: number;
-}): JSX.Element {
+}): React.JSX.Element {
   const wrapperRef = React.useRef<HTMLDivElement>(null);
 
   const duration = Math.max(maximumPosition - minimumPosition, 0);

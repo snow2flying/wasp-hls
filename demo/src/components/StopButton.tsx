@@ -6,7 +6,7 @@ export default React.memo(function StopButton({
 }: {
   disabled: boolean;
   onClick: () => void;
-}): JSX.Element {
+}): React.JSX.Element {
   return (
     <button
       disabled={disabled}

@@ -1,7 +1,6 @@
 import * as React from "react";
 
-export default function Header(): JSX.Element {
-  /* eslint-disable max-len */
+export default function Header(): React.JSX.Element {
   return (
     <div className="nav-header">
       <div className="header-left">
@@ -24,11 +23,9 @@ export default function Header(): JSX.Element {
       </div>
     </div>
   );
-  /* eslint-enable max-len */
 }
 
-function GithubLogo(): JSX.Element {
-  /* eslint-disable max-len */
+function GithubLogo(): React.JSX.Element {
   return (
     <a href="https://github.com/peaBerberian/wasp-hls">
       <svg
@@ -41,5 +38,4 @@ function GithubLogo(): JSX.Element {
       </svg>
     </a>
   );
-  /* eslint-enable max-len */
 }

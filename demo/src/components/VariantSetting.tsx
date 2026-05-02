@@ -15,7 +15,7 @@ function VariantSetting({
   variantList: VariantInfo[];
   isAuto: boolean;
   updateVariant: (v: VariantInfo | undefined) => void;
-}): JSX.Element | null {
+}): React.JSX.Element | null {
   const onSelectChange = React.useCallback(
     (evt: React.SyntheticEvent<HTMLSelectElement>) => {
       if (variantList.length < 2) {
