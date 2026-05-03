@@ -348,6 +348,8 @@ most of them are not needed for playback):
   - [ ] CHANNELS: Not so hard to implement, but I've been too lazy to parse that
         specific format from the Multivariant Playlist for now
   - [ ] CHARACTERISTICS: Soon...
+  - [ ] BIT-DEPTH
+  - [ ] SAMPLE-RATE
   - [ ] FORCED: As the SUBTITLES TYPE is not handled yet, we don't have to use
         this one
   - [ ] INSTREAM-ID: As the CLOSED-CAPTIONS TYPE is not handled yet, we don't
@@ -365,6 +367,8 @@ most of them are not needed for playback):
   - [x] FRAME-RATE: Used to describe variant in variant selection API
   - [x] SCORE: Considered both to select a variant and to determine if a quality
         is better when "fast-switching".
+  - [ ] VIDEO-RANGE
+  - [ ] REQ-VIDEO-LAYOUT
   - [ ] STABLE-VARIANT-ID: Not really needed for now (only for content steering?)
   - [ ] AVERAGE-BANDWIDTH: Not used yet. I don't know if it's useful yet for us.
   - [ ] SUPPLEMENTAL-CODECS: In our web use case, I'm not sure if this is only
@@ -381,7 +385,8 @@ most of them are not needed for playback):
       doing some manual cleaning?
 - [ ] EXT-X-DEFINE: Seems rare enough, so may be supported if the time is
       taken...
-- [ ] EXT-X-MEDIA-SEQUENCE: Not sure of what this allows. To check...
+- [ ] EXT-X-MEDIA-SEQUENCE: For now, playlist are refreshed without needing
+      to identify the media sequence.
 - [ ] EXT-X-I-FRAMES-ONLY: To handle one day, perhaps (very low priority)
 - [ ] EXT-X-PART: low-latency related
 - [ ] EXT-X-PART-INF: low-latency related
@@ -396,11 +401,10 @@ most of them are not needed for playback):
 - [ ] EXT-X-SESSION-KEY
 - [ ] EXT-X-CONTENT-STEERING
 - [ ] EXT-X-KEY: decryption and related tags are very low priority
-- [ ] EXT-X-DISCONTINUITY: I'm under the impression in our scenario that it
-      only is useful to increment discontinuity sequences, which we have no
-      need for...
-- [ ] EXT-X-DISCONTINUITY-SEQUENCE: I don't think we need this, at least I
-      didn't encounter a case for it now that isn't handled by other tags.
+- [ ] EXT-X-DISCONTINUITY: For now discontinuities are handled in a reactive
+      way, not proactive, so I don't rely on this. To check if there are
+      advantages I did not see.
+- [ ] EXT-X-DISCONTINUITY-SEQUENCE: See `EXT-X-DISCONTINUITY` handling.
 
 ## Setup
 
