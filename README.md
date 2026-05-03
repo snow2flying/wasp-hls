@@ -196,8 +196,7 @@ It already has a lot of features but there's still some left work:
 Type of contents:
 
 - [x] Play HLS VoD contents
-- [x] Play HLS live contents _(for now require presence of
-      `EXT-X-PROGRAM-DATE-TIME` tag in media playlist)_
+- [x] Play HLS live contents
 - [ ] Proper support of HLS low-latency contents.
       _Priority: average_
 
@@ -280,11 +279,7 @@ MSE API and buffer handling:
       segments if they are needed again.
 - [x] Discontinuity handling: Automatically skip "holes" in the buffer where
       it is known that no segment will be pushed to fill them.
-- [x] Proper handling of `QuotaExceededError` after pushing segments (when low
-      on memory).
-      This is generally not needed as the browser should already handle some kind of
-      garbage collection but some platforms still may have issues when memory is
-      constrained.
+- [x] Handle `QuotaExceededError` after pushing segments when low on memory.
 - [ ] Freezing handling: Detect when the browser is not making progress in the
       content despite having media data to play and try to unstuck it.
       _Priority: average_
