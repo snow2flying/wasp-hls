@@ -38,6 +38,11 @@ Those characteristics are the same than for most other variant API, namely:
 
   `undefined` if unknown,
 
+- `videoRange` (`"SDR" | "HLG" | "PQ" | "UNKNOWN" | undefined`): The dynamic
+  range announced for the video data linked to that variant.
+
+  `undefined` if there's no video data.
+
 Note that `getLockedVariant` won't return its new value synchronously after a
 `lockVariant` call as it is is first processed by the `WaspHlsPlayer`'s
 WebWorker, an inherently asynchronous process. If you want to know when and if

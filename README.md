@@ -345,11 +345,11 @@ most of them are not needed for playback):
   - [x] LANGUAGE: In audio track selection API
   - [x] ASSOC-LANGUAGE: In audio track selection API
   - [x] NAME: In audio track selection API
-  - [ ] CHANNELS: Not so hard to implement, but I've been too lazy to parse that
+  - [x] CHANNELS: Not so hard to implement, but I've been too lazy to parse that
         specific format from the Multivariant Playlist for now
-  - [ ] CHARACTERISTICS: Soon...
-  - [ ] BIT-DEPTH
-  - [ ] SAMPLE-RATE
+  - [x] CHARACTERISTICS: Soon...
+  - [x] BIT-DEPTH
+  - [x] SAMPLE-RATE
   - [ ] FORCED: As the SUBTITLES TYPE is not handled yet, we don't have to use
         this one
   - [ ] INSTREAM-ID: As the CLOSED-CAPTIONS TYPE is not handled yet, we don't
@@ -367,7 +367,7 @@ most of them are not needed for playback):
   - [x] FRAME-RATE: Used to describe variant in variant selection API
   - [x] SCORE: Considered both to select a variant and to determine if a quality
         is better when "fast-switching".
-  - [ ] VIDEO-RANGE
+  - [x] VIDEO-RANGE
   - [ ] REQ-VIDEO-LAYOUT
   - [ ] STABLE-VARIANT-ID: Not really needed for now (only for content steering?)
   - [ ] AVERAGE-BANDWIDTH: Not used yet. I don't know if it's useful yet for us.

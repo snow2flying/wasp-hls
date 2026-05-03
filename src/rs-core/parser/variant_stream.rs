@@ -219,7 +219,7 @@ enum HdcpLevel {
 
 /// Indicate the dynamic range of the video track(s) of the concerned content.
 #[derive(Copy, Clone, Debug)]
-enum VideoDynamicRange {
+pub(crate) enum VideoDynamicRange {
     /// The video in the corresponding content is encoded using one of the
     /// following reference opto-electronic transfer characteristic functions
     /// specified by the TransferCharacteristics code point: [CICP] 1, 6, 13,
@@ -289,6 +289,10 @@ impl VariantStream {
 
     pub(crate) fn frame_rate(&self) -> Option<f64> {
         self.frame_rate
+    }
+
+    pub(crate) fn video_range(&self) -> VideoDynamicRange {
+        self.video_range
     }
 
     pub(crate) fn id(&self) -> u32 {

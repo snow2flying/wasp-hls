@@ -35,6 +35,22 @@ When set, the returned object has the following properties (same than for a
 
   For example, an AC-3 5.1 Rendition would have a `channels` attribute set to `6`.
 
+- `characteristics` (`Array.<string> | undefined`): Semantic characteristics
+  linked to that audio track, generally expressed as Uniform Type Identifiers
+  such as accessibility-related metadata or commentary flags.
+
+- `bitDepth` (`number | undefined`): If set, the bit depth in bits of the audio
+  samples for every rendition grouped into that audio track.
+
+- `sampleRate` (`number | undefined`): If set, the sample rate in hertz of the
+  audio samples for every rendition grouped into that audio track.
+
+- `bitDepths` (`Array.<number> | undefined`): Distinct bit depths in bits found
+  among the renditions grouped into that audio track.
+
+- `sampleRates` (`Array.<number> | undefined`): Distinct sample rates in hertz
+  found among the renditions grouped into that audio track.
+
 The current audio track should be known once the `audioTrackUpdate`
 [event](../Player_Events.md) is sent for the currently-loaded content, which
 should happen at least once before the content is in the `"Loaded"`

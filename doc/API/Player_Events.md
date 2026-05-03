@@ -300,6 +300,11 @@ When set to an object, it should contain the following keys:
 
   `undefined` if unknown,
 
+- `videoRange` (`"SDR" | "HLG" | "PQ" | "UNKNOWN" | undefined`): The dynamic
+  range announced for the video data linked to that variant.
+
+  `undefined` if there's no video data.
+
 You can also know at any time the same characteristics of the current variant
 by calling the [`getCurrentVariant`](./Variant_Selection/getCurrentVariant.md)
 method.
@@ -352,6 +357,11 @@ for the `variantUpdate` event):
 
   `undefined` if unknown,
 
+- `videoRange` (`"SDR" | "HLG" | "PQ" | "UNKNOWN" | undefined`): The dynamic
+  range announced for the video data linked to that variant.
+
+  `undefined` if there's no video data.
+
 If that change of lock status led to a change of currently-loaded variant,
 you'll also receive a `variantUpdate` event.
 
@@ -392,6 +402,11 @@ Each object should contain the following keys (same than for the
   combination in that variant, in bits per second.
 
   `undefined` if unknown,
+
+- `videoRange` (`"SDR" | "HLG" | "PQ" | "UNKNOWN" | undefined`): The dynamic
+  range announced for the video data linked to that variant.
+
+  `undefined` if there's no video data.
 
 You can also know at any time the list of available variants by calling the
 [`getVariantList`](./Variant_Selection/getVariantList.md) method.
@@ -437,6 +452,22 @@ When set to an object, it should contain the following keys:
 
   For example, an AC-3 5.1 Rendition would have a `channels` attribute set to `6`.
 
+- `characteristics` (`Array.<string> | undefined`): Semantic characteristics
+  linked to that audio track, generally expressed as Uniform Type Identifiers
+  such as accessibility-related metadata or commentary flags.
+
+- `bitDepth` (`number | undefined`): If set, the bit depth in bits of the audio
+  samples for every rendition grouped into that audio track.
+
+- `sampleRate` (`number | undefined`): If set, the sample rate in hertz of the
+  audio samples for every rendition grouped into that audio track.
+
+- `bitDepths` (`Array.<number> | undefined`): Distinct bit depths in bits found
+  among the renditions grouped into that audio track.
+
+- `sampleRates` (`Array.<number> | undefined`): Distinct sample rates in hertz
+  found among the renditions grouped into that audio track.
+
 You can also know at any time the same characteristics of the current audio
 track by calling the [`getCurrentAudioTrack`](./Audio_Track_Selection/getCurrentAudioTrack.md)
 method.
@@ -477,6 +508,22 @@ Each object should contain the following keys (same than for the
   present in any media data in that audio track.
 
   For example, an AC-3 5.1 Rendition would have a `channels` attribute set to `6`.
+
+- `characteristics` (`Array.<string> | undefined`): Semantic characteristics
+  linked to that audio track, generally expressed as Uniform Type Identifiers
+  such as accessibility-related metadata or commentary flags.
+
+- `bitDepth` (`number | undefined`): If set, the bit depth in bits of the audio
+  samples for every rendition grouped into that audio track.
+
+- `sampleRate` (`number | undefined`): If set, the sample rate in hertz of the
+  audio samples for every rendition grouped into that audio track.
+
+- `bitDepths` (`Array.<number> | undefined`): Distinct bit depths in bits found
+  among the renditions grouped into that audio track.
+
+- `sampleRates` (`Array.<number> | undefined`): Distinct sample rates in hertz
+  found among the renditions grouped into that audio track.
 
 You can also know at any time the list of available audio tracks by calling the
 [`getAudioTrackList`](./Audio_Track_Selection/getAudioTrackList.md) method.

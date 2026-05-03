@@ -15,4 +15,4 @@ pub(crate) use multi_variant_playlist::{
     MediaPlaylistPermanentId, MediaPlaylistUpdateError, MultivariantPlaylist,
     MultivariantPlaylistParsingError,
 };
-pub(crate) use variant_stream::{VariantStream, VideoResolution};
+pub(crate) use variant_stream::{VariantStream, VideoDynamicRange, VideoResolution};

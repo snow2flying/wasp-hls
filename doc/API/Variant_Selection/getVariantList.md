@@ -37,6 +37,11 @@ Each of those objects should contain the following keys:
 
   `undefined` if unknown,
 
+- `videoRange` (`"SDR" | "HLG" | "PQ" | "UNKNOWN" | undefined`): The dynamic
+  range announced for the video data linked to that variant.
+
+  `undefined` if there is no video data linked to that variant.
+
 That list of variants is known once the `variantListUpdate`
 [event](../Player_Events.md) is sent for the currently-loaded content, which
 should happen at least once before the content is in the `"Loaded"`
