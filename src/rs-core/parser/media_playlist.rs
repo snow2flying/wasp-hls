@@ -129,6 +129,8 @@ impl InitSegmentInfo {
 /// Information linked to a single media segment.
 #[derive(Clone, Debug)]
 pub(crate) struct MediaSegmentInfo {
+    /// Media sequence number identifying this segment within the current playlist lineage.
+    sequence: u32,
     /// Information on the time boundaries of that segment.
     ///
     /// It should be exclusive to the time boundaries of all other segments in this Media Playlist.
@@ -140,6 +142,11 @@ pub(crate) struct MediaSegmentInfo {
 }
 
 impl MediaSegmentInfo {
+    /// Media sequence number identifying this segment within the current playlist lineage.
+    pub(crate) fn sequence(&self) -> u32 {
+        self.sequence
+    }
+
     /// First presentation time the segment contains media data for, in seconds.
     pub(crate) fn start(&self) -> f64 {
         self.time_info.start()
@@ -168,6 +175,37 @@ impl MediaSegmentInfo {
     /// URL at which this initialization segment should be requested.
     pub(crate) fn url(&self) -> &Url {
         &self.url
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct MediaPlaylistUpdateSummary {
+    previous_first_sequence: u32,
+    previous_segment_count: usize,
+    dropped_segments: usize,
+    retained_segments: usize,
+    appended_segments: usize,
+}
+
+impl MediaPlaylistUpdateSummary {
+    pub(crate) fn previous_first_sequence(&self) -> u32 {
+        self.previous_first_sequence
+    }
+
+    pub(crate) fn previous_segment_count(&self) -> usize {
+        self.previous_segment_count
+    }
+
+    pub(crate) fn dropped_segments(&self) -> usize {
+        self.dropped_segments
+    }
+
+    pub(crate) fn retained_segments(&self) -> usize {
+        self.retained_segments
+    }
+
+    pub(crate) fn appended_segments(&self) -> usize {
+        self.appended_segments
     }
 }
 
@@ -262,6 +300,9 @@ pub struct MediaPlaylist {
     segment_list: SegmentList,
     /// URL at which this Media Playlist may be updated.
     url: Url,
+    /// Summary of the latest refresh against the previous playlist if this playlist came from
+    /// an update and not an initial parse.
+    update_summary: Option<MediaPlaylistUpdateSummary>,
     // TODO
     // pub server_control: ServerControl,
     // pub part_inf: Option<f64>,
@@ -453,6 +494,7 @@ impl MediaPlaylist {
                 };
                 if let Some(duration) = next_segment_duration {
                     let seg = MediaSegmentInfo {
+                        sequence: 0,
                         time_info: SegmentTimeInfo::new(curr_start_time, duration),
                         byte_range: next_segment_byte_range,
                         url: seg_url,
@@ -474,7 +516,10 @@ impl MediaPlaylist {
                             byte_range,
                         });
                     }
-                    media_segments.push(seg);
+                    media_segments.push(MediaSegmentInfo {
+                        sequence: media_sequence + media_segments.len() as u32,
+                        ..seg
+                    });
                     curr_start_time += duration;
                     next_segment_duration = None;
                     next_segment_byte_range = None;
@@ -500,6 +545,9 @@ impl MediaPlaylist {
         if playlist_type == PlaylistNature::Unknown && !end_list {
             playlist_type = PlaylistNature::Live;
         }
+        let update_summary = prev_playlist.and_then(|prev| {
+            summarize_media_playlist_update(prev, media_sequence, media_segments.as_slice())
+        });
         Ok(MediaPlaylist {
             version,
             independent_segments,
@@ -511,6 +559,7 @@ impl MediaPlaylist {
             i_frames_only,
             segment_list: SegmentList::new(maps_info, media_segments),
             url,
+            update_summary,
             // TODO
             // server_control,
             // part_inf,
@@ -579,6 +628,10 @@ impl MediaPlaylist {
         self.target_duration as f64
     }
 
+    pub(crate) fn media_sequence(&self) -> u32 {
+        self.media_sequence
+    }
+
     /// Returns the start time of the first media segment referenced in that `MediaPlaylist`, in
     /// seconds.
     pub(crate) fn beginning(&self) -> Option<f64> {
@@ -611,6 +664,25 @@ impl MediaPlaylist {
     /// the last chronological one.
     pub(crate) fn is_ended(&self) -> bool {
         self.end_list
+    }
+
+    pub(crate) fn update_summary(&self) -> Option<&MediaPlaylistUpdateSummary> {
+        self.update_summary.as_ref()
+    }
+
+    pub(crate) fn first_sequence(&self) -> Option<u32> {
+        self.segment_list.media().first().map(|s| s.sequence())
+    }
+
+    pub(crate) fn last_sequence(&self) -> Option<u32> {
+        self.segment_list.media().last().map(|s| s.sequence())
+    }
+
+    pub(crate) fn contains_sequence(&self, sequence: u32) -> bool {
+        match (self.first_sequence(), self.last_sequence()) {
+            (Some(first), Some(last)) => first <= sequence && sequence <= last,
+            _ => false,
+        }
     }
 
     /// Return Mime-type associated to this MediaPlaylist.
@@ -661,4 +733,69 @@ impl MediaPlaylist {
     fn extension(&self) -> Option<&str> {
         self.segment_list.media().first().map(|s| s.url.extension())
     }
+}
+
+fn summarize_media_playlist_update(
+    prev_playlist: &MediaPlaylist,
+    new_media_sequence: u32,
+    new_segments: &[MediaSegmentInfo],
+) -> Option<MediaPlaylistUpdateSummary> {
+    let prev_segments = prev_playlist.segment_list.media();
+    let previous_first_sequence = prev_playlist.media_sequence();
+    let previous_segment_count = prev_segments.len();
+
+    if previous_segment_count == 0 {
+        return Some(MediaPlaylistUpdateSummary {
+            previous_first_sequence,
+            previous_segment_count,
+            dropped_segments: 0,
+            retained_segments: 0,
+            appended_segments: new_segments.len(),
+        });
+    }
+
+    let new_last_sequence = new_segments.last().map(|s| s.sequence());
+    let prev_last_sequence = prev_segments.last().map(|s| s.sequence()).unwrap();
+    let retained_segments = new_last_sequence
+        .map(|new_last| {
+            if new_media_sequence > prev_last_sequence || new_last < previous_first_sequence {
+                0
+            } else {
+                (u32::min(prev_last_sequence, new_last)
+                    - u32::max(previous_first_sequence, new_media_sequence)
+                    + 1) as usize
+            }
+        })
+        .unwrap_or(0);
+    let dropped_segments = previous_segment_count.saturating_sub(retained_segments);
+    let appended_segments = new_segments.len().saturating_sub(retained_segments);
+
+    if retained_segments > 0 {
+        let overlap_start = u32::max(previous_first_sequence, new_media_sequence);
+        let overlap_end = u32::min(prev_last_sequence, new_last_sequence.unwrap());
+        for sequence in overlap_start..=overlap_end {
+            let prev_idx = (sequence - previous_first_sequence) as usize;
+            let new_idx = (sequence - new_media_sequence) as usize;
+            let prev_seg = &prev_segments[prev_idx];
+            let new_seg = &new_segments[new_idx];
+            if prev_seg.url() != new_seg.url() || prev_seg.byte_range() != new_seg.byte_range() {
+                Logger::warn(&format!(
+                    "Parser: Media playlist refresh mismatch for sequence {} (prev: {} {:?}, new: {} {:?})",
+                    sequence,
+                    prev_seg.url().get_ref(),
+                    prev_seg.byte_range(),
+                    new_seg.url().get_ref(),
+                    new_seg.byte_range()
+                ));
+            }
+        }
+    }
+
+    Some(MediaPlaylistUpdateSummary {
+        previous_first_sequence,
+        previous_segment_count,
+        dropped_segments,
+        retained_segments,
+        appended_segments,
+    })
 }

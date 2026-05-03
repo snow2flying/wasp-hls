@@ -722,6 +722,33 @@ impl Dispatcher {
         };
         self.playlist_refresh_timers
             .set_timer(playlist_id.clone(), refresh_interval);
+        if let Some(media_type) = playlist_store.curr_media_type_for(&playlist_id) {
+            if let Some(playlist) = playlist_store.curr_media_playlist(media_type) {
+                if let Some(summary) = playlist.update_summary() {
+                    Logger::debug(&format!(
+                        "Core: Media playlist refresh seq {} -> {} (prev_count: {}, dropped: {}, retained: {}, appended: {})",
+                        summary.previous_first_sequence(),
+                        playlist.media_sequence(),
+                        summary.previous_segment_count(),
+                        summary.dropped_segments(),
+                        summary.retained_segments(),
+                        summary.appended_segments(),
+                    ));
+                }
+                let stale_request_ids = self.segment_request_contexts.ids_matching(|context| {
+                    matches!(
+                        context,
+                        PendingSegmentRequest::Media {
+                            media_type: req_media_type,
+                            sequence,
+                            ..
+                        } if *req_media_type == media_type
+                            && !playlist.contains_sequence(*sequence)
+                    )
+                });
+                self.requester.abort_segments(&stale_request_ids);
+            }
+        }
 
         if let Some(duration) = playlist_store.segment_target_duration() {
             let mut min_buffer_time = f64::max(3., duration - 1.);
@@ -933,7 +960,7 @@ impl Dispatcher {
                             .insert(PendingSegmentRequest::Media {
                                 media_type,
                                 time_info: seg.time_info().clone(),
-
+                                sequence: seg.sequence(),
                                 quality_context: seg_info.1,
                             });
                     self.requester
@@ -1048,6 +1075,7 @@ impl Dispatcher {
                 media_type: req_media_type,
                 time_info,
                 quality_context,
+                ..
             } => {
                 if Some(req_media_type) != media_type {
                     Logger::warn("Loaded media segment with mismatched media type context.");

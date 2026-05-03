@@ -702,6 +702,41 @@ impl Requester {
         aborted_requests
     }
 
+    pub(crate) fn abort_segments(&mut self, request_ids: &[u32]) {
+        if request_ids.is_empty() {
+            return;
+        }
+
+        let mut i = 0;
+        let mut aborted_pending = false;
+        while i < self.pending_segment_requests.len() {
+            let next_req = &self.pending_segment_requests[i];
+            if request_ids.contains(&next_req.caller_id) {
+                log_segment_abort(next_req);
+                aborted_pending = true;
+                jsAbortRequest(next_req.host_id);
+                self.pending_segment_requests.remove(i);
+            } else {
+                i += 1;
+            }
+        }
+
+        i = 0;
+        while i < self.segment_waiting_queue.len() {
+            let next_req = &self.segment_waiting_queue[i];
+            if request_ids.contains(&next_req.caller_id) {
+                log_segment_abort(next_req);
+                self.segment_waiting_queue.remove(i);
+            } else {
+                i += 1;
+            }
+        }
+
+        if aborted_pending {
+            self.check_segment_queue();
+        }
+    }
+
     fn end_pending_request(&mut self, host_id: RequestId) -> Option<FinishedRequestType> {
         if let Some(res) = self.end_pending_segment_request(host_id) {
             Some(FinishedRequestType::Segment(res))
