@@ -118,22 +118,71 @@ pub(crate) enum VariableDefinition {
     QueryParam { name: String },
 }
 
+pub(crate) struct AttributeListIter<'a> {
+    line: &'a str,
+    offset: usize,
+}
+
+pub(crate) struct AttributeListItem<'a> {
+    pub(crate) name: &'a str,
+    pub(crate) value_start_offset: usize,
+}
+
+impl<'a> AttributeListIter<'a> {
+    pub(crate) fn new(line: &'a str, offset: usize) -> Self {
+        Self { line, offset }
+    }
+}
+
+impl<'a> Iterator for AttributeListIter<'a> {
+    type Item = AttributeListItem<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.offset >= self.line.len() {
+            return None;
+        }
+        let idx = self.line[self.offset..].find('=')?;
+        let item = AttributeListItem {
+            name: &self.line[self.offset..self.offset + idx],
+            value_start_offset: self.offset + idx + 1,
+        };
+        self.offset = skip_attribute_list_value(self.line, item.value_start_offset) + 1;
+        Some(item)
+    }
+}
+
+pub(crate) fn parse_substituted_quoted_string(
+    line: &str,
+    value_start_offset: usize,
+    variable_store: &VariableStore,
+) -> Result<String, VariableDefinitionError> {
+    let (parsed, _) = parse_quoted_string(line, value_start_offset);
+    let parsed = parsed.map_err(|_| VariableDefinitionError::InvalidDefinition)?;
+    Ok(variable_store.substitute(parsed)?.into_owned())
+}
+
+pub(crate) fn parse_substituted_comma_separated_list(
+    line: &str,
+    value_start_offset: usize,
+    variable_store: &VariableStore,
+) -> Result<Vec<String>, VariableDefinitionError> {
+    let (parsed, _) = parse_comma_separated_list(line, value_start_offset);
+    let parsed = parsed.map_err(|_| VariableDefinitionError::InvalidDefinition)?;
+    parsed
+        .into_iter()
+        .map(|value| variable_store.substitute(value).map(|v| v.into_owned()))
+        .collect()
+}
+
 pub(crate) fn parse_define_tag(line: &str) -> Result<VariableDefinition, VariableDefinitionError> {
     let mut name: Option<String> = None;
     let mut value: Option<String> = None;
     let mut import: Option<String> = None;
     let mut query_param: Option<String> = None;
-    let mut offset = "#EXT-X-DEFINE:".len();
-
-    while offset < line.len() {
-        let Some(idx) = line[offset..].find('=') else {
-            return Err(VariableDefinitionError::InvalidDefinition);
-        };
-        let attr_name = &line[offset..offset + idx];
-        let (parsed_value, end_offset) = parse_quoted_string(line, offset + idx + 1);
-        offset = end_offset + 1;
+    for item in AttributeListIter::new(line, "#EXT-X-DEFINE:".len()) {
+        let (parsed_value, _) = parse_quoted_string(line, item.value_start_offset);
         let parsed_value = parsed_value.map_err(|_| VariableDefinitionError::InvalidDefinition)?;
-        match attr_name {
+        match item.name {
             "NAME" => name = Some(parsed_value.to_owned()),
             "VALUE" => value = Some(parsed_value.to_owned()),
             "IMPORT" => import = Some(parsed_value.to_owned()),
@@ -226,7 +275,7 @@ fn parse_query_params(url: &Url) -> HashMap<String, String> {
 }
 
 fn percent_decode(input: &str) -> Result<String, VariableDefinitionError> {
-    let mut result = String::with_capacity(input.len());
+    let mut result = Vec::with_capacity(input.len());
     let bytes = input.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
@@ -236,14 +285,14 @@ fn percent_decode(input: &str) -> Result<String, VariableDefinitionError> {
             }
             let high = from_hex(bytes[i + 1])?;
             let low = from_hex(bytes[i + 2])?;
-            result.push((high * 16 + low) as char);
+            result.push(high * 16 + low);
             i += 3;
         } else {
-            result.push(bytes[i] as char);
+            result.push(bytes[i]);
             i += 1;
         }
     }
-    Ok(result)
+    String::from_utf8(result).map_err(|_| VariableDefinitionError::InvalidPercentEncoding)
 }
 
 fn from_hex(byte: u8) -> Result<u8, VariableDefinitionError> {

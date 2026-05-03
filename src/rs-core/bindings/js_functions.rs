@@ -871,6 +871,7 @@ impl From<MultivariantPlaylistParsingError> for MultivariantPlaylistParsingError
             | MultivariantPlaylistParsingError::UnableToReadLine
             | MultivariantPlaylistParsingError::VariableDefinition(_)
             | MultivariantPlaylistParsingError::Unknown => {
+                // TODO: Add explicit `EXT-X-DEFINE`-related parse error codes to the wasm/TS API.
                 MultivariantPlaylistParsingErrorCode::Unknown
             }
         }
@@ -897,7 +898,10 @@ impl From<MediaPlaylistUpdateError> for MediaPlaylistParsingErrorCode {
             }
             MediaPlaylistUpdateError::ParsingError(
                 MediaPlaylistParsingError::VariableDefinition(_),
-            ) => MediaPlaylistParsingErrorCode::Unknown,
+            ) => {
+                // TODO: Add explicit `EXT-X-DEFINE`-related parse error codes to the wasm/TS API.
+                MediaPlaylistParsingErrorCode::Unknown
+            }
             MediaPlaylistUpdateError::NotFound => MediaPlaylistParsingErrorCode::Unknown,
         }
     }

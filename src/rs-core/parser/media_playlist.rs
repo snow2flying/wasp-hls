@@ -9,8 +9,9 @@ use super::{
     multi_variant_playlist::MediaPlaylistContext,
     utils::{
         parse_byte_range, parse_decimal_floating_point, parse_decimal_integer, parse_define_tag,
-        parse_enumerated_string, parse_iso_8601_date, parse_quoted_string, parse_start_attribute,
-        StartAttribute, VariableDefinition, VariableDefinitionError, VariableStore,
+        parse_enumerated_string, parse_iso_8601_date, parse_start_attribute,
+        parse_substituted_quoted_string, AttributeListIter, StartAttribute, VariableDefinition,
+        VariableDefinitionError, VariableStore,
     },
 };
 
@@ -371,52 +372,41 @@ impl MediaPlaylist {
                     "-X-MAP" => {
                         let mut map_info_url: Option<Url> = None;
                         let mut map_info_byte_range: Option<ByteRange> = None;
-                        let mut base_offset = colon_idx + 1;
-                        loop {
-                            if base_offset >= str_line.len() {
-                                break;
-                            }
-                            match str_line[base_offset..].find('=') {
-                                None => {
-                                    Logger::warn("Attribute Name not followed by equal sign");
-                                    break;
+                        for item in AttributeListIter::new(&str_line, colon_idx + 1) {
+                            match item.name {
+                                "URI" => {
+                                    let val = parse_substituted_quoted_string(
+                                        &str_line,
+                                        item.value_start_offset,
+                                        &variable_store,
+                                    )?;
+                                    let init_url = Url::new(val);
+                                    let init_url = if init_url.is_absolute() {
+                                        init_url
+                                    } else {
+                                        Url::from_relative(playlist_base_url, init_url)
+                                    };
+                                    map_info_url = Some(init_url);
                                 }
-                                Some(idx) => match &str_line[base_offset..base_offset + idx] {
-                                    "URI" => {
-                                        let (parsed, end_offset) =
-                                            parse_quoted_string(&str_line, base_offset + idx + 1);
-                                        base_offset = end_offset + 1;
-                                        if let Ok(val) = parsed {
-                                            let val = variable_store.substitute(val)?;
-                                            let init_url = Url::new(val.into_owned());
-                                            let init_url = if init_url.is_absolute() {
-                                                init_url
-                                            } else {
-                                                Url::from_relative(playlist_base_url, init_url)
-                                            };
-                                            map_info_url = Some(init_url);
+                                "BYTERANGE" => {
+                                    let val = parse_substituted_quoted_string(
+                                        &str_line,
+                                        item.value_start_offset,
+                                        &variable_store,
+                                    )?;
+                                    match parse_byte_range(&val, 0, None) {
+                                        Some(br) => {
+                                            current_byte = Some(br.last_byte + 1);
+                                            map_info_byte_range = Some(br);
                                         }
-                                    }
-
-                                    "BYTERANGE" => {
-                                        let (parsed, end_offset) =
-                                            parse_quoted_string(&str_line, base_offset + idx + 1);
-                                        base_offset = end_offset + 1;
-                                        if let Ok(val) = parsed {
-                                            let val = variable_store.substitute(val)?;
-                                            match parse_byte_range(&val, 0, None) {
-                                                Some(br) => {
-                                                    current_byte = Some(br.last_byte + 1);
-                                                    map_info_byte_range = Some(br);
-                                                }
-                                                _ => return Err(
-                                                    MediaPlaylistParsingError::UnparsableByteRange,
-                                                ),
-                                            };
+                                        _ => {
+                                            return Err(
+                                                MediaPlaylistParsingError::UnparsableByteRange,
+                                            );
                                         }
-                                    }
-                                    _ => {}
-                                },
+                                    };
+                                }
+                                _ => {}
                             }
                         }
                         if let Some(url) = map_info_url {

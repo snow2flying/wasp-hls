@@ -2,8 +2,8 @@ use super::{
     media_playlist::MediaPlaylistParsingError,
     multi_variant_playlist::MediaPlaylistContext,
     utils::{
-        parse_comma_separated_list, parse_enumerated_string, parse_quoted_string,
-        skip_attribute_list_value, VariableStore,
+        parse_enumerated_string, parse_substituted_comma_separated_list,
+        parse_substituted_quoted_string, AttributeListIter, VariableStore,
     },
     MediaPlaylist,
 };
@@ -144,180 +144,132 @@ impl MediaTag {
         let mut bit_depth: Option<u32> = None;
         let mut sample_rate: Option<u32> = None;
 
-        let mut offset = "#EXT-X-MEDIA:".len();
-        loop {
-            if offset >= media_line.len() {
-                break;
-            }
-            match media_line[offset..].find('=') {
-                None => {
-                    Logger::warn("Attribute Name not followed by equal sign");
-                    break;
+        for item in AttributeListIter::new(media_line, "#EXT-X-MEDIA:".len()) {
+            match item.name {
+                "TYPE" => {
+                    let (parsed, end_offset) =
+                        parse_enumerated_string(media_line, item.value_start_offset);
+                    let _ = end_offset;
+                    match parsed {
+                        "AUDIO" => typ = Some(MediaTagType::Audio),
+                        "VIDEO" => typ = Some(MediaTagType::Video),
+                        "SUBTITLES" => typ = Some(MediaTagType::Subtitles),
+                        "CLOSED-CAPTIONS" => typ = Some(MediaTagType::ClosedCaptions),
+                        x => {
+                            Logger::warn(&format!("Unrecognized media type: {}", x));
+                            typ = Some(MediaTagType::Other);
+                        }
+                    };
                 }
-                Some(idx) => match &media_line[offset..offset + idx] {
-                    "TYPE" => {
-                        let (parsed, end_offset) =
-                            parse_enumerated_string(media_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        match parsed {
-                            "AUDIO" => typ = Some(MediaTagType::Audio),
-                            "VIDEO" => typ = Some(MediaTagType::Video),
-                            "SUBTITLES" => typ = Some(MediaTagType::Subtitles),
-                            "CLOSED-CAPTIONS" => typ = Some(MediaTagType::ClosedCaptions),
-                            x => {
-                                Logger::warn(&format!("Unrecognized media type: {}", x));
-                                typ = Some(MediaTagType::Other);
-                            }
-                        };
+                "URI" => {
+                    let parsed = parse_substituted_quoted_string(
+                        media_line,
+                        item.value_start_offset,
+                        variable_store,
+                    )
+                    .map_err(|_| MediaTagParsingError::Unknown)?;
+                    url = Some(Url::new(parsed));
+                }
+                "GROUP-ID" => {
+                    group_id = Some(
+                        parse_substituted_quoted_string(
+                            media_line,
+                            item.value_start_offset,
+                            variable_store,
+                        )
+                        .map_err(|_| MediaTagParsingError::Unknown)?,
+                    );
+                }
+                "LANGUAGE" => {
+                    language = Some(
+                        parse_substituted_quoted_string(
+                            media_line,
+                            item.value_start_offset,
+                            variable_store,
+                        )
+                        .map_err(|_| MediaTagParsingError::Unknown)?,
+                    );
+                }
+                "ASSOC-LANGUAGE" => {
+                    assoc_language = Some(
+                        parse_substituted_quoted_string(
+                            media_line,
+                            item.value_start_offset,
+                            variable_store,
+                        )
+                        .map_err(|_| MediaTagParsingError::Unknown)?,
+                    );
+                }
+                "NAME" => {
+                    name = Some(
+                        parse_substituted_quoted_string(
+                            media_line,
+                            item.value_start_offset,
+                            variable_store,
+                        )
+                        .map_err(|_| MediaTagParsingError::Unknown)?,
+                    );
+                }
+                "STABLE-RENDITION-ID" => {
+                    stable_rendition_id = Some(
+                        parse_substituted_quoted_string(
+                            media_line,
+                            item.value_start_offset,
+                            variable_store,
+                        )
+                        .map_err(|_| MediaTagParsingError::Unknown)?,
+                    );
+                }
+                "DEFAULT" => {
+                    default = true;
+                }
+                "AUTOSELECT" => {
+                    autoselect = true;
+                }
+                "FORCED" => {
+                    forced = true;
+                }
+                "CHANNELS" => {
+                    let val = parse_substituted_quoted_string(
+                        media_line,
+                        item.value_start_offset,
+                        variable_store,
+                    )
+                    .map_err(|_| MediaTagParsingError::Unknown)?;
+                    match val.split('/').next().unwrap_or("").parse::<u32>() {
+                        Ok(parsed_channels) => channels = Some(parsed_channels),
+                        Err(_) => Logger::warn("Unparsable CHANNELS value"),
                     }
-                    "URI" => {
-                        let (parsed, end_offset) =
-                            parse_quoted_string(media_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(parsed) = parsed {
-                            let parsed = variable_store
-                                .substitute(parsed)
-                                .map_err(|_| MediaTagParsingError::Unknown)?;
-                            url = Some(Url::new(parsed.into_owned()));
-                        } else {
-                            Logger::warn("Unparsable URI value");
-                        }
+                }
+                "CHARACTERISTICS" => {
+                    characteristics = parse_substituted_comma_separated_list(
+                        media_line,
+                        item.value_start_offset,
+                        variable_store,
+                    )
+                    .map_err(|_| MediaTagParsingError::Unknown)?;
+                    characteristics.sort();
+                    characteristics.dedup();
+                }
+                "BIT-DEPTH" => {
+                    let (parsed, end_offset) =
+                        parse_enumerated_string(media_line, item.value_start_offset);
+                    let _ = end_offset;
+                    match parsed.parse::<u32>() {
+                        Ok(val) => bit_depth = Some(val),
+                        Err(_) => Logger::warn("Unparsable BIT-DEPTH value"),
                     }
-                    "GROUP-ID" => {
-                        let (parsed, end_offset) =
-                            parse_quoted_string(media_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            let val = variable_store
-                                .substitute(val)
-                                .map_err(|_| MediaTagParsingError::Unknown)?;
-                            group_id = Some(val.into_owned());
-                        } else {
-                            Logger::warn("Unparsable GROUP-ID value");
-                        }
+                }
+                "SAMPLE-RATE" => {
+                    let (parsed, end_offset) =
+                        parse_enumerated_string(media_line, item.value_start_offset);
+                    let _ = end_offset;
+                    match parsed.parse::<u32>() {
+                        Ok(val) => sample_rate = Some(val),
+                        Err(_) => Logger::warn("Unparsable SAMPLE-RATE value"),
                     }
-                    "LANGUAGE" => {
-                        let (parsed, end_offset) =
-                            parse_quoted_string(media_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            let val = variable_store
-                                .substitute(val)
-                                .map_err(|_| MediaTagParsingError::Unknown)?;
-                            language = Some(val.into_owned());
-                        } else {
-                            Logger::warn("Unparsable LANGUAGE value");
-                        }
-                    }
-                    "ASSOC-LANGUAGE" => {
-                        let (parsed, end_offset) =
-                            parse_quoted_string(media_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            let val = variable_store
-                                .substitute(val)
-                                .map_err(|_| MediaTagParsingError::Unknown)?;
-                            assoc_language = Some(val.into_owned());
-                        } else {
-                            Logger::warn("Unparsable ASSOC-LANGUAGE value");
-                        }
-                    }
-                    "NAME" => {
-                        let (parsed, end_offset) =
-                            parse_quoted_string(media_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            let val = variable_store
-                                .substitute(val)
-                                .map_err(|_| MediaTagParsingError::Unknown)?;
-                            name = Some(val.into_owned());
-                        } else {
-                            Logger::warn("Unparsable NAME value");
-                        }
-                    }
-                    "STABLE-RENDITION-ID" => {
-                        let (parsed, end_offset) =
-                            parse_quoted_string(media_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            let val = variable_store
-                                .substitute(val)
-                                .map_err(|_| MediaTagParsingError::Unknown)?;
-                            stable_rendition_id = Some(val.into_owned());
-                        } else {
-                            Logger::warn("Unparsable STABLE-RENDITION-ID value");
-                        }
-                    }
-                    "DEFAULT" => {
-                        let end_offset = skip_attribute_list_value(media_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        default = true;
-                    }
-                    "AUTOSELECT" => {
-                        let end_offset = skip_attribute_list_value(media_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        autoselect = true;
-                    }
-                    "FORCED" => {
-                        let end_offset = skip_attribute_list_value(media_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        forced = true;
-                    }
-                    "CHANNELS" => {
-                        let (parsed, end_offset) =
-                            parse_quoted_string(media_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            let val = variable_store
-                                .substitute(val)
-                                .map_err(|_| MediaTagParsingError::Unknown)?;
-                            match val.split('/').next().unwrap_or("").parse::<u32>() {
-                                Ok(parsed_channels) => channels = Some(parsed_channels),
-                                Err(_) => Logger::warn("Unparsable CHANNELS value"),
-                            }
-                        } else {
-                            Logger::warn("Unparsable CHANNELS value");
-                        }
-                    }
-                    "CHARACTERISTICS" => {
-                        let (parsed, end_offset) =
-                            parse_comma_separated_list(media_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(vals) = parsed {
-                            let mut substituted_vals = Vec::with_capacity(vals.len());
-                            for value in vals {
-                                let value = variable_store
-                                    .substitute(value)
-                                    .map_err(|_| MediaTagParsingError::Unknown)?;
-                                substituted_vals.push(value.into_owned());
-                            }
-                            characteristics = substituted_vals;
-                            characteristics.sort();
-                            characteristics.dedup();
-                        } else {
-                            Logger::warn("Unparsable CHARACTERISTICS value");
-                        }
-                    }
-                    "BIT-DEPTH" => {
-                        let (parsed, end_offset) =
-                            parse_enumerated_string(media_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        match parsed.parse::<u32>() {
-                            Ok(val) => bit_depth = Some(val),
-                            Err(_) => Logger::warn("Unparsable BIT-DEPTH value"),
-                        }
-                    }
-                    "SAMPLE-RATE" => {
-                        let (parsed, end_offset) =
-                            parse_enumerated_string(media_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        match parsed.parse::<u32>() {
-                            Ok(val) => sample_rate = Some(val),
-                            Err(_) => Logger::warn("Unparsable SAMPLE-RATE value"),
-                        }
-                    }
-                    _ => offset = skip_attribute_list_value(media_line, offset + idx + 1) + 1,
-                },
+                }
+                _ => {}
             }
         }
 
