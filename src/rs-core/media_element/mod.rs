@@ -534,8 +534,12 @@ impl MediaElementReference {
                 };
                 if let Some(SourceBufferQueueElement::PushMedia((_, id))) = queue_elt {
                     if let Some(media_offset) = self.media_offset {
-                        self.audio_inventory
-                            .reconcile_push_result(id, &buffered, media_offset, success);
+                        self.audio_inventory.reconcile_push_result(
+                            id,
+                            &buffered,
+                            media_offset,
+                            success,
+                        );
                     }
                 }
             }
@@ -549,8 +553,12 @@ impl MediaElementReference {
                 };
                 if let Some(SourceBufferQueueElement::PushMedia((_, id))) = queue_elt {
                     if let Some(media_offset) = self.media_offset {
-                        self.video_inventory
-                            .reconcile_push_result(id, &buffered, media_offset, success);
+                        self.video_inventory.reconcile_push_result(
+                            id,
+                            &buffered,
+                            media_offset,
+                            success,
+                        );
                     }
                 }
             }
