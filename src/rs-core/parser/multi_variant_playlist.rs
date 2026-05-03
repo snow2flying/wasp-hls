@@ -1,12 +1,15 @@
 use super::audio_track_list::AudioTrackList;
 use super::media_playlist::{MediaPlaylist, MediaPlaylistParsingError};
 use super::media_tag::{MediaTag, MediaTagParsingError};
-use super::utils::StartAttribute;
+use super::utils::{
+    parse_define_tag, StartAttribute, VariableDefinition, VariableDefinitionError, VariableStore,
+};
 use super::variant_stream::{VariantParsingError, VariantStream};
 use super::{AudioTrack, MediaTagType};
 use crate::parser::utils::parse_start_attribute;
 use crate::utils::url::Url;
 use crate::Logger;
+use std::collections::HashMap;
 use std::{error, fmt, io};
 
 /// Represents a parsed HLS Multivariant Playlist (a.k.a. Master Playlist).
@@ -50,6 +53,7 @@ impl MultivariantPlaylist {
         let mut other_media: Vec<MediaTag> = vec![];
         let mut start = None;
         let mut independent_segments = None;
+        let mut variable_store = VariableStore::from_url(&url);
 
         let mut lines = playlist.lines();
         match lines.next() {
@@ -74,6 +78,18 @@ impl MultivariantPlaylist {
                     Some(idx) => idx + 4,
                 };
                 match &str_line[4..colon_idx] {
+                    "-X-DEFINE" => match parse_define_tag(&str_line) {
+                        Ok(VariableDefinition::Name { name, value }) => {
+                            variable_store.define(name, value)?
+                        }
+                        Ok(VariableDefinition::Import { .. }) => {
+                            return Err(MultivariantPlaylistParsingError::Unknown);
+                        }
+                        Ok(VariableDefinition::QueryParam { name }) => {
+                            variable_store.define_query_param(&name)?
+                        }
+                        Err(err) => return Err(err.into()),
+                    },
                     "-X-STREAM-INF" => {
                         let variant_url =
                             match lines.next() {
@@ -85,7 +101,10 @@ impl MultivariantPlaylist {
                                         MultivariantPlaylistParsingError::UnableToReadVariantUri,
                                     )
                                 }
-                                Some(Ok(l)) => Url::new(l),
+                                Some(Ok(l)) => {
+                                    let line = variable_store.substitute(&l)?;
+                                    Url::new(line.into_owned())
+                                }
                             };
 
                         let variant = VariantStream::create_from_stream_inf(
@@ -93,12 +112,13 @@ impl MultivariantPlaylist {
                             variant_url,
                             playlist_base_url,
                             last_id,
+                            &variable_store,
                         )?;
                         last_id += 1;
                         variants.push(variant);
                     }
                     "-X-MEDIA" => {
-                        let media = MediaTag::create(&str_line, &url, last_id)?;
+                        let media = MediaTag::create(&str_line, &url, last_id, &variable_store)?;
                         last_id += 1;
                         if media.typ() == MediaTagType::Audio {
                             audio_media.push(media);
@@ -147,6 +167,7 @@ impl MultivariantPlaylist {
             context: MediaPlaylistContext {
                 start,
                 independent_segments,
+                multivariant_variables: variable_store.definitions().clone(),
             },
         })
     }
@@ -480,6 +501,7 @@ impl MultivariantPlaylist {
 pub(crate) struct MediaPlaylistContext {
     independent_segments: Option<bool>,
     start: Option<StartAttribute>,
+    multivariant_variables: HashMap<String, String>,
 }
 
 impl MediaPlaylistContext {
@@ -489,12 +511,15 @@ impl MediaPlaylistContext {
     pub(crate) fn independent_segments(&self) -> Option<bool> {
         self.independent_segments
     }
+    pub(crate) fn multivariant_variables(&self) -> &HashMap<String, String> {
+        &self.multivariant_variables
+    }
 }
 
 // NOTE: should we add information on the line at which the error was encountered?
 // It may not be always trivial relatively to the cost of development though.
 #[derive(Debug)]
-pub enum MultivariantPlaylistParsingError {
+pub(crate) enum MultivariantPlaylistParsingError {
     MissingExtM3uHeader,
     MissingUriLineAfterVariant,
     UnableToReadVariantUri,
@@ -508,6 +533,8 @@ pub enum MultivariantPlaylistParsingError {
     MediaTagMissingGroupId,
 
     UnableToReadLine,
+
+    VariableDefinition(VariableDefinitionError),
 
     Unknown,
 }
@@ -546,6 +573,9 @@ impl fmt::Display for MultivariantPlaylistParsingError {
                 f,
                 "The first line of the Multivariant Playlist isn't `#EXTM3U`. Are you sure this is a Multivariant Playlist?"
             ),
+            MultivariantPlaylistParsingError::VariableDefinition(err) => {
+                write!(f, "Invalid EXT-X-DEFINE usage in the Multivariant Playlist: {:?}", err)
+            }
             MultivariantPlaylistParsingError::Unknown => write!(
                 f,
                 "An unknown error was encountered while parsing the MultivariantPlaylist"
@@ -586,8 +616,14 @@ impl From<MediaTagParsingError> for MultivariantPlaylistParsingError {
     }
 }
 
+impl From<VariableDefinitionError> for MultivariantPlaylistParsingError {
+    fn from(err: VariableDefinitionError) -> MultivariantPlaylistParsingError {
+        MultivariantPlaylistParsingError::VariableDefinition(err)
+    }
+}
+
 #[derive(Debug)]
-pub enum MediaPlaylistUpdateError {
+pub(crate) enum MediaPlaylistUpdateError {
     NotFound,
     ParsingError(MediaPlaylistParsingError),
 }
@@ -645,4 +681,125 @@ enum MediaPlaylistUrlLocation {
     AudioTrack,
     /// This Media Playlist's URL is defined as another media in the `MultivariantPlaylist` object.
     OtherMedia,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn substitutes_multivariant_variables_in_variant_and_media_tags() {
+        let playlist = r#"#EXTM3U
+#EXT-X-DEFINE:NAME="host",VALUE="https://cdn.example.com"
+#EXT-X-DEFINE:NAME="group",VALUE="aud-main"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="{$group}",NAME="Track {$group}",URI="{$host}/audio.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=1000,AUDIO="{$group}"
+{$host}/video.m3u8
+"#;
+        let parsed = MultivariantPlaylist::parse(
+            Cursor::new(playlist),
+            Url::new("https://example.com/master.m3u8".to_owned()),
+        )
+        .unwrap();
+
+        assert_eq!(
+            parsed.variant_from_idx(0).unwrap().url().get_ref(),
+            "https://cdn.example.com/video.m3u8"
+        );
+        assert_eq!(parsed.audio_tracks()[0].name(), "Track aud-main");
+        assert_eq!(
+            parsed.audio_tracks()[0].medias()[0]
+                .url()
+                .unwrap()
+                .get_ref(),
+            "https://cdn.example.com/audio.m3u8"
+        );
+    }
+
+    #[test]
+    fn imports_multivariant_variables_and_query_params_in_media_playlists() {
+        let multivariant = r#"#EXTM3U
+#EXT-X-DEFINE:NAME="cdn",VALUE="https://cdn.example.com"
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+video.m3u8
+"#;
+        let mut parsed = MultivariantPlaylist::parse(
+            Cursor::new(multivariant),
+            Url::new("https://example.com/master.m3u8".to_owned()),
+        )
+        .unwrap();
+        let media_playlist = r#"#EXTM3U
+#EXT-X-DEFINE:IMPORT="cdn"
+#EXT-X-DEFINE:QUERYPARAM="token"
+#EXT-X-TARGETDURATION:4
+#EXTINF:4,
+{$cdn}/seg.ts?auth={$token}
+"#;
+
+        let media = parsed
+            .update_media_playlist(
+                &MediaPlaylistPermanentId::new(MediaPlaylistUrlLocation::Variant, 0),
+                Cursor::new(media_playlist),
+                Url::new("https://example.com/video.m3u8?token=abc%20123".to_owned()),
+            )
+            .unwrap();
+
+        assert_eq!(
+            media.segment_list().media()[0].url().get_ref(),
+            "https://cdn.example.com/seg.ts?auth=abc 123"
+        );
+        assert!(parsed
+            .media_playlist(&MediaPlaylistPermanentId::new(
+                MediaPlaylistUrlLocation::Variant,
+                0
+            ))
+            .is_some());
+    }
+
+    #[test]
+    fn variables_do_not_implicitly_persist_across_media_playlist_reloads() {
+        let multivariant = r#"#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+video.m3u8
+"#;
+        let mut parsed = MultivariantPlaylist::parse(
+            Cursor::new(multivariant),
+            Url::new("https://example.com/master.m3u8".to_owned()),
+        )
+        .unwrap();
+        let first_media = r#"#EXTM3U
+#EXT-X-DEFINE:NAME="cdn",VALUE="https://cdn.example.com"
+#EXT-X-TARGETDURATION:4
+#EXTINF:4,
+{$cdn}/seg-1.ts
+"#;
+        parsed
+            .update_media_playlist(
+                &MediaPlaylistPermanentId::new(MediaPlaylistUrlLocation::Variant, 0),
+                Cursor::new(first_media),
+                Url::new("https://example.com/video.m3u8".to_owned()),
+            )
+            .unwrap();
+
+        let second_media = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXTINF:4,
+{$cdn}/seg-2.ts
+"#;
+        let err = parsed
+            .update_media_playlist(
+                &MediaPlaylistPermanentId::new(MediaPlaylistUrlLocation::Variant, 0),
+                Cursor::new(second_media),
+                Url::new("https://example.com/video.m3u8".to_owned()),
+            )
+            .unwrap_err();
+
+        assert!(matches!(
+            err,
+            MediaPlaylistUpdateError::ParsingError(MediaPlaylistParsingError::VariableDefinition(
+                _
+            ))
+        ));
+    }
 }

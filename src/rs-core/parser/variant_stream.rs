@@ -6,6 +6,7 @@ use super::{
     utils::{
         parse_comma_separated_list, parse_decimal_floating_point, parse_decimal_integer,
         parse_enumerated_string, parse_quoted_string, parse_resolution, skip_attribute_list_value,
+        VariableStore,
     },
 };
 use crate::{bindings::MediaType, utils::url::Url, Logger};
@@ -315,6 +316,7 @@ impl VariantStream {
         url: Url,
         base_uri: &str,
         id: u32,
+        variable_store: &VariableStore,
     ) -> Result<Self, VariantParsingError> {
         let mut bandwidth: Option<u64> = None;
         let mut resolution: Option<VideoResolution> = None;
@@ -369,10 +371,17 @@ impl VariantStream {
                             parse_comma_separated_list(variant_line, offset + idx + 1);
                         offset = end_offset + 1;
                         if let Ok(val) = parsed {
-                            codecs = val
-                                .iter()
-                                .map(|c| (guess_media_type_from_codec(c), (*c).to_owned()))
-                                .collect();
+                            let mut parsed_codecs = Vec::with_capacity(val.len());
+                            for codec in val {
+                                let codec = variable_store
+                                    .substitute(codec)
+                                    .map_err(|_| VariantParsingError::InvalidDecimalInteger)?;
+                                parsed_codecs.push((
+                                    guess_media_type_from_codec(&codec),
+                                    codec.into_owned(),
+                                ));
+                            }
+                            codecs = parsed_codecs;
                         } else {
                             Logger::warn("Unparsable CODECS value");
                         }
@@ -435,7 +444,10 @@ impl VariantStream {
                             parse_quoted_string(variant_line, offset + idx + 1);
                         offset = end_offset + 1;
                         if let Ok(val) = parsed {
-                            stable_variant_id = Some(val.to_owned());
+                            let val = variable_store
+                                .substitute(val)
+                                .map_err(|_| VariantParsingError::InvalidDecimalInteger)?;
+                            stable_variant_id = Some(val.into_owned());
                         } else {
                             Logger::warn("Unparsable STABLE-VARIANT-ID value");
                         }
@@ -445,7 +457,10 @@ impl VariantStream {
                             parse_quoted_string(variant_line, offset + idx + 1);
                         offset = end_offset + 1;
                         if let Ok(val) = parsed {
-                            audio = Some(val.to_owned());
+                            let val = variable_store
+                                .substitute(val)
+                                .map_err(|_| VariantParsingError::InvalidDecimalInteger)?;
+                            audio = Some(val.into_owned());
                         } else {
                             Logger::warn("Unparsable AUDIO value");
                         }
@@ -455,7 +470,10 @@ impl VariantStream {
                             parse_quoted_string(variant_line, offset + idx + 1);
                         offset = end_offset + 1;
                         if let Ok(val) = parsed {
-                            video = Some(val.to_owned());
+                            let val = variable_store
+                                .substitute(val)
+                                .map_err(|_| VariantParsingError::InvalidDecimalInteger)?;
+                            video = Some(val.into_owned());
                         } else {
                             Logger::warn("Unparsable VIDEO value");
                         }
@@ -465,7 +483,10 @@ impl VariantStream {
                             parse_quoted_string(variant_line, offset + idx + 1);
                         offset = end_offset + 1;
                         if let Ok(val) = parsed {
-                            subtitles = Some(val.to_owned());
+                            let val = variable_store
+                                .substitute(val)
+                                .map_err(|_| VariantParsingError::InvalidDecimalInteger)?;
+                            subtitles = Some(val.into_owned());
                         } else {
                             Logger::warn("Unparsable SUBTITLES value");
                         }
@@ -478,7 +499,10 @@ impl VariantStream {
                                 parse_quoted_string(variant_line, offset + idx + 1);
                             offset = end_offset + 1;
                             if let Ok(val) = parsed {
-                                closed_captions = Some(val.to_owned());
+                                let val = variable_store
+                                    .substitute(val)
+                                    .map_err(|_| VariantParsingError::InvalidDecimalInteger)?;
+                                closed_captions = Some(val.into_owned());
                             } else {
                                 Logger::warn("Unparsable CLOSED-CAPTIONS value");
                             }
@@ -495,7 +519,10 @@ impl VariantStream {
                             parse_quoted_string(variant_line, offset + idx + 1);
                         offset = end_offset + 1;
                         if let Ok(val) = parsed {
-                            pathway_id = Some(val.to_owned());
+                            let val = variable_store
+                                .substitute(val)
+                                .map_err(|_| VariantParsingError::InvalidDecimalInteger)?;
+                            pathway_id = Some(val.into_owned());
                         } else {
                             Logger::warn("Unparsable PATHWAY-ID value");
                         }

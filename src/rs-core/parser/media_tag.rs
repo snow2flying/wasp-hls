@@ -3,7 +3,7 @@ use super::{
     multi_variant_playlist::MediaPlaylistContext,
     utils::{
         parse_comma_separated_list, parse_enumerated_string, parse_quoted_string,
-        skip_attribute_list_value,
+        skip_attribute_list_value, VariableStore,
     },
     MediaPlaylist,
 };
@@ -125,6 +125,7 @@ impl MediaTag {
         media_line: &str,
         multi_variant_playlist_url: &Url,
         id: u32,
+        variable_store: &VariableStore,
     ) -> Result<Self, MediaTagParsingError> {
         let playlist_base_url = multi_variant_playlist_url.pathname();
         let mut typ: Option<MediaTagType> = None;
@@ -174,7 +175,10 @@ impl MediaTag {
                             parse_quoted_string(media_line, offset + idx + 1);
                         offset = end_offset + 1;
                         if let Ok(parsed) = parsed {
-                            url = Some(Url::new(parsed.to_owned()));
+                            let parsed = variable_store
+                                .substitute(parsed)
+                                .map_err(|_| MediaTagParsingError::Unknown)?;
+                            url = Some(Url::new(parsed.into_owned()));
                         } else {
                             Logger::warn("Unparsable URI value");
                         }
@@ -184,7 +188,10 @@ impl MediaTag {
                             parse_quoted_string(media_line, offset + idx + 1);
                         offset = end_offset + 1;
                         if let Ok(val) = parsed {
-                            group_id = Some(val.to_owned());
+                            let val = variable_store
+                                .substitute(val)
+                                .map_err(|_| MediaTagParsingError::Unknown)?;
+                            group_id = Some(val.into_owned());
                         } else {
                             Logger::warn("Unparsable GROUP-ID value");
                         }
@@ -194,7 +201,10 @@ impl MediaTag {
                             parse_quoted_string(media_line, offset + idx + 1);
                         offset = end_offset + 1;
                         if let Ok(val) = parsed {
-                            language = Some(val.to_owned());
+                            let val = variable_store
+                                .substitute(val)
+                                .map_err(|_| MediaTagParsingError::Unknown)?;
+                            language = Some(val.into_owned());
                         } else {
                             Logger::warn("Unparsable LANGUAGE value");
                         }
@@ -204,7 +214,10 @@ impl MediaTag {
                             parse_quoted_string(media_line, offset + idx + 1);
                         offset = end_offset + 1;
                         if let Ok(val) = parsed {
-                            assoc_language = Some(val.to_owned());
+                            let val = variable_store
+                                .substitute(val)
+                                .map_err(|_| MediaTagParsingError::Unknown)?;
+                            assoc_language = Some(val.into_owned());
                         } else {
                             Logger::warn("Unparsable ASSOC-LANGUAGE value");
                         }
@@ -214,7 +227,10 @@ impl MediaTag {
                             parse_quoted_string(media_line, offset + idx + 1);
                         offset = end_offset + 1;
                         if let Ok(val) = parsed {
-                            name = Some(val.to_owned());
+                            let val = variable_store
+                                .substitute(val)
+                                .map_err(|_| MediaTagParsingError::Unknown)?;
+                            name = Some(val.into_owned());
                         } else {
                             Logger::warn("Unparsable NAME value");
                         }
@@ -224,7 +240,10 @@ impl MediaTag {
                             parse_quoted_string(media_line, offset + idx + 1);
                         offset = end_offset + 1;
                         if let Ok(val) = parsed {
-                            stable_rendition_id = Some(val.to_owned());
+                            let val = variable_store
+                                .substitute(val)
+                                .map_err(|_| MediaTagParsingError::Unknown)?;
+                            stable_rendition_id = Some(val.into_owned());
                         } else {
                             Logger::warn("Unparsable STABLE-RENDITION-ID value");
                         }
@@ -249,6 +268,9 @@ impl MediaTag {
                             parse_quoted_string(media_line, offset + idx + 1);
                         offset = end_offset + 1;
                         if let Ok(val) = parsed {
+                            let val = variable_store
+                                .substitute(val)
+                                .map_err(|_| MediaTagParsingError::Unknown)?;
                             match val.split('/').next().unwrap_or("").parse::<u32>() {
                                 Ok(parsed_channels) => channels = Some(parsed_channels),
                                 Err(_) => Logger::warn("Unparsable CHANNELS value"),
@@ -262,7 +284,14 @@ impl MediaTag {
                             parse_comma_separated_list(media_line, offset + idx + 1);
                         offset = end_offset + 1;
                         if let Ok(vals) = parsed {
-                            characteristics = vals.iter().map(|v| (*v).to_owned()).collect();
+                            let mut substituted_vals = Vec::with_capacity(vals.len());
+                            for value in vals {
+                                let value = variable_store
+                                    .substitute(value)
+                                    .map_err(|_| MediaTagParsingError::Unknown)?;
+                                substituted_vals.push(value.into_owned());
+                            }
+                            characteristics = substituted_vals;
                             characteristics.sort();
                             characteristics.dedup();
                         } else {

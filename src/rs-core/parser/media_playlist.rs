@@ -8,9 +8,9 @@ use std::{error, fmt, io::BufRead};
 use super::{
     multi_variant_playlist::MediaPlaylistContext,
     utils::{
-        parse_byte_range, parse_decimal_floating_point, parse_decimal_integer,
+        parse_byte_range, parse_decimal_floating_point, parse_decimal_integer, parse_define_tag,
         parse_enumerated_string, parse_iso_8601_date, parse_quoted_string, parse_start_attribute,
-        StartAttribute,
+        StartAttribute, VariableDefinition, VariableDefinitionError, VariableStore,
     },
 };
 
@@ -170,12 +170,13 @@ impl MediaSegmentInfo {
 ///
 /// See display implementation for more information on its variants.
 #[derive(Debug)]
-pub enum MediaPlaylistParsingError {
+pub(crate) enum MediaPlaylistParsingError {
     UnparsableExtInf,
     UnparsableByteRange,
     UriMissingInMap,
     MissingTargetDuration,
     UriWithoutExtInf,
+    VariableDefinition(VariableDefinitionError),
 }
 
 impl fmt::Display for MediaPlaylistParsingError {
@@ -196,11 +197,24 @@ impl fmt::Display for MediaPlaylistParsingError {
             MediaPlaylistParsingError::UnparsableByteRange => {
                 write!(f, "One of the uri had an Unparsable BYTERANGE")
             }
+            MediaPlaylistParsingError::VariableDefinition(err) => {
+                write!(
+                    f,
+                    "Invalid EXT-X-DEFINE usage in the Media Playlist: {:?}",
+                    err
+                )
+            }
         }
     }
 }
 
 impl error::Error for MediaPlaylistParsingError {}
+
+impl From<VariableDefinitionError> for MediaPlaylistParsingError {
+    fn from(err: VariableDefinitionError) -> MediaPlaylistParsingError {
+        MediaPlaylistParsingError::VariableDefinition(err)
+    }
+}
 
 /// Structure representing the concept of the `Media Playlist` in HLS.
 ///
@@ -270,6 +284,7 @@ impl MediaPlaylist {
         let mut next_segment_duration: Option<f64> = None;
         let mut current_byte: Option<usize> = None;
         let mut next_segment_byte_range: Option<ByteRange> = None;
+        let mut variable_store = VariableStore::from_url(&url);
 
         let lines = playlist.lines();
         for line in lines {
@@ -283,6 +298,18 @@ impl MediaPlaylist {
                 };
 
                 match &str_line[4..colon_idx] {
+                    "-X-DEFINE" => match parse_define_tag(&str_line) {
+                        Ok(VariableDefinition::Name { name, value }) => {
+                            variable_store.define(name, value)?
+                        }
+                        Ok(VariableDefinition::Import { name }) => {
+                            variable_store.import(&name, context.multivariant_variables())?
+                        }
+                        Ok(VariableDefinition::QueryParam { name }) => {
+                            variable_store.define_query_param(&name)?
+                        }
+                        Err(err) => return Err(err.into()),
+                    },
                     "-X-VERSION" => match parse_decimal_integer(&str_line, colon_idx + 1).0 {
                         Ok(v) if v <= (u32::MAX as u64) => version = Some(v as u32),
                         _ => Logger::warn("Unparsable VERSION value"),
@@ -360,7 +387,8 @@ impl MediaPlaylist {
                                             parse_quoted_string(&str_line, base_offset + idx + 1);
                                         base_offset = end_offset + 1;
                                         if let Ok(val) = parsed {
-                                            let init_url = Url::new(val.to_owned());
+                                            let val = variable_store.substitute(val)?;
+                                            let init_url = Url::new(val.into_owned());
                                             let init_url = if init_url.is_absolute() {
                                                 init_url
                                             } else {
@@ -375,7 +403,8 @@ impl MediaPlaylist {
                                             parse_quoted_string(&str_line, base_offset + idx + 1);
                                         base_offset = end_offset + 1;
                                         if let Ok(val) = parsed {
-                                            match parse_byte_range(val, 0, None) {
+                                            let val = variable_store.substitute(val)?;
+                                            match parse_byte_range(&val, 0, None) {
                                                 Some(br) => {
                                                     current_byte = Some(br.last_byte + 1);
                                                     map_info_byte_range = Some(br);
@@ -412,7 +441,8 @@ impl MediaPlaylist {
                 }
             } else {
                 // URI
-                let seg_url = Url::new(str_line);
+                let seg_line = variable_store.substitute(&str_line)?;
+                let seg_url = Url::new(seg_line.into_owned());
                 let seg_url = if seg_url.is_absolute() {
                     seg_url
                 } else {

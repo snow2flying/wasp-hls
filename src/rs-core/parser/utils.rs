@@ -1,6 +1,259 @@
-use std::num::{ParseFloatError, ParseIntError};
+use crate::utils::url::Url;
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    num::{ParseFloatError, ParseIntError},
+};
 
 use crate::Logger;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum VariableDefinitionError {
+    DuplicateName,
+    MissingImportedVariable,
+    MissingQueryParam,
+    InvalidName,
+    InvalidPercentEncoding,
+    InvalidValue,
+    InvalidDefinition,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct VariableStore {
+    variables: HashMap<String, String>,
+    query_params: HashMap<String, String>,
+}
+
+impl VariableStore {
+    pub(crate) fn from_url(url: &Url) -> Self {
+        Self {
+            variables: HashMap::new(),
+            query_params: parse_query_params(url),
+        }
+    }
+
+    pub(crate) fn define(
+        &mut self,
+        name: String,
+        value: String,
+    ) -> Result<(), VariableDefinitionError> {
+        validate_variable_name(&name)?;
+        validate_variable_value(&value)?;
+        if self.variables.contains_key(&name) {
+            return Err(VariableDefinitionError::DuplicateName);
+        }
+        self.variables.insert(name, value);
+        Ok(())
+    }
+
+    pub(crate) fn import(
+        &mut self,
+        name: &str,
+        imported_variables: &HashMap<String, String>,
+    ) -> Result<(), VariableDefinitionError> {
+        validate_variable_name(name)?;
+        let value = imported_variables
+            .get(name)
+            .ok_or(VariableDefinitionError::MissingImportedVariable)?;
+        self.define(name.to_owned(), value.clone())
+    }
+
+    pub(crate) fn define_query_param(&mut self, name: &str) -> Result<(), VariableDefinitionError> {
+        validate_variable_name(name)?;
+        let value = self
+            .query_params
+            .get(name)
+            .ok_or(VariableDefinitionError::MissingQueryParam)?
+            .clone();
+        self.define(name.to_owned(), value)
+    }
+
+    pub(crate) fn substitute<'a>(
+        &self,
+        value: &'a str,
+    ) -> Result<Cow<'a, str>, VariableDefinitionError> {
+        let Some(first_idx) = value.find("{$") else {
+            return Ok(Cow::Borrowed(value));
+        };
+
+        let mut substituted = String::with_capacity(value.len());
+        substituted.push_str(&value[..first_idx]);
+        let mut offset = first_idx;
+        while offset < value.len() {
+            match value[offset..].find("{$") {
+                None => {
+                    substituted.push_str(&value[offset..]);
+                    break;
+                }
+                Some(relative_start) => {
+                    let start = offset + relative_start;
+                    substituted.push_str(&value[offset..start]);
+                    let after_start = start + 2;
+                    let Some(relative_end) = value[after_start..].find('}') else {
+                        return Err(VariableDefinitionError::InvalidDefinition);
+                    };
+                    let end = after_start + relative_end;
+                    let variable_name = &value[after_start..end];
+                    validate_variable_name(variable_name)?;
+                    let variable_value = self
+                        .variables
+                        .get(variable_name)
+                        .ok_or(VariableDefinitionError::InvalidDefinition)?;
+                    substituted.push_str(variable_value);
+                    offset = end + 1;
+                }
+            }
+        }
+        Ok(Cow::Owned(substituted))
+    }
+
+    pub(crate) fn definitions(&self) -> &HashMap<String, String> {
+        &self.variables
+    }
+}
+
+pub(crate) enum VariableDefinition {
+    Name { name: String, value: String },
+    Import { name: String },
+    QueryParam { name: String },
+}
+
+pub(crate) fn parse_define_tag(line: &str) -> Result<VariableDefinition, VariableDefinitionError> {
+    let mut name: Option<String> = None;
+    let mut value: Option<String> = None;
+    let mut import: Option<String> = None;
+    let mut query_param: Option<String> = None;
+    let mut offset = "#EXT-X-DEFINE:".len();
+
+    while offset < line.len() {
+        let Some(idx) = line[offset..].find('=') else {
+            return Err(VariableDefinitionError::InvalidDefinition);
+        };
+        let attr_name = &line[offset..offset + idx];
+        let (parsed_value, end_offset) = parse_quoted_string(line, offset + idx + 1);
+        offset = end_offset + 1;
+        let parsed_value = parsed_value.map_err(|_| VariableDefinitionError::InvalidDefinition)?;
+        match attr_name {
+            "NAME" => name = Some(parsed_value.to_owned()),
+            "VALUE" => value = Some(parsed_value.to_owned()),
+            "IMPORT" => import = Some(parsed_value.to_owned()),
+            "QUERYPARAM" => query_param = Some(parsed_value.to_owned()),
+            _ => {}
+        }
+    }
+
+    let alternatives_count = usize::from(name.is_some())
+        + usize::from(import.is_some())
+        + usize::from(query_param.is_some());
+    if alternatives_count != 1 {
+        return Err(VariableDefinitionError::InvalidDefinition);
+    }
+
+    if let Some(name) = name {
+        if let Some(value) = value {
+            validate_variable_name(&name)?;
+            validate_variable_value(&value)?;
+            Ok(VariableDefinition::Name { name, value })
+        } else {
+            Err(VariableDefinitionError::InvalidDefinition)
+        }
+    } else if let Some(name) = import {
+        validate_variable_name(&name)?;
+        Ok(VariableDefinition::Import { name })
+    } else if let Some(name) = query_param {
+        validate_variable_name(&name)?;
+        Ok(VariableDefinition::QueryParam { name })
+    } else {
+        Err(VariableDefinitionError::InvalidDefinition)
+    }
+}
+
+fn validate_variable_name(name: &str) -> Result<(), VariableDefinitionError> {
+    if name.is_empty() {
+        return Err(VariableDefinitionError::InvalidName);
+    }
+    if name
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        Ok(())
+    } else {
+        Err(VariableDefinitionError::InvalidName)
+    }
+}
+
+fn validate_variable_value(value: &str) -> Result<(), VariableDefinitionError> {
+    if value.contains('"') || value.contains('\r') || value.contains('\n') {
+        Err(VariableDefinitionError::InvalidValue)
+    } else {
+        Ok(())
+    }
+}
+
+fn parse_query_params(url: &Url) -> HashMap<String, String> {
+    let input = url.get_ref();
+    let Some(query_start) = input.find('?') else {
+        return HashMap::new();
+    };
+    let query = match input[query_start + 1..].find('#') {
+        Some(hash_offset) => &input[query_start + 1..query_start + 1 + hash_offset],
+        None => &input[query_start + 1..],
+    };
+
+    let mut result = HashMap::new();
+    for pair in query.split('&') {
+        if pair.is_empty() {
+            continue;
+        }
+        let Some(eq_idx) = pair.find('=') else {
+            continue;
+        };
+        let key = &pair[..eq_idx];
+        let val = &pair[eq_idx + 1..];
+        if result.contains_key(key) {
+            continue;
+        }
+        match percent_decode(val) {
+            Ok(decoded) => {
+                if validate_variable_value(&decoded).is_ok() {
+                    result.insert(key.to_owned(), decoded);
+                }
+            }
+            Err(_) => continue,
+        }
+    }
+    result
+}
+
+fn percent_decode(input: &str) -> Result<String, VariableDefinitionError> {
+    let mut result = String::with_capacity(input.len());
+    let bytes = input.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            if i + 2 >= bytes.len() {
+                return Err(VariableDefinitionError::InvalidPercentEncoding);
+            }
+            let high = from_hex(bytes[i + 1])?;
+            let low = from_hex(bytes[i + 2])?;
+            result.push((high * 16 + low) as char);
+            i += 3;
+        } else {
+            result.push(bytes[i] as char);
+            i += 1;
+        }
+    }
+    Ok(result)
+}
+
+fn from_hex(byte: u8) -> Result<u8, VariableDefinitionError> {
+    match byte {
+        b'0'..=b'9' => Ok(byte - b'0'),
+        b'a'..=b'f' => Ok(byte - b'a' + 10),
+        b'A'..=b'F' => Ok(byte - b'A' + 10),
+        _ => Err(VariableDefinitionError::InvalidPercentEncoding),
+    }
+}
 
 /// Parse decimal integer value as defined by the HLS specification:
 /// From the `value_start_offset` (which is the byte offset in `line` at which

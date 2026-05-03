@@ -869,6 +869,7 @@ impl From<MultivariantPlaylistParsingError> for MultivariantPlaylistParsingError
             }
             MultivariantPlaylistParsingError::UnableToReadVariantUri
             | MultivariantPlaylistParsingError::UnableToReadLine
+            | MultivariantPlaylistParsingError::VariableDefinition(_)
             | MultivariantPlaylistParsingError::Unknown => {
                 MultivariantPlaylistParsingErrorCode::Unknown
             }
@@ -894,6 +895,9 @@ impl From<MediaPlaylistUpdateError> for MediaPlaylistParsingErrorCode {
             MediaPlaylistUpdateError::ParsingError(MediaPlaylistParsingError::UriWithoutExtInf) => {
                 MediaPlaylistParsingErrorCode::UriWithoutExtInf
             }
+            MediaPlaylistUpdateError::ParsingError(
+                MediaPlaylistParsingError::VariableDefinition(_),
+            ) => MediaPlaylistParsingErrorCode::Unknown,
             MediaPlaylistUpdateError::NotFound => MediaPlaylistParsingErrorCode::Unknown,
         }
     }
