@@ -300,10 +300,11 @@ When set to an object, it should contain the following keys:
 
   `undefined` if unknown,
 
-- `videoRange` (`"SDR" | "HLG" | "PQ" | "UNKNOWN" | undefined`): The dynamic
-  range announced for the video data linked to that variant.
+- `videoRange` (`string | undefined`): The dynamic range announced for the
+  video data linked to that variant, as directly signaled through the HLS
+  `VIDEO-RANGE` attribute.
 
-  `undefined` if there's no video data.
+  `undefined` if there's no video data or if that property is not specified.
 
 You can also know at any time the same characteristics of the current variant
 by calling the [`getCurrentVariant`](./Variant_Selection/getCurrentVariant.md)
@@ -357,10 +358,11 @@ for the `variantUpdate` event):
 
   `undefined` if unknown,
 
-- `videoRange` (`"SDR" | "HLG" | "PQ" | "UNKNOWN" | undefined`): The dynamic
-  range announced for the video data linked to that variant.
+- `videoRange` (`string | undefined`): The dynamic range announced for the
+  video data linked to that variant, as directly signaled through the HLS
+  `VIDEO-RANGE` attribute.
 
-  `undefined` if there's no video data.
+  `undefined` if there's no video data or if that property is not specified.
 
 If that change of lock status led to a change of currently-loaded variant,
 you'll also receive a `variantUpdate` event.
@@ -403,10 +405,11 @@ Each object should contain the following keys (same than for the
 
   `undefined` if unknown,
 
-- `videoRange` (`"SDR" | "HLG" | "PQ" | "UNKNOWN" | undefined`): The dynamic
-  range announced for the video data linked to that variant.
+- `videoRange` (`string | undefined`): The dynamic range announced for the
+  video data linked to that variant, as directly signaled through the HLS
+  `VIDEO-RANGE` attribute.
 
-  `undefined` if there's no video data.
+  `undefined` if there's no video data or if that property is not specified.
 
 You can also know at any time the list of available variants by calling the
 [`getVariantList`](./Variant_Selection/getVariantList.md) method.

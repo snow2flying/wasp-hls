@@ -459,7 +459,7 @@ export interface VariantInfo {
   height: number | undefined;
   frameRate: number | undefined;
   bandwidth: number | undefined;
-  videoRange?: "SDR" | "HLG" | "PQ" | "UNKNOWN" | undefined;
+  videoRange?: string | undefined;
 }
 
 export interface AudioTrackInfo {

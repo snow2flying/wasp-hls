@@ -1225,22 +1225,6 @@ export function announceFetchedContent(
   }
   const variantInfoObj: VariantInfo[] = [];
   {
-    const toVideoRange = (
-      videoRangeCode: number,
-    ): VariantInfo["videoRange"] => {
-      switch (videoRangeCode) {
-        case 1:
-          return "SDR";
-        case 2:
-          return "HLG";
-        case 3:
-          return "PQ";
-        case 4:
-          return "UNKNOWN";
-        default:
-          return undefined;
-      }
-    };
     let i = 0;
     i++; // Skip number of variants
     while (i < variantInfo.length) {
@@ -1259,8 +1243,15 @@ export function announceFetchedContent(
       const bandwidth = variantInfo[i];
       i++;
 
-      const videoRangeCode = variantInfo[i];
+      const videoRangeLen = variantInfo[i];
       i++;
+      const videoRangeU8 = new Uint8Array(
+        memory.buffer,
+        variantInfo[i],
+        videoRangeLen,
+      );
+      i++;
+      const videoRange = cachedTextDecoder.decode(videoRangeU8);
 
       variantInfoObj.push({
         id,
@@ -1268,7 +1259,7 @@ export function announceFetchedContent(
         width: width === 0 ? undefined : width,
         frameRate: frameRate === 0 ? undefined : frameRate,
         bandwidth: bandwidth === 0 ? undefined : bandwidth,
-        videoRange: toVideoRange(videoRangeCode),
+        videoRange: videoRange === "" ? undefined : videoRange,
       });
     }
   }

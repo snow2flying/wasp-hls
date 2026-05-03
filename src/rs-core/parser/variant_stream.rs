@@ -74,10 +74,9 @@ pub struct VariantStream {
     /// Stream with an hdcp_level attribute unless its value is `None`.
     hdcp_level: HdcpLevel,
 
-    /// The dynamic range of the video of this variant stream.
-    /// Clients that do not recognize the attribute value SHOULD NOT select the
-    /// Variant Stream.
-    video_range: VideoDynamicRange,
+    /// The dynamic range of the video of this variant stream, as signaled
+    /// through the HLS `VIDEO-RANGE` attribute.
+    video_range: Option<String>,
 
     /// The value is a list of formats, each associated to a `MediaType`, where
     /// each format specifies a media sample type that is present in one or
@@ -217,33 +216,6 @@ enum HdcpLevel {
     Unknown,
 }
 
-/// Indicate the dynamic range of the video track(s) of the concerned content.
-#[derive(Copy, Clone, Debug)]
-pub(crate) enum VideoDynamicRange {
-    /// The video in the corresponding content is encoded using one of the
-    /// following reference opto-electronic transfer characteristic functions
-    /// specified by the TransferCharacteristics code point: [CICP] 1, 6, 13,
-    /// 14, 15.
-    /// Note that different TransferCharacteristics code points can use the
-    /// same transfer function.
-    Sdr,
-
-    /// The video in the corresponding content is encoded using a reference
-    /// opto-electronic transfer characteristic function specified by the
-    /// TransferCharacteristics code point 18, or consists of such video mixed
-    /// with video qualifying as `Sdr` (see above).
-    Hlg,
-
-    /// The video in the corresponding content is encoded using a reference
-    /// opto-electronic transfer characteristic function specified by the
-    /// TransferCharacteristics code point 16, or consists of such video mixed
-    /// with video qualifying as Sdr or Hlg (see above).
-    Pq,
-
-    /// The video dynamic range of the current content is any other.
-    Unknown,
-}
-
 #[derive(Debug)]
 pub enum VariantParsingError {
     MissingBandwidth,
@@ -291,8 +263,8 @@ impl VariantStream {
         self.frame_rate
     }
 
-    pub(crate) fn video_range(&self) -> VideoDynamicRange {
-        self.video_range
+    pub(crate) fn video_range(&self) -> Option<&str> {
+        self.video_range.as_deref()
     }
 
     pub(crate) fn id(&self) -> u32 {
@@ -349,7 +321,7 @@ impl VariantStream {
         let mut average_bandwitdh: Option<u64> = None;
         let mut codecs: Vec<(Option<MediaType>, String)> = vec![];
         let mut hdcp_level: HdcpLevel = HdcpLevel::None;
-        let mut video_range: VideoDynamicRange = VideoDynamicRange::Sdr;
+        let mut video_range: Option<String> = None;
         let mut program_id: Option<u64> = None;
         let mut score: Option<f64> = None;
         let mut frame_rate: Option<f64> = None;
@@ -516,12 +488,7 @@ impl VariantStream {
                         let (parsed, end_offset) =
                             parse_enumerated_string(variant_line, offset + idx + 1);
                         offset = end_offset + 1;
-                        video_range = match parsed {
-                            "SDR" => VideoDynamicRange::Sdr,
-                            "HLG" => VideoDynamicRange::Hlg,
-                            "PQ" => VideoDynamicRange::Pq,
-                            _ => VideoDynamicRange::Unknown,
-                        };
+                        video_range = Some(parsed.to_owned());
                     }
                     "PATHWAY-ID" => {
                         let (parsed, end_offset) =

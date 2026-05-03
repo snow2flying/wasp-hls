@@ -37,10 +37,12 @@ Each of those objects should contain the following keys:
 
   `undefined` if unknown,
 
-- `videoRange` (`"SDR" | "HLG" | "PQ" | "UNKNOWN" | undefined`): The dynamic
-  range announced for the video data linked to that variant.
+- `videoRange` (`string | undefined`): The dynamic range announced for the
+  video data linked to that variant, as directly signaled through the HLS
+  `VIDEO-RANGE` attribute.
 
-  `undefined` if there is no video data linked to that variant.
+  `undefined` if there is no video data linked to that variant or if that
+  property is not specified.
 
 That list of variants is known once the `variantListUpdate`
 [event](../Player_Events.md) is sent for the currently-loaded content, which

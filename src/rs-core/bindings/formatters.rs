@@ -1,6 +1,6 @@
 use crate::{
     media_element::SourceBufferCreationError,
-    parser::{AudioTrack, ByteRange, VariantStream, VideoDynamicRange, VideoResolution},
+    parser::{AudioTrack, ByteRange, VariantStream, VideoResolution},
 };
 
 static NULL_RESOLUTION: VideoResolution = VideoResolution::new(0, 0);
@@ -15,16 +15,13 @@ pub(crate) unsafe fn format_variants_info_for_js(variants: &[&VariantStream]) ->
         ret.push(resolution.width());
         ret.push(v.frame_rate().unwrap_or(0.) as u32);
         ret.push(v.bandwidth() as u32);
-        ret.push(if v.has_type(crate::bindings::MediaType::Video) {
-            match v.video_range() {
-                VideoDynamicRange::Sdr => 1,
-                VideoDynamicRange::Hlg => 2,
-                VideoDynamicRange::Pq => 3,
-                VideoDynamicRange::Unknown => 4,
-            }
+        let video_range = if v.has_type(crate::bindings::MediaType::Video) {
+            v.video_range().unwrap_or("")
         } else {
-            0
-        });
+            ""
+        };
+        ret.push(video_range.len() as u32);
+        ret.push(video_range.as_ptr() as u32);
     });
     ret
 }
