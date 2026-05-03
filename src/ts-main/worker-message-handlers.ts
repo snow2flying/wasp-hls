@@ -2,6 +2,7 @@ import assertNever from "../ts-common/assertNever";
 import logger from "../ts-common/logger";
 import QueuedSourceBuffer, {
   SourceBufferOperation,
+  SourceBufferOperationCancelledError,
 } from "../ts-common/QueuedSourceBuffer";
 import timeRangesToFloat64Array from "../ts-common/timeRangesToFloat64Array";
 import type {
@@ -420,10 +421,24 @@ export function onAppendBufferMessage(
       handleAppendBufferError(err);
     }
     function handleAppendBufferError(err: unknown): void {
+      if (err instanceof SourceBufferOperationCancelledError) {
+        logger.info("API: Ignoring cancelled appendBuffer operation");
+        return;
+      }
       const { message } = getErrorInformation(
         err,
         "Unknown error when appending data to the SourceBuffer",
       );
+      let buffered = new Float64Array([]);
+      try {
+        if (sbObject !== undefined) {
+          buffered = timeRangesToFloat64Array(
+            sbObject.queuedSourceBuffer.getBufferedRanges(),
+          );
+        }
+      } catch (_) {
+        /* ignore error here */
+      }
       postMessageToWorker(worker, {
         type: MainMessageType.SourceBufferOperationError,
         value: {
@@ -433,6 +448,7 @@ export function onAppendBufferMessage(
           operation: SourceBufferOperation.Push,
           isBufferFull:
             err instanceof Error && err.name === "QuotaExceededError",
+          buffered,
         },
       });
     }
@@ -483,10 +499,24 @@ export function onRemoveBufferMessage(
       handleRemoveBufferError(err);
     }
     function handleRemoveBufferError(err: unknown): void {
+      if (err instanceof SourceBufferOperationCancelledError) {
+        logger.info("API: Ignoring cancelled removeBuffer operation");
+        return;
+      }
       const { message } = getErrorInformation(
         err,
         "Unknown error when removing data to the SourceBuffer",
       );
+      let buffered = new Float64Array([]);
+      try {
+        if (sbObject !== undefined) {
+          buffered = timeRangesToFloat64Array(
+            sbObject.queuedSourceBuffer.getBufferedRanges(),
+          );
+        }
+      } catch (_) {
+        /* ignore error here */
+      }
       postMessageToWorker(worker, {
         type: MainMessageType.SourceBufferOperationError,
         value: {
@@ -495,6 +525,7 @@ export function onRemoveBufferMessage(
           message,
           operation: SourceBufferOperation.Remove,
           isBufferFull: false,
+          buffered,
         },
       });
     }

@@ -1,6 +1,8 @@
 import idGenerator from "../ts-common/idGenerator";
 import logger from "../ts-common/logger";
-import QueuedSourceBuffer from "../ts-common/QueuedSourceBuffer";
+import QueuedSourceBuffer, {
+  SourceBufferOperationCancelledError,
+} from "../ts-common/QueuedSourceBuffer";
 import timeRangesToFloat64Array from "../ts-common/timeRangesToFloat64Array";
 import type {
   AudioTrackInfo,
@@ -961,13 +963,26 @@ export function appendBuffer(
           }
         })
         .catch((err) => {
+          if (err instanceof SourceBufferOperationCancelledError) {
+            logger.info("Worker: Ignoring cancelled appendBuffer operation");
+            return;
+          }
           try {
+            let buffered;
+            try {
+              const timeRange =
+                sourceBufferObj.sourceBuffer.getBufferedRanges();
+              buffered = new JsTimeRanges(timeRangesToFloat64Array(timeRange));
+            } catch (_) {
+              buffered = new JsTimeRanges(new Float64Array([]));
+            }
             if (err instanceof Error && err.name === "QuotaExceededError") {
               playerInstance
                 .getDispatcher()
                 ?.on_append_buffer_error(
                   sourceBufferId,
                   PushedSegmentErrorCode.BufferFull,
+                  buffered,
                 );
             } else {
               playerInstance
@@ -975,6 +990,7 @@ export function appendBuffer(
                 ?.on_append_buffer_error(
                   sourceBufferId,
                   PushedSegmentErrorCode.UnknownError,
+                  buffered,
                 );
             }
           } catch (err2) {
@@ -1048,13 +1064,24 @@ export function removeBuffer(
             logger.error("Error when calling `on_source_buffer_update`", error);
           }
         })
-        .catch(() => {
+        .catch((err) => {
+          if (err instanceof SourceBufferOperationCancelledError) {
+            logger.info("Worker: Ignoring cancelled removeBuffer operation");
+            return;
+          }
+          let buffered;
+          try {
+            const timeRange = sourceBufferObj.sourceBuffer.getBufferedRanges();
+            buffered = new JsTimeRanges(timeRangesToFloat64Array(timeRange));
+          } catch (_) {
+            buffered = new JsTimeRanges(new Float64Array([]));
+          }
           try {
             playerInstance
               .getDispatcher()
-              ?.on_remove_buffer_error(sourceBufferId);
-          } catch (err) {
-            const error = err instanceof Error ? err : "Unknown Error";
+              ?.on_remove_buffer_error(sourceBufferId, buffered);
+          } catch (err2) {
+            const error = err2 instanceof Error ? err2 : "Unknown Error";
             logger.error("Error when calling `on_remove_buffer_error`", error);
           }
         });

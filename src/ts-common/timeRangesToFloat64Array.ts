@@ -8,7 +8,7 @@
  */
 export default function timeRangesToFloat64Array(
   timeRanges: TimeRanges,
-): Float64Array {
+): Float64Array<ArrayBuffer> {
   const buffered = new Float64Array(timeRanges.length * 2);
   for (let i = 0; i < timeRanges.length; i++) {
     const offset = i * 2;
