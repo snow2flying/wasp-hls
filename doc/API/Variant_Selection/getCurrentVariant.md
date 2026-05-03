@@ -36,6 +36,12 @@ When set, the returned object has the following properties (same than for a
 
   `undefined` if unknown,
 
+- `videoRange` (`string | undefined`): The dynamic range announced for the
+  video data linked to that variant, as directly signaled through the HLS
+  `VIDEO-RANGE` attribute.
+
+  `undefined` if there's no video data or if that property is not specified.
+
 The current variant should be known once the `variantUpdate`
 [event](../Player_Events.md) is sent for the currently-loaded content, which
 should happen at least once before the content is in the `"Loaded"`

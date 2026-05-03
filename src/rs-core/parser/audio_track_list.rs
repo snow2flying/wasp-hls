@@ -1,4 +1,5 @@
 use super::MediaTag;
+use std::collections::BTreeSet;
 use std::ops::{Deref, DerefMut};
 
 /// Allows to translate various `EXT-X-MEDIA` tag found inside a Multivariant Playlist into well
@@ -19,14 +20,15 @@ impl AudioTrackList {
             let language = media.language();
             let assoc_language = media.assoc_language();
             let channels = media.channels();
+            let characteristics = media.characteristics();
 
             // Check if the track already exist in another encoding quality
-            // TODO also check characteristics
             let pos_compat = available_audio_tracks.iter().position(|t| {
                 t.name() == name
                     && t.language() == language
                     && t.assoc_language() == assoc_language
                     && t.channels() == channels
+                    && t.characteristics() == characteristics
             });
 
             if let Some(pos) = pos_compat {
@@ -141,6 +143,60 @@ impl AudioTrack {
     /// Returns the number of channels that audio track outputs
     pub fn channels(&self) -> Option<u32> {
         self.media_tags.first().and_then(|t| t.channels())
+    }
+
+    /// Returns semantic characteristics linked to that audio track.
+    pub fn characteristics(&self) -> &[String] {
+        self.media_tags
+            .first()
+            .map(|t| t.characteristics())
+            .unwrap_or(&[])
+    }
+
+    /// Returns the uniform bit depth linked to that audio track when all
+    /// backing renditions agree on it.
+    pub fn bit_depth(&self) -> Option<u32> {
+        let first = self.media_tags.first()?.bit_depth()?;
+        if self.media_tags.iter().all(|t| t.bit_depth() == Some(first)) {
+            Some(first)
+        } else {
+            None
+        }
+    }
+
+    /// Returns the uniform sample rate linked to that audio track when all
+    /// backing renditions agree on it.
+    pub fn sample_rate(&self) -> Option<u32> {
+        let first = self.media_tags.first()?.sample_rate()?;
+        if self
+            .media_tags
+            .iter()
+            .all(|t| t.sample_rate() == Some(first))
+        {
+            Some(first)
+        } else {
+            None
+        }
+    }
+
+    /// Returns all distinct bit depths seen on backing renditions.
+    pub fn bit_depths(&self) -> Vec<u32> {
+        self.media_tags
+            .iter()
+            .filter_map(|t| t.bit_depth())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    /// Returns all distinct sample rates seen on backing renditions.
+    pub fn sample_rates(&self) -> Vec<u32> {
+        self.media_tags
+            .iter()
+            .filter_map(|t| t.sample_rate())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
     }
 
     /// Returns slice of the various `MediaTag` objects that audio track is associated with.

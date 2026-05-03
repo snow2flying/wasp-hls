@@ -1243,12 +1243,23 @@ export function announceFetchedContent(
       const bandwidth = variantInfo[i];
       i++;
 
+      const videoRangeLen = variantInfo[i];
+      i++;
+      const videoRangeU8 = new Uint8Array(
+        memory.buffer,
+        variantInfo[i],
+        videoRangeLen,
+      );
+      i++;
+      const videoRange = cachedTextDecoder.decode(videoRangeU8);
+
       variantInfoObj.push({
         id,
         height: height === 0 ? undefined : height,
         width: width === 0 ? undefined : width,
         frameRate: frameRate === 0 ? undefined : frameRate,
         bandwidth: bandwidth === 0 ? undefined : bandwidth,
+        videoRange: videoRange === "" ? undefined : videoRange,
       });
     }
   }
@@ -1289,12 +1300,55 @@ export function announceFetchedContent(
       const channels = audioTracksInfo[i];
       i++;
 
+      const characteristicsCount = audioTracksInfo[i];
+      i++;
+      const characteristics: string[] = [];
+      for (let j = 0; j < characteristicsCount; j++) {
+        const characteristicLen = audioTracksInfo[i];
+        i++;
+        const characteristicU8 = new Uint8Array(
+          memory.buffer,
+          audioTracksInfo[i],
+          characteristicLen,
+        );
+        i++;
+        characteristics.push(cachedTextDecoder.decode(characteristicU8));
+      }
+
+      const bitDepth = audioTracksInfo[i];
+      i++;
+
+      const sampleRate = audioTracksInfo[i];
+      i++;
+
+      const bitDepthCount = audioTracksInfo[i];
+      i++;
+      const bitDepths: number[] = [];
+      for (let j = 0; j < bitDepthCount; j++) {
+        bitDepths.push(audioTracksInfo[i]);
+        i++;
+      }
+
+      const sampleRateCount = audioTracksInfo[i];
+      i++;
+      const sampleRates: number[] = [];
+      for (let j = 0; j < sampleRateCount; j++) {
+        sampleRates.push(audioTracksInfo[i]);
+        i++;
+      }
+
       audioTracksObj.push({
         id,
         language: language === "" ? undefined : language,
         assocLanguage: assocLanguage === "" ? undefined : assocLanguage,
         name,
-        channels,
+        channels: channels === 0 ? undefined : channels,
+        characteristics:
+          characteristics.length === 0 ? undefined : characteristics,
+        bitDepth: bitDepth === 0 ? undefined : bitDepth,
+        sampleRate: sampleRate === 0 ? undefined : sampleRate,
+        bitDepths: bitDepths.length === 0 ? undefined : bitDepths,
+        sampleRates: sampleRates.length === 0 ? undefined : sampleRates,
       });
     }
   }

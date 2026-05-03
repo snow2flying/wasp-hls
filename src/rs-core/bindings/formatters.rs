@@ -15,6 +15,13 @@ pub(crate) unsafe fn format_variants_info_for_js(variants: &[&VariantStream]) ->
         ret.push(resolution.width());
         ret.push(v.frame_rate().unwrap_or(0.) as u32);
         ret.push(v.bandwidth() as u32);
+        let video_range = if v.has_type(crate::bindings::MediaType::Video) {
+            v.video_range().unwrap_or("")
+        } else {
+            ""
+        };
+        ret.push(video_range.len() as u32);
+        ret.push(video_range.as_ptr() as u32);
     });
     ret
 }
@@ -83,6 +90,26 @@ pub(crate) unsafe fn format_audio_tracks_for_js(tracks: &[AudioTrack]) -> Vec<u3
         ret.push(name.len() as u32);
         ret.push(name.as_ptr() as u32);
         ret.push(t.channels().unwrap_or(0));
+
+        let characteristics = t.characteristics();
+        ret.push(characteristics.len() as u32);
+        characteristics.iter().for_each(|characteristic| {
+            ret.push(characteristic.len() as u32);
+            ret.push(characteristic.as_ptr() as u32);
+        });
+
+        ret.push(t.bit_depth().unwrap_or(0));
+        ret.push(t.sample_rate().unwrap_or(0));
+
+        let bit_depths = t.bit_depths();
+        ret.push(bit_depths.len() as u32);
+        bit_depths.iter().for_each(|bit_depth| ret.push(*bit_depth));
+
+        let sample_rates = t.sample_rates();
+        ret.push(sample_rates.len() as u32);
+        sample_rates
+            .iter()
+            .for_each(|sample_rate| ret.push(*sample_rate));
     });
     ret
 }

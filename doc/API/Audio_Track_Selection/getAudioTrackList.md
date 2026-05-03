@@ -40,6 +40,30 @@ Each of those objects should contain the following keys (same than for the
 
   For example, an AC-3 5.1 Rendition would have a `channels` attribute set to `6`.
 
+- `characteristics` (`Array.<string> | undefined`): Semantic characteristics
+  linked to that audio track, generally expressed as Uniform Type Identifiers
+  such as accessibility-related metadata or commentary flags.
+
+  `undefined` if unknown or if no such characteristics are announced.
+
+- `bitDepth` (`number | undefined`): If set, the bit depth in bits of the audio
+  samples for every rendition grouped into that audio track.
+
+  `undefined` if unknown or if grouped renditions do not all share the same bit
+  depth.
+
+- `sampleRate` (`number | undefined`): If set, the sample rate in hertz of the
+  audio samples for every rendition grouped into that audio track.
+
+  `undefined` if unknown or if grouped renditions do not all share the same
+  sample rate.
+
+- `bitDepths` (`Array.<number> | undefined`): Distinct bit depths in bits found
+  among the renditions grouped into that audio track.
+
+- `sampleRates` (`Array.<number> | undefined`): Distinct sample rates in hertz
+  found among the renditions grouped into that audio track.
+
 That list of audio tracks is known once the `audioTrackListUpdate`
 [event](../Player_Events.md) is sent for the currently-loaded content, which
 should happen at least once before the content is in the `"Loaded"`

@@ -38,6 +38,12 @@ Those characteristics are the same than for most other variant API, namely:
 
   `undefined` if unknown,
 
+- `videoRange` (`string | undefined`): The dynamic range announced for the
+  video data linked to that variant, as directly signaled through the HLS
+  `VIDEO-RANGE` attribute.
+
+  `undefined` if there's no video data or if that property is not specified.
+
 Note that `getLockedVariant` won't return its new value synchronously after a
 `lockVariant` call as it is is first processed by the `WaspHlsPlayer`'s
 WebWorker, an inherently asynchronous process. If you want to know when and if
