@@ -168,7 +168,7 @@ impl MediaTag {
                         variable_store,
                     )
                     .map_err(|_| MediaTagParsingError::Unknown)?;
-                    url = Some(Url::new(parsed));
+                    url = Some(Url::new(parsed.into_owned()));
                 }
                 "GROUP-ID" => {
                     group_id = Some(
@@ -177,7 +177,8 @@ impl MediaTag {
                             item.value_start_offset,
                             variable_store,
                         )
-                        .map_err(|_| MediaTagParsingError::Unknown)?,
+                        .map_err(|_| MediaTagParsingError::Unknown)?
+                        .into_owned(),
                     );
                 }
                 "LANGUAGE" => {
@@ -187,7 +188,8 @@ impl MediaTag {
                             item.value_start_offset,
                             variable_store,
                         )
-                        .map_err(|_| MediaTagParsingError::Unknown)?,
+                        .map_err(|_| MediaTagParsingError::Unknown)?
+                        .into_owned(),
                     );
                 }
                 "ASSOC-LANGUAGE" => {
@@ -197,7 +199,8 @@ impl MediaTag {
                             item.value_start_offset,
                             variable_store,
                         )
-                        .map_err(|_| MediaTagParsingError::Unknown)?,
+                        .map_err(|_| MediaTagParsingError::Unknown)?
+                        .into_owned(),
                     );
                 }
                 "NAME" => {
@@ -207,7 +210,8 @@ impl MediaTag {
                             item.value_start_offset,
                             variable_store,
                         )
-                        .map_err(|_| MediaTagParsingError::Unknown)?,
+                        .map_err(|_| MediaTagParsingError::Unknown)?
+                        .into_owned(),
                     );
                 }
                 "STABLE-RENDITION-ID" => {
@@ -217,7 +221,8 @@ impl MediaTag {
                             item.value_start_offset,
                             variable_store,
                         )
-                        .map_err(|_| MediaTagParsingError::Unknown)?,
+                        .map_err(|_| MediaTagParsingError::Unknown)?
+                        .into_owned(),
                     );
                 }
                 "DEFAULT" => {
@@ -247,7 +252,10 @@ impl MediaTag {
                         item.value_start_offset,
                         variable_store,
                     )
-                    .map_err(|_| MediaTagParsingError::Unknown)?;
+                    .map_err(|_| MediaTagParsingError::Unknown)?
+                    .into_iter()
+                    .map(|v| v.into_owned())
+                    .collect();
                     characteristics.sort();
                     characteristics.dedup();
                 }

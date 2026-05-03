@@ -380,7 +380,7 @@ impl MediaPlaylist {
                                         item.value_start_offset,
                                         &variable_store,
                                     )?;
-                                    let init_url = Url::new(val);
+                                    let init_url = Url::new(val.into_owned());
                                     let init_url = if init_url.is_absolute() {
                                         init_url
                                     } else {

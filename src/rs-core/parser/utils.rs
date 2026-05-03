@@ -151,26 +151,26 @@ impl<'a> Iterator for AttributeListIter<'a> {
     }
 }
 
-pub(crate) fn parse_substituted_quoted_string(
-    line: &str,
+pub(crate) fn parse_substituted_quoted_string<'a>(
+    line: &'a str,
     value_start_offset: usize,
     variable_store: &VariableStore,
-) -> Result<String, VariableDefinitionError> {
+) -> Result<Cow<'a, str>, VariableDefinitionError> {
     let (parsed, _) = parse_quoted_string(line, value_start_offset);
     let parsed = parsed.map_err(|_| VariableDefinitionError::InvalidDefinition)?;
-    Ok(variable_store.substitute(parsed)?.into_owned())
+    variable_store.substitute(parsed)
 }
 
-pub(crate) fn parse_substituted_comma_separated_list(
-    line: &str,
+pub(crate) fn parse_substituted_comma_separated_list<'a>(
+    line: &'a str,
     value_start_offset: usize,
     variable_store: &VariableStore,
-) -> Result<Vec<String>, VariableDefinitionError> {
+) -> Result<Vec<Cow<'a, str>>, VariableDefinitionError> {
     let (parsed, _) = parse_comma_separated_list(line, value_start_offset);
     let parsed = parsed.map_err(|_| VariableDefinitionError::InvalidDefinition)?;
     parsed
         .into_iter()
-        .map(|value| variable_store.substitute(value).map(|v| v.into_owned()))
+        .map(|value| variable_store.substitute(value))
         .collect()
 }
 

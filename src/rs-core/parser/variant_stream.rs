@@ -365,8 +365,8 @@ impl VariantStream {
                     )
                     .map_err(|_| VariantParsingError::InvalidDecimalInteger)?;
                     codecs = parsed_codecs
-                        .iter()
-                        .map(|c| (guess_media_type_from_codec(c), c.clone()))
+                        .into_iter()
+                        .map(|c| (guess_media_type_from_codec(&c), c.into_owned()))
                         .collect();
                 }
                 "FRAME-RATE" => {
@@ -430,7 +430,8 @@ impl VariantStream {
                             item.value_start_offset,
                             variable_store,
                         )
-                        .map_err(|_| VariantParsingError::InvalidDecimalInteger)?,
+                        .map_err(|_| VariantParsingError::InvalidDecimalInteger)?
+                        .into_owned(),
                     );
                 }
                 "AUDIO" => {
@@ -440,7 +441,8 @@ impl VariantStream {
                             item.value_start_offset,
                             variable_store,
                         )
-                        .map_err(|_| VariantParsingError::InvalidDecimalInteger)?,
+                        .map_err(|_| VariantParsingError::InvalidDecimalInteger)?
+                        .into_owned(),
                     );
                 }
                 "VIDEO" => {
@@ -450,7 +452,8 @@ impl VariantStream {
                             item.value_start_offset,
                             variable_store,
                         )
-                        .map_err(|_| VariantParsingError::InvalidDecimalInteger)?,
+                        .map_err(|_| VariantParsingError::InvalidDecimalInteger)?
+                        .into_owned(),
                     );
                 }
                 "SUBTITLES" => {
@@ -460,7 +463,8 @@ impl VariantStream {
                             item.value_start_offset,
                             variable_store,
                         )
-                        .map_err(|_| VariantParsingError::InvalidDecimalInteger)?,
+                        .map_err(|_| VariantParsingError::InvalidDecimalInteger)?
+                        .into_owned(),
                     );
                 }
                 "CLOSED-CAPTIONS" => {
@@ -472,7 +476,8 @@ impl VariantStream {
                                 item.value_start_offset,
                                 variable_store,
                             )
-                            .map_err(|_| VariantParsingError::InvalidDecimalInteger)?,
+                            .map_err(|_| VariantParsingError::InvalidDecimalInteger)?
+                            .into_owned(),
                         );
                     }
                 }
@@ -489,7 +494,8 @@ impl VariantStream {
                             item.value_start_offset,
                             variable_store,
                         )
-                        .map_err(|_| VariantParsingError::InvalidDecimalInteger)?,
+                        .map_err(|_| VariantParsingError::InvalidDecimalInteger)?
+                        .into_owned(),
                     );
                 }
                 _ => {}
