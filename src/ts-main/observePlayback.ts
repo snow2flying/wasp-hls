@@ -1,7 +1,7 @@
-import EventEmitter from "../ts-common/EventEmitter";
-import timeRangesToFloat64Array from "../ts-common/timeRangesToFloat64Array";
-import type { MediaObservation } from "../ts-common/types";
-import { PlaybackTickReason } from "../ts-common/types";
+import EventEmitter from "../ts-common/EventEmitter.ts";
+import timeRangesToFloat64Array from "../ts-common/timeRangesToFloat64Array.ts";
+import type { MediaObservation } from "../ts-common/types.ts";
+import { PlaybackTickReason } from "../ts-common/types.ts";
 
 /** Items emitted by `observePlayback`. */
 export type PlaybackObserverObservation = Omit<

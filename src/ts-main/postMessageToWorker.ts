@@ -1,5 +1,5 @@
-import logger from "../ts-common/logger";
-import type { MainMessage } from "../ts-common/types";
+import logger from "../ts-common/logger.ts";
+import type { MainMessage } from "../ts-common/types.ts";
 
 /**
  * Post given `msg` message to the given `worker` with optional `Transferable`

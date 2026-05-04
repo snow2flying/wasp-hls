@@ -1,10 +1,10 @@
-import assertNever from "../ts-common/assertNever";
-import logger from "../ts-common/logger";
+import assertNever from "../ts-common/assertNever.ts";
+import logger from "../ts-common/logger.ts";
 import QueuedSourceBuffer, {
   SourceBufferOperation,
   SourceBufferOperationCancelledError,
-} from "../ts-common/QueuedSourceBuffer";
-import timeRangesToFloat64Array from "../ts-common/timeRangesToFloat64Array";
+} from "../ts-common/QueuedSourceBuffer.ts";
+import timeRangesToFloat64Array from "../ts-common/timeRangesToFloat64Array.ts";
 import type {
   AppendBufferWorkerMessage,
   AttachMediaSourceWorkerMessage,
@@ -32,10 +32,13 @@ import type {
   AreTypesSupportedWorkerMessage,
   VariantLockStatusChangeWorkerMessage,
   SourceBufferId,
-} from "../ts-common/types";
-import { MainMessageType, MediaSourceReadyState } from "../ts-common/types";
-import { AddSourceBufferErrorCode, MediaType, OtherErrorCode } from "../wasm";
-import type { WaspError } from "./errors";
+} from "../ts-common/types.ts";
+import { MainMessageType, MediaSourceReadyState } from "../ts-common/types.ts";
+import {
+  AddSourceBufferErrorCode,
+  MediaType,
+  OtherErrorCode,
+} from "../wasm/index.js";
 import {
   WaspMediaPlaylistParsingError,
   WaspMediaPlaylistRequestError,
@@ -46,11 +49,12 @@ import {
   WaspSegmentRequestError,
   WaspSourceBufferCreationError,
   WaspSourceBufferError,
-} from "./errors";
-import PlaybackObserver from "./observePlayback";
-import postMessageToWorker from "./postMessageToWorker";
-import type { ContentMetadata } from "./types";
-import { clearElementSrc, getErrorInformation } from "./utils";
+} from "./errors/index.ts";
+import type { WaspError } from "./errors/index.ts";
+import PlaybackObserver from "./observePlayback.ts";
+import postMessageToWorker from "./postMessageToWorker.ts";
+import type { ContentMetadata } from "./types.ts";
+import { clearElementSrc, getErrorInformation } from "./utils.ts";
 
 /**
  * Interval, in milliseconds, at which playback observations are sent to the

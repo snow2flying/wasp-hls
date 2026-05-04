@@ -1,6 +1,6 @@
-import logger from "../../ts-common/logger";
-import { parseSyncSafeInteger, frameParsers } from "./id3-utils";
-import { TimedMetadataPacket } from "./read-aac";
+import logger from "../../ts-common/logger.ts";
+import { parseSyncSafeInteger, frameParsers } from "./id3-utils.ts";
+import type { TimedMetadataPacket } from "./read-aac.ts";
 
 const METADATA_STREAM_TYPE = 0x15;
 
@@ -34,7 +34,7 @@ export default class TimedMetadataParser {
     this._bufferSize = 0;
 
     // calculate the text track in-band metadata track dispatch type
-    // eslint-disable-next-line max-len
+
     // https://html.spec.whatwg.org/multipage/embedded-content.html#steps-to-expose-a-media-resource-specific-text-track
     this.dispatchType = METADATA_STREAM_TYPE.toString(16);
     if (this._descriptor !== undefined) {

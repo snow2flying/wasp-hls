@@ -1,5 +1,5 @@
-import { ONE_SECOND_IN_TS } from "./clock-utils";
-import { TrackInfo } from "./types";
+import { ONE_SECOND_IN_TS } from "./clock-utils.ts";
+import type { TrackInfo } from "./types.ts";
 
 /**
  * Store information about the start and end of the track and the

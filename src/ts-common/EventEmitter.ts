@@ -1,4 +1,4 @@
-import logger from "./logger";
+import logger from "./logger.ts";
 
 /**
  * Generic type for a non-emitting event emitter (can only be relied on for

@@ -1,5 +1,5 @@
-import { RequestErrorReason } from "../../wasm";
-import { WaspErrorCode } from "./common";
+import { RequestErrorReason } from "../../wasm/index.js";
+import { WaspErrorCode } from "./common.ts";
 
 /**
  * Error used to describe a problem with the Multivariant Playlist request.

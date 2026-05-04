@@ -1,5 +1,5 @@
-import * as Bindings from "./bindings";
-import MessageReceiver from "./MessageReceiver";
+import * as Bindings from "./bindings.ts";
+import MessageReceiver from "./MessageReceiver.ts";
 
 // Declare ts-bindings as globals, capitalized and prefixed with "js".
 // We don't care, we are the only one to control the Worker.

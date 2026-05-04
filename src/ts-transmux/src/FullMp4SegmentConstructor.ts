@@ -1,5 +1,5 @@
-import * as clock from "./clock-utils";
-import { createInitSegment } from "./mp4-utils";
+import * as clock from "./clock-utils.ts";
+import { createInitSegment } from "./mp4-utils.ts";
 
 interface ConstructedMp4Segment {
   type: string | undefined;

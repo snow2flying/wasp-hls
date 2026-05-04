@@ -1,17 +1,16 @@
-import { isLikelyAacData } from "./aac-utils";
-import AdtsPacketParser from "./AdtsPacketParser";
-import ElementaryPacketParser, {
-  ElementaryPacket,
-} from "./ElementaryPacketParser";
-import FullMp4SegmentConstructor from "./FullMp4SegmentConstructor";
-import H264NalUnitProducer from "./H264NalUnitProducer";
-import { Mp4AudioSegmentGenerator } from "./Mp4AudioSegmentGenerator";
-import Mp4VideoSegmentGenerator from "./Mp4VideoSegmentGenerator";
-import { readNextAdtsOrId3 } from "./read-aac";
-import TimedMetadataParser from "./TimedMetadataParser";
-import TimestampRolloverHandler from "./TimestampRolloverHandler";
-import TransportPacketParser from "./TransportPacketParser";
-import TransportStreamSplitter from "./TransportStreamSplitter";
+import { isLikelyAacData } from "./aac-utils.ts";
+import AdtsPacketParser from "./AdtsPacketParser.ts";
+import type { ElementaryPacket } from "./ElementaryPacketParser.ts";
+import ElementaryPacketParser from "./ElementaryPacketParser.ts";
+import FullMp4SegmentConstructor from "./FullMp4SegmentConstructor.ts";
+import H264NalUnitProducer from "./H264NalUnitProducer.ts";
+import { Mp4AudioSegmentGenerator } from "./Mp4AudioSegmentGenerator.ts";
+import Mp4VideoSegmentGenerator from "./Mp4VideoSegmentGenerator.ts";
+import { readNextAdtsOrId3 } from "./read-aac.ts";
+import TimedMetadataParser from "./TimedMetadataParser.ts";
+import TimestampRolloverHandler from "./TimestampRolloverHandler.ts";
+import TransportPacketParser from "./TransportPacketParser.ts";
+import TransportStreamSplitter from "./TransportStreamSplitter.ts";
 
 interface AacPipelineElements {
   name: "aac";

@@ -1,5 +1,5 @@
-import { MultivariantPlaylistParsingErrorCode } from "../../wasm";
-import type { WaspErrorCode } from "./common";
+import { MultivariantPlaylistParsingErrorCode } from "../../wasm/index.js";
+import type { WaspErrorCode } from "./common.ts";
 
 /**
  * Error used to describe a problem when parsing a Multivariant Playlist.

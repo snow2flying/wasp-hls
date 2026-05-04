@@ -11,7 +11,7 @@ import type {
   SegmentParsingErrorCode,
   StartingPositionType,
   TimerReason,
-} from "../../ts-common/generatedWasmEnums";
+} from "../../ts-common/generatedWasmEnums.ts";
 
 export {
   AddSourceBufferErrorCode,
@@ -34,7 +34,7 @@ export {
   SourceBufferCreationErrorCode,
   StartingPositionType,
   TimerReason,
-} from "../../ts-common/generatedWasmEnums";
+} from "../../ts-common/generatedWasmEnums.ts";
 
 export class AddSourceBufferResult {
   free(): void;

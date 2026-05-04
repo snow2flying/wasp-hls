@@ -1,2 +1,2 @@
-import Transmuxer from "./src/Transmuxer";
+import Transmuxer from "./src/Transmuxer.ts";
 export default Transmuxer;

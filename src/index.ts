@@ -1,6 +1,8 @@
-import logger, { LoggerLevel as innerLoggerLevel } from "./ts-common/logger";
-import WaspHlsPlayer, { PlayerState as innerPlayerState } from "./ts-main";
-export { WaspHlsPlayerConfig } from "./ts-common/types";
+import logger, { LoggerLevel as innerLoggerLevel } from "./ts-common/logger.ts";
+import WaspHlsPlayer, {
+  PlayerState as innerPlayerState,
+} from "./ts-main/index.ts";
+export { WaspHlsPlayerConfig } from "./ts-common/types.ts";
 export {
   AudioTrackInfo,
   VariantInfo,
@@ -16,7 +18,7 @@ export {
   WaspSegmentRequestError,
   WaspSourceBufferCreationError,
   WaspSourceBufferError,
-} from "./ts-main";
+} from "./ts-main/index.ts";
 
 /** Enumerates the various "states" the WaspHlsPlayer can be in. */
 export const PlayerState = {

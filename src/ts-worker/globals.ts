@@ -1,9 +1,12 @@
-import { numberIdGenerator } from "../ts-common/idGenerator";
-import logger from "../ts-common/logger";
-import type QueuedSourceBuffer from "../ts-common/QueuedSourceBuffer";
-import type { SourceBufferId, WaspHlsPlayerConfig } from "../ts-common/types";
-import type Transmuxer from "../ts-transmux";
-import { Dispatcher, type InitOutput, type MediaType } from "../wasm";
+import { numberIdGenerator } from "../ts-common/idGenerator.ts";
+import logger from "../ts-common/logger.ts";
+import type QueuedSourceBuffer from "../ts-common/QueuedSourceBuffer.ts";
+import type {
+  SourceBufferId,
+  WaspHlsPlayerConfig,
+} from "../ts-common/types.ts";
+import type Transmuxer from "../ts-transmux/index.ts";
+import { Dispatcher, type InitOutput, type MediaType } from "../wasm/index.js";
 
 export interface WorkerInitializationOptions {
   hasMseInWorker: boolean;

@@ -1,24 +1,15 @@
-import idGenerator from "../ts-common/idGenerator";
-import logger from "../ts-common/logger";
+import idGenerator from "../ts-common/idGenerator.ts";
+import logger from "../ts-common/logger.ts";
 import QueuedSourceBuffer, {
   SourceBufferOperationCancelledError,
-} from "../ts-common/QueuedSourceBuffer";
-import timeRangesToFloat64Array from "../ts-common/timeRangesToFloat64Array";
+} from "../ts-common/QueuedSourceBuffer.ts";
+import timeRangesToFloat64Array from "../ts-common/timeRangesToFloat64Array.ts";
 import type {
   AudioTrackInfo,
   SourceBufferId,
   VariantInfo,
 } from "../ts-common/types.js";
-import { WorkerMessageType } from "../ts-common/types.js";
-import type {
-  MediaPlaylistParsingErrorCode,
-  MultivariantPlaylistParsingErrorCode,
-  OtherErrorCode,
-  PlaylistNature,
-  RequestErrorReason,
-  SourceBufferCreationErrorCode,
-  TimerReason,
-} from "../wasm";
+import { WorkerMessageType } from "../ts-common/types.ts";
 import {
   AddSourceBufferErrorCode,
   AddSourceBufferResult,
@@ -39,15 +30,24 @@ import {
   RemoveMediaSourceErrorCode,
   RemoveMediaSourceResult,
   SegmentParsingErrorCode,
-} from "../wasm";
-import type { RequestId, ResourceId, TimerId } from "./globals";
+} from "../wasm/index.js";
+import type {
+  MediaPlaylistParsingErrorCode,
+  MultivariantPlaylistParsingErrorCode,
+  OtherErrorCode,
+  PlaylistNature,
+  RequestErrorReason,
+  SourceBufferCreationErrorCode,
+  TimerReason,
+} from "../wasm/index.js";
 import {
   cachedCodecsSupport,
   jsMemoryResources,
   requestsStore,
   playerInstance,
   getMediaSourceObj,
-} from "./globals";
+} from "./globals.ts";
+import type { RequestId, ResourceId, TimerId } from "./globals.ts";
 import {
   getDurationFromTrun,
   getMDHDTimescale,

@@ -16,6 +16,7 @@
     "noUnusedParameters": true,
     "noUnusedLocals": true,
     "moduleResolution": "bundler",
+    "rewriteRelativeImportExtensions": true,
     "typeRoots": ["./node_modules/@types"],
     "jsx": "react"
   },

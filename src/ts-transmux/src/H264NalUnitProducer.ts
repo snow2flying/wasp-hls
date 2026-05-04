@@ -1,5 +1,5 @@
-import { VideoElementaryPacket } from "./ElementaryPacketParser";
-import ExpGolomb from "./exp-golomb";
+import type { VideoElementaryPacket } from "./ElementaryPacketParser.ts";
+import ExpGolomb from "./exp-golomb.ts";
 
 /**
  * Accepts a NAL unit byte stream and unpacks the embedded NAL units.

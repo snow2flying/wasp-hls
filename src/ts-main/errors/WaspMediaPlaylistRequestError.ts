@@ -1,6 +1,6 @@
-import type { MediaType } from "../../wasm";
-import { RequestErrorReason } from "../../wasm";
-import { WaspErrorCode } from "./common";
+import type { MediaType } from "../../wasm/index.js";
+import { RequestErrorReason } from "../../wasm/index.js";
+import { WaspErrorCode } from "./common.ts";
 
 /**
  * Error used to describe a problem with the Media Playlist request.

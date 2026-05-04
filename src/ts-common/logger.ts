@@ -1,5 +1,5 @@
-import EventEmitter from "./EventEmitter";
-import noop from "./noop";
+import EventEmitter from "./EventEmitter.ts";
+import noop from "./noop.ts";
 
 /**
  * Possible verbosity level for the `WaspHlsPlayer`'s Logger.

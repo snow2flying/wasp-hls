@@ -2,12 +2,12 @@ import {
   ADTS_STREAM_TYPE,
   H264_STREAM_TYPE,
   METADATA_STREAM_TYPE,
-} from "./constants";
-import {
+} from "./constants.ts";
+import type {
   ParsedPacket,
   PesPacket,
   ProgramMapTable,
-} from "./TransportPacketParser";
+} from "./TransportPacketParser.ts";
 
 export interface MetadataElementaryPacket {
   type: "metadata";

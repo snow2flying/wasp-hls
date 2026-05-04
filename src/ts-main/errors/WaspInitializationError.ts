@@ -1,5 +1,5 @@
-import { InitializationErrorCode } from "../../ts-common/types";
-import { WaspErrorCode } from "./common";
+import { InitializationErrorCode } from "../../ts-common/types.ts";
+import { WaspErrorCode } from "./common.ts";
 
 /**
  * Error used when the `WaspHlsPlayer` initialization (e.g. through the

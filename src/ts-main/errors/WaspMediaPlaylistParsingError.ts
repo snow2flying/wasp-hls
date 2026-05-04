@@ -1,6 +1,6 @@
-import type { MediaType } from "../../wasm";
-import { MediaPlaylistParsingErrorCode } from "../../wasm";
-import type { WaspErrorCode } from "./common";
+import type { MediaType } from "../../wasm/index.js";
+import { MediaPlaylistParsingErrorCode } from "../../wasm/index.js";
+import type { WaspErrorCode } from "./common.ts";
 
 /**
  * Error used to describe a problem when parsing a Media Playlist.

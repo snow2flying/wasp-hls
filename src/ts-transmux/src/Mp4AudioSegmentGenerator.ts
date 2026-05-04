@@ -1,17 +1,17 @@
-import { AacFrame } from "./AdtsPacketParser";
+import type { AacFrame } from "./AdtsPacketParser.ts";
 import {
   prefixWithSilence,
   trimAdtsFramesByEarliestDts,
   generateSampleTable as generateAudioSampleTable,
   concatenateFrameData,
-} from "./audio-frame-utils";
-import { createMdat, createMoof } from "./mp4-utils";
+} from "./audio-frame-utils.ts";
+import { createMdat, createMoof } from "./mp4-utils.ts";
 import {
   calculateTrackBaseMediaDecodeTime,
   clearDtsInfo,
   collectDtsInfo,
-} from "./track-utils";
-import { TrackInfo } from "./types";
+} from "./track-utils.ts";
+import type { TrackInfo } from "./types.ts";
 
 export interface Mp4AudioSegmentData {
   trackInfo: TrackInfo;

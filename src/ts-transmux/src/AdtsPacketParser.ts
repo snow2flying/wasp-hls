@@ -1,5 +1,5 @@
-import logger from "../../ts-common/logger";
-import { ONE_SECOND_IN_TS } from "./clock-utils";
+import logger from "../../ts-common/logger.ts";
+import { ONE_SECOND_IN_TS } from "./clock-utils.ts";
 
 const ADTS_SAMPLING_FREQUENCIES = [
   96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025,

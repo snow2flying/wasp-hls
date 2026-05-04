@@ -1,4 +1,4 @@
-import logger from "./logger";
+import logger from "./logger.ts";
 
 /**
  * Creates an ID generator which generates a different string identifier each

@@ -1,4 +1,4 @@
-import { parseAdtsSize, parseId3TagSize } from "./aac-utils";
+import { parseAdtsSize, parseId3TagSize } from "./aac-utils.ts";
 
 export interface TimedMetadataPacket {
   type: "timed-metadata";

@@ -1,14 +1,14 @@
-import assertNever from "../ts-common/assertNever";
-import logger from "../ts-common/logger";
-import noop from "../ts-common/noop";
-import { SourceBufferOperation } from "../ts-common/QueuedSourceBuffer";
-import timeRangesToFloat64Array from "../ts-common/timeRangesToFloat64Array";
-import type { MainMessage, WaspHlsPlayerConfig } from "../ts-common/types";
+import assertNever from "../ts-common/assertNever.ts";
+import logger from "../ts-common/logger.ts";
+import noop from "../ts-common/noop.ts";
+import { SourceBufferOperation } from "../ts-common/QueuedSourceBuffer.ts";
+import timeRangesToFloat64Array from "../ts-common/timeRangesToFloat64Array.ts";
+import type { MainMessage, WaspHlsPlayerConfig } from "../ts-common/types.ts";
 import {
   InitializationErrorCode,
   MainMessageType,
   WorkerMessageType,
-} from "../ts-common/types";
+} from "../ts-common/types.ts";
 import initializeWasm, {
   JsTimeRanges,
   MediaObservation,
@@ -16,15 +16,15 @@ import initializeWasm, {
   OtherErrorCode,
   PushedSegmentErrorCode,
   StartingPosition,
-} from "../wasm";
-import { stopObservingPlayback } from "./bindings";
-import type { ContentInfo, WorkerInitializationOptions } from "./globals";
+} from "../wasm/index.js";
+import { stopObservingPlayback } from "./bindings.ts";
+import type { ContentInfo, WorkerInitializationOptions } from "./globals.ts";
 import {
   cachedCodecsSupport,
   playerInstance,
   updateDispatcherConfig,
-} from "./globals";
-import postMessageToMain from "./postMessage";
+} from "./globals.ts";
+import postMessageToMain from "./postMessage.ts";
 
 let wasInitializedCalled = false;
 

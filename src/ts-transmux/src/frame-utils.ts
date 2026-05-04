@@ -2,7 +2,8 @@
 // composed of the nal units that make up that frame
 // Also keep track of cummulative data about the frame from the nal units such
 
-import { NalUnitType, ParsedNalUnit } from "./H264NalUnitProducer";
+import type { ParsedNalUnit } from "./H264NalUnitProducer.ts";
+import { NalUnitType } from "./H264NalUnitProducer.ts";
 
 // as the frame duration, starting pts, etc.
 function groupNalsIntoFrames(nalUnits: ParsedNalUnit[]): any[] {

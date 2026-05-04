@@ -1,4 +1,4 @@
-import { TrackInfo, TrackSample } from "./types";
+import type { TrackInfo, TrackSample } from "./types.ts";
 
 const MAX_UINT32 = Math.pow(2, 32);
 const BOXES_NAME = {

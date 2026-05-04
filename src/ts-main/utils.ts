@@ -1,8 +1,8 @@
-import isNullOrUndefined from "../ts-common/isNullOrUndefined";
-import logger from "../ts-common/logger";
-import { MainMessageType } from "../ts-common/types";
-import postMessageToWorker from "./postMessageToWorker";
-import type { ContentMetadata } from "./types";
+import isNullOrUndefined from "../ts-common/isNullOrUndefined.ts";
+import logger from "../ts-common/logger.ts";
+import { MainMessageType } from "../ts-common/types.ts";
+import postMessageToWorker from "./postMessageToWorker.ts";
+import type { ContentMetadata } from "./types.ts";
 
 /**
  * Default mime-type used for checking support of mpeg2-ts media.

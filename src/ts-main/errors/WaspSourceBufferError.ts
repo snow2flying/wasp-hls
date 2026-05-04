@@ -1,7 +1,7 @@
-import type { SourceBufferOperation } from "../../ts-common/QueuedSourceBuffer";
-import type { MediaType } from "../../wasm";
-import { PushedSegmentErrorCode } from "../../wasm";
-import type { WaspErrorCode } from "./common";
+import type { SourceBufferOperation } from "../../ts-common/QueuedSourceBuffer.ts";
+import type { MediaType } from "../../wasm/index.js";
+import { PushedSegmentErrorCode } from "../../wasm/index.js";
+import type { WaspErrorCode } from "./common.ts";
 
 /**
  * Error used when a SourceBuffer operation failed.

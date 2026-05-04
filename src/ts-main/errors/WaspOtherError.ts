@@ -1,5 +1,5 @@
-import { OtherErrorCode } from "../../wasm";
-import { WaspErrorCode } from "./common";
+import { OtherErrorCode } from "../../wasm/index.js";
+import { WaspErrorCode } from "./common.ts";
 
 /**
  * Error used when an uncategorized error arised.

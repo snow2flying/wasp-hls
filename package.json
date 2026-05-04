@@ -3,12 +3,12 @@
   "version": "0.4.2",
   "description": "WebAssembly HLS Player Proof Of Concept",
   "type": "module",
-  "main": "build/es6/index.js",
-  "types": "build/es6/index.d.ts",
+  "main": "build/es6/ts-main/index.js",
+  "types": "build/es6/ts-main/index.d.ts",
   "exports": {
     ".": {
-      "types": "./build/es6/index.d.ts",
-      "default": "./build/es6/index.js"
+      "types": "./build/es6/ts-main/index.d.ts",
+      "default": "./build/es6/ts-main/index.js"
     },
     "./wasm": {
       "types": "./build/embedded/wasm.d.ts",
@@ -32,7 +32,7 @@
     "build:demo:release": "esbuild demo/src/index.tsx --bundle --outfile=build/demo.js --minify",
     "build:demo:watch": "esbuild demo/src/index.tsx --bundle --outfile=build/demo.js --watch",
     "build:main": "esbuild src/ts-main/index.ts --bundle --outfile=build/main.js",
-    "build:main:es6": "rm -rf build/es6 && tsc -p src/tsconfig.json --outDir \"./build/es6\"",
+    "build:main:es6": "rm -rf build/es6 && tsc -p src/ts-main/tsconfig.json --outDir \"./build/es6\"",
     "build:main:release": "esbuild src/ts-main/index.ts --bundle --outfile=build/main.js --minify",
     "build:release": "npm run generate:wasm-abi && npm run clean && npm run build:wasm:release && npm run build:worker:release && npm run build:main:release",
     "build:wasm": "npm run generate:wasm-abi && npm run compile:rs && npm run move:wasm && npm run check:wasm-abi",

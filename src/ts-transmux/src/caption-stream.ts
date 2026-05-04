@@ -1,13 +1,14 @@
-import EventEmitter from "../../ts-common/EventEmitter";
-import logger from "../../ts-common/logger";
+import EventEmitter from "../../ts-common/EventEmitter.ts";
+import logger from "../../ts-common/logger.ts";
+import type { CaptionPacket } from "./caption-packet-parser.ts";
 import {
   parseSei,
   parseUserData,
   parseCaptionPackets,
   USER_DATA_REGISTERED_ITU_T_T35,
-  CaptionPacket,
-} from "./caption-packet-parser";
-import { NalUnitType, ParsedNalUnit } from "./H264NalUnitProducer";
+} from "./caption-packet-parser.ts";
+import type { ParsedNalUnit } from "./H264NalUnitProducer.ts";
+import { NalUnitType } from "./H264NalUnitProducer.ts";
 
 // TODO Convert it and use it?
 
@@ -60,17 +61,17 @@ class CaptionStream extends EventEmitter<CaptionStreamEvents> {
     this._parse708Captions = options._parse708Captions !== false;
     this._captionPackets = [];
     this.ccStreams_ = [
-      new Cea608Stream(0, 0), // eslint-disable-line no-use-before-define
-      new Cea608Stream(0, 1), // eslint-disable-line no-use-before-define
-      new Cea608Stream(1, 0), // eslint-disable-line no-use-before-define
-      new Cea608Stream(1, 1), // eslint-disable-line no-use-before-define
+      new Cea608Stream(0, 0),
+      new Cea608Stream(0, 1),
+      new Cea608Stream(1, 0),
+      new Cea608Stream(1, 1),
     ];
 
     this.cc708Stream_ = null;
     if (this._parse708Captions) {
       this.cc708Stream_ = new Cea708Stream({
         captionServices: options.captionServices,
-      }); // eslint-disable-line no-use-before-define
+      });
     }
 
     this.latestDts_ = null;
@@ -1435,7 +1436,7 @@ class Cea608Stream extends EventEmitter<Cea608StreamEvents> {
 
     // Constants for the LSByte command codes recognized by Cea608Stream. This
     // list is not exhaustive. For a more comprehensive listing and semantics see
-    // eslint-disable-next-line max-len
+
     // http://www.gpo.gov/fdsys/pkg/CFR-2010-title47-vol1/pdf/CFR-2010-title47-vol1-sec15-119.pdf
     // Pop-on Mode
     this.RESUME_CAPTION_LOADING_ = this.CONTROL_ | 0x20;

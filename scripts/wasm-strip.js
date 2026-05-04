@@ -47,10 +47,10 @@
  * painful to exploit than I first expected, but I hope it turned out OK.
  */
 
-const fs = require("fs");
+import fs from "fs";
 
 // Promise versions will be easier to work with here
-const { access, stat } = require("fs/promises");
+import { access, stat } from "fs/promises";
 
 /** Magic number a WebAssembly file should start with. */
 const WASM_MAGIC_NUMBER = 0x0061736d;

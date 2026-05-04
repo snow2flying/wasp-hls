@@ -2,9 +2,9 @@ import {
   ONE_SECOND_IN_TS,
   audioTsToVideoTs,
   videoTsToAudioTs,
-} from "./clock-utils";
-import generateFrameOfSilence from "./generate_frame_of_silence";
-import type { TrackInfo } from "./types";
+} from "./clock-utils.ts";
+import generateFrameOfSilence from "./generate_frame_of_silence.ts";
+import type { TrackInfo } from "./types.ts";
 
 /**
  * Sum the `byteLength` properties of the data in each AAC frame

@@ -1,13 +1,13 @@
-import WaspInitializationError from "./WaspInitializationError";
-import WaspMediaPlaylistParsingError from "./WaspMediaPlaylistParsingError";
-import WaspMediaPlaylistRequestError from "./WaspMediaPlaylistRequestError";
-import WaspMultivariantPlaylistParsingError from "./WaspMultivariantPlaylistParsingError";
-import WaspMultivariantPlaylistRequestError from "./WaspMultivariantPlaylistRequestError";
-import WaspOtherError from "./WaspOtherError";
-import WaspSegmentParsingError from "./WaspSegmentParsingError";
-import WaspSegmentRequestError from "./WaspSegmentRequestError";
-import WaspSourceBufferCreationError from "./WaspSourceBufferCreationError";
-import WaspSourceBufferError from "./WaspSourceBufferError";
+import WaspInitializationError from "./WaspInitializationError.ts";
+import WaspMediaPlaylistParsingError from "./WaspMediaPlaylistParsingError.ts";
+import WaspMediaPlaylistRequestError from "./WaspMediaPlaylistRequestError.ts";
+import WaspMultivariantPlaylistParsingError from "./WaspMultivariantPlaylistParsingError.ts";
+import WaspMultivariantPlaylistRequestError from "./WaspMultivariantPlaylistRequestError.ts";
+import WaspOtherError from "./WaspOtherError.ts";
+import WaspSegmentParsingError from "./WaspSegmentParsingError.ts";
+import WaspSegmentRequestError from "./WaspSegmentRequestError.ts";
+import WaspSourceBufferCreationError from "./WaspSourceBufferCreationError.ts";
+import WaspSourceBufferError from "./WaspSourceBufferError.ts";
 
 /**
  * General type for all potential errors returned by the `WaspHlsPlayer`.
@@ -23,7 +23,7 @@ export type WaspError =
   | WaspSourceBufferCreationError
   | WaspSourceBufferError;
 
-export { WaspErrorCode } from "./common";
+export { WaspErrorCode } from "./common.ts";
 
 export {
   WaspInitializationError,

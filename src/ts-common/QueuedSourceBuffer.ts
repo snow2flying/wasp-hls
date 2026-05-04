@@ -1,5 +1,5 @@
-import assertNever from "./assertNever";
-import logger from "./logger";
+import assertNever from "./assertNever.ts";
+import logger from "./logger.ts";
 
 /**
  * Error raised for queued SourceBuffer operations that were never attempted

@@ -4,15 +4,16 @@ import {
   generateSampleTable,
   groupFramesIntoGops,
   groupNalsIntoFrames,
-} from "./frame-utils";
-import { NalUnitType, ParsedNalUnit } from "./H264NalUnitProducer";
-import { createMdat, createMoof } from "./mp4-utils";
+} from "./frame-utils.ts";
+import type { ParsedNalUnit } from "./H264NalUnitProducer.ts";
+import { NalUnitType } from "./H264NalUnitProducer.ts";
+import { createMdat, createMoof } from "./mp4-utils.ts";
 import {
   calculateTrackBaseMediaDecodeTime,
   clearDtsInfo,
   collectDtsInfo,
-} from "./track-utils";
-import { TrackInfo } from "./types";
+} from "./track-utils.ts";
+import type { TrackInfo } from "./types.ts";
 
 export interface Mp4VideoSegmentData {
   trackInfo: TrackInfo;

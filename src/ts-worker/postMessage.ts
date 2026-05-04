@@ -1,5 +1,5 @@
-import logger from "../ts-common/logger";
-import type { WorkerMessage } from "../ts-common/types";
+import logger from "../ts-common/logger.ts";
+import type { WorkerMessage } from "../ts-common/types.ts";
 
 export default function postMessageToMain(
   msg: WorkerMessage,

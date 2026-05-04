@@ -1,5 +1,5 @@
-import WaspHlsPlayer from "./api";
-export type { AudioTrackInfo, VariantInfo } from "./types";
-export { PlayerState } from "./types";
-export * from "./errors/index";
+import WaspHlsPlayer from "./api.ts";
+export type { AudioTrackInfo, VariantInfo } from "./types.ts";
+export { PlayerState } from "./types.ts";
+export * from "./errors/index.ts";
 export default WaspHlsPlayer;

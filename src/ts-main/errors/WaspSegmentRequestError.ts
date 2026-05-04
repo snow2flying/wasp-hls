@@ -1,6 +1,6 @@
-import assertNever from "../../ts-common/assertNever";
-import { MediaType, RequestErrorReason } from "../../wasm";
-import { WaspErrorCode } from "./common";
+import assertNever from "../../ts-common/assertNever.ts";
+import { MediaType, RequestErrorReason } from "../../wasm/index.js";
+import { WaspErrorCode } from "./common.ts";
 
 // TODO add `MediaType`?
 // TODO add `status`?

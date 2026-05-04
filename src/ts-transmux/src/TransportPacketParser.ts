@@ -2,7 +2,7 @@ import {
   ADTS_STREAM_TYPE,
   H264_STREAM_TYPE,
   METADATA_STREAM_TYPE,
-} from "./constants";
+} from "./constants.ts";
 
 export interface PatPacket extends PacketBase {
   type: "pat";

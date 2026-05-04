@@ -10,10 +10,10 @@ import type {
   StartingPositionType,
   PlaylistNature,
   AddSourceBufferErrorCode,
-} from "../wasm";
-import { MediaSourceReadyState, PlaybackTickReason } from "../wasm";
-import type { LoggerLevel } from "./logger";
-import type { SourceBufferOperation } from "./QueuedSourceBuffer";
+} from "../wasm/index.js";
+import { MediaSourceReadyState, PlaybackTickReason } from "../wasm/index.js";
+import type { LoggerLevel } from "./logger.ts";
+import type { SourceBufferOperation } from "./QueuedSourceBuffer.ts";
 
 export { MediaSourceReadyState, PlaybackTickReason };
 

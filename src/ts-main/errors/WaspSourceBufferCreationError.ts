@@ -1,6 +1,6 @@
-import type { MediaType } from "../../wasm";
-import { SourceBufferCreationErrorCode } from "../../wasm";
-import type { WaspErrorCode } from "./common";
+import type { MediaType } from "../../wasm/index.js";
+import { SourceBufferCreationErrorCode } from "../../wasm/index.js";
+import type { WaspErrorCode } from "./common.ts";
 
 export default class WaspSourceBufferCreationError extends Error {
   public readonly name: "WaspSourceBufferCreationError";

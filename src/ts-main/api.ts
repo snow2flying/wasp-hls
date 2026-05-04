@@ -1,33 +1,37 @@
-import assertNever from "../ts-common/assertNever";
-import EventEmitter from "../ts-common/EventEmitter";
-import idGenerator from "../ts-common/idGenerator";
-import type { LoggerLevel } from "../ts-common/logger";
-import logger from "../ts-common/logger";
-import noop from "../ts-common/noop";
+import assertNever from "../ts-common/assertNever.ts";
+import EventEmitter from "../ts-common/EventEmitter.ts";
+import idGenerator from "../ts-common/idGenerator.ts";
+import type { LoggerLevel } from "../ts-common/logger.ts";
+import logger from "../ts-common/logger.ts";
+import noop from "../ts-common/noop.ts";
 import type {
   AudioTrackInfo,
   VariantInfo,
   WaspHlsPlayerConfig,
   WorkerMessage,
-} from "../ts-common/types";
+} from "../ts-common/types.ts";
 import {
   MainMessageType,
   InitializationErrorCode,
   WorkerMessageType,
-} from "../ts-common/types";
-import { MediaType, PlaylistNature, StartingPositionType } from "../wasm";
-import DEFAULT_CONFIG from "./default_config";
-import type { WaspError } from "./errors";
-import { WaspInitializationError } from "./errors";
-import postMessageToWorker from "./postMessageToWorker";
-import type { ContentMetadata } from "./types";
-import { PlayerState } from "./types";
+} from "../ts-common/types.ts";
+import {
+  MediaType,
+  PlaylistNature,
+  StartingPositionType,
+} from "../wasm/index.js";
+import DEFAULT_CONFIG from "./default_config.ts";
+import type { WaspError } from "./errors/index.ts";
+import { WaspInitializationError } from "./errors/index.ts";
+import postMessageToWorker from "./postMessageToWorker.ts";
+import type { ContentMetadata } from "./types.ts";
+import { PlayerState } from "./types.ts";
 import {
   canDemuxMpeg2Ts,
   potentiallyRelativeUrlToAbsoluteUrl,
   requestStopForContent,
   waitForLoad,
-} from "./utils";
+} from "./utils.ts";
 import {
   onAppendBufferMessage,
   onAttachMediaSourceMessage,
@@ -54,7 +58,7 @@ import {
   onFlushMessage,
   onAreTypesSupportedMessage,
   onVariantLockStatusChangeMessage,
-} from "./worker-message-handlers";
+} from "./worker-message-handlers.ts";
 
 // Allows to ensure a never-seen-before identifier is used for each content.
 const generateContentId = idGenerator();
@@ -1203,11 +1207,8 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
           new WaspInitializationError(
             InitializationErrorCode.UnknownError,
             undefined,
-            /* eslint-disable @typescript-eslint/no-unsafe-member-access*/
-            /* eslint-disable @typescript-eslint/no-unsafe-argument */
+            /* eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
             ev.error?.message ?? undefined,
-            /* eslint-enable @typescript-eslint/no-unsafe-member-access*/
-            /* eslint-enable @typescript-eslint/no-unsafe-argument */
           ),
         );
       }

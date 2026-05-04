@@ -1,20 +1,23 @@
 {
   "compilerOptions": {
     "allowJs": true,
-    "target": "es2020",
-    "lib": ["es2020", "esnext", "dom"],
+    "declaration": true,
+    "target": "es2017",
+    "lib": ["es2017", "dom"],
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": false,
-    "module": "ES6",
+    "module": "nodenext",
     "noImplicitAny": true,
     "strict": true,
     "strictNullChecks": true,
     "strictPropertyInitialization": true,
     "noUnusedParameters": true,
     "noUnusedLocals": true,
-    "moduleResolution": "bundler",
+    "moduleResolution": "nodenext",
+    "rewriteRelativeImportExtensions": true,
+    "rootDir": "..",
     "typeRoots": ["./node_modules/@types"]
   },
-  "include": ["./*.ts", "./**/*.ts"]
+  "include": ["./*.ts", "./**/*.ts", "../ts-common/**/*.ts"]
 }
