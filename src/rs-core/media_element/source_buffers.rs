@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::bindings::{
-    jsAddSourceBuffer, jsAppendBuffer, jsFlush, jsRemoveBuffer, AddSourceBufferErrorCode, JsResult,
+    jsAddSourceBuffer, jsAppendBuffer, jsFlush, jsRemoveBuffer, AddSourceBufferErrorCode,
     MediaType, ParsedSegmentInfo, ResourceId, SegmentParsingErrorCode, SourceBufferId,
 };
 use crate::dispatcher::JsMemoryBlob;
@@ -58,7 +58,7 @@ impl SourceBuffer {
     /// * `mime_type` - Mime-type to use when creating this `SourceBuffer` on the JavaScript-side.
     pub(super) fn new(media_type: MediaType, typ: String) -> Result<Self, AddSourceBufferError> {
         Logger::info(&format!("Creating new {} SourceBuffer", media_type));
-        match jsAddSourceBuffer(media_type, &typ).result() {
+        match jsAddSourceBuffer(media_type, &typ) {
             Ok(x) => Ok(Self {
                 id: x,
                 typ,
@@ -112,7 +112,7 @@ impl SourceBuffer {
             "Buffer {} ({}): Pushing initialization segment",
             self.id, self.typ
         ));
-        match jsAppendBuffer(self.id, segment_data.id(), false).result() {
+        match jsAppendBuffer(self.id, segment_data.id(), false) {
             Err(err) => Err(PushSegmentError::from_js_append_buffer_error(
                 self.media_type,
                 err,
@@ -146,7 +146,7 @@ impl SourceBuffer {
         self.queue
             .push_back(SourceBufferQueueElement::PushMedia((data, id)));
         Logger::debug(&format!("Buffer {} ({}): Pushing", self.id, self.typ));
-        match jsAppendBuffer(self.id, segment_data, parse_time_info).result() {
+        match jsAppendBuffer(self.id, segment_data, parse_time_info) {
             Err(err) => Err(PushSegmentError::from_js_append_buffer_error(
                 self.media_type,
                 err,
@@ -155,7 +155,7 @@ impl SourceBuffer {
         }
     }
 
-    /// Remove media data from this `SourceBuffer`, based js_on a `start` and `end` time in seconds.
+    /// Remove media data from this `SourceBuffer`, based on a `start` and `end` time in seconds.
     ///
     /// # Arguments
     ///
@@ -172,7 +172,7 @@ impl SourceBuffer {
             "Buffer {} ({}): Removing {} {}",
             self.id, self.typ, start, end
         ));
-        jsRemoveBuffer(self.id, start, end);
+        let _ = jsRemoveBuffer(self.id, start, end);
     }
 
     /// Empty media data from this `SourceBuffer`.
@@ -183,7 +183,7 @@ impl SourceBuffer {
         self.was_used = true;
         self.queue.push_back(SourceBufferQueueElement::Emptying);
         Logger::debug(&format!("Buffer {} ({}): emptying", self.id, self.typ));
-        jsRemoveBuffer(self.id, 0., f64::INFINITY);
+        let _ = jsRemoveBuffer(self.id, 0., f64::INFINITY);
     }
 
     /// SourceBuffers maintain a queue of planned operations such as push and remove to media

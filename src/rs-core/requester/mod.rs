@@ -364,7 +364,7 @@ impl Requester {
     /// Fetch either the MultivariantPlaylist or a MediaPlaylist reachable
     /// through the given `url` and add its `request_id` to `pending_playlist_requests`.
     ///
-    /// Once it succeeds, the `on_request_finished` function will be called.
+    /// Once it succeeds, the `__web_event__request_finished` function will be called.
     pub(crate) fn fetch_playlist(&mut self, url: Url, playlist_type: PlaylistFileType) {
         let timeout = match playlist_type {
             PlaylistFileType::MultivariantPlaylist => {
@@ -389,7 +389,7 @@ impl Requester {
     /// Fetch the initialization segment whose metadata is given here add its
     /// `request_id` to `pending_segment_requests`.
     ///
-    /// Once it succeeds, the `on_request_finished` function will be called.
+    /// Once it succeeds, the `__web_event__request_finished` function will be called.
     pub(crate) fn request_init_segment(
         &mut self,
         media_type: MediaType,
@@ -426,7 +426,7 @@ impl Requester {
     /// `unlock_segment_requests` methods), the request will technically either be
     /// started right away or once the right condition is triggered.
     ///
-    /// Once the request finishes with success, the `on_request_finished`
+    /// Once the request finishes with success, the `__web_event__request_finished`
     /// function will be called.
     pub(crate) fn request_media_segment(
         &mut self,

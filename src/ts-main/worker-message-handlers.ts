@@ -34,11 +34,7 @@ import type {
   SourceBufferId,
 } from "../ts-common/types";
 import { MainMessageType, MediaSourceReadyState } from "../ts-common/types";
-import {
-  AddSourceBufferErrorCode,
-  MediaType,
-  OtherErrorCode,
-} from "../wasm/wasp_hls";
+import { AddSourceBufferErrorCode, MediaType, OtherErrorCode } from "../wasm";
 import type { WaspError } from "./errors";
 import {
   WaspMediaPlaylistParsingError,

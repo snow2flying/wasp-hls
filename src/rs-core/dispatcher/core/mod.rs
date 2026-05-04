@@ -199,7 +199,7 @@ impl Dispatcher {
                     true,
                     s.url().get_ref(),
                     time_info.is_none(),
-                    time_info.map(|t| vec![t.start(), t.end()]),
+                    time_info.map(|t| (t.start(), t.end())),
                     s.media_type(),
                     reason,
                     status,
@@ -218,7 +218,7 @@ impl Dispatcher {
                             true,
                             x.url.get_ref(),
                             reason,
-                            media_type,
+                            Some(media_type),
                             status,
                         );
                     }
@@ -243,7 +243,7 @@ impl Dispatcher {
                     false,
                     request_info.url().get_ref(),
                     request_info.time_info().is_none(),
-                    request_info.time_info().map(|t| vec![t.start(), t.end()]),
+                    request_info.time_info().map(|t| (t.start(), t.end())),
                     request_info.media_type(),
                     reason,
                     status,
@@ -266,7 +266,7 @@ impl Dispatcher {
                         false,
                         request_info.url.get_ref(),
                         reason,
-                        media_type,
+                        Some(media_type),
                         status,
                     )
                 }
@@ -492,9 +492,9 @@ impl Dispatcher {
 
             self.ready_state = PlayerReadyState::AwaitingSegments;
             if playlist_store.playlist_type() != PlaylistNature::VoD {
-                jsSetMediaSourceDuration(u32::MAX as f64);
+                let _ = jsSetMediaSourceDuration(u32::MAX as f64);
             } else if let Some(duration) = playlist_store.curr_duration() {
-                jsSetMediaSourceDuration(duration);
+                let _ = jsSetMediaSourceDuration(duration);
             } else {
                 Logger::warn("Core: Unknown content duration");
             }

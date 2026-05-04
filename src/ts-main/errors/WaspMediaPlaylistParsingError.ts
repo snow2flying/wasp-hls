@@ -1,5 +1,5 @@
-import type { MediaType } from "../../wasm/wasp_hls";
-import { MediaPlaylistParsingErrorCode } from "../../wasm/wasp_hls";
+import type { MediaType } from "../../wasm";
+import { MediaPlaylistParsingErrorCode } from "../../wasm";
 import type { WaspErrorCode } from "./common";
 
 /**

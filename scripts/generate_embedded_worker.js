@@ -38,11 +38,14 @@
  * its default export to the `WaspHlsPlayer` as if it was the Worker file's
  * URL (it basically still is).
  */
-const fs = require("fs");
-const path = require("path");
+import fs from "fs";
+import path from "path";
 
-const originalWorkerFilePath = path.join(__dirname, "../build/worker.js");
-const destinationDirPath = path.join(__dirname, "../build/embedded");
+const originalWorkerFilePath = path.join(
+  import.meta.dirname,
+  "../build/worker.js",
+);
+const destinationDirPath = path.join(import.meta.dirname, "../build/embedded");
 const destinationJsPath = path.join(destinationDirPath, "worker.js");
 const destinationDeclPath = path.join(destinationDirPath, "worker.d.ts");
 const declarationFile = `declare const EmbeddedWorker: string;

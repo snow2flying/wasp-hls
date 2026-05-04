@@ -18,7 +18,7 @@ import type {
   RequestErrorReason,
   SourceBufferCreationErrorCode,
   TimerReason,
-} from "../wasm/wasp_hls.js";
+} from "../wasm";
 import {
   AddSourceBufferErrorCode,
   AddSourceBufferResult,
@@ -39,7 +39,7 @@ import {
   RemoveMediaSourceErrorCode,
   RemoveMediaSourceResult,
   SegmentParsingErrorCode,
-} from "../wasm/wasp_hls.js";
+} from "../wasm";
 import type { RequestId, ResourceId, TimerId } from "./globals";
 import {
   cachedCodecsSupport,

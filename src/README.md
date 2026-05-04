@@ -25,6 +25,15 @@ The code is splitted into several directories:
   to call API only normally exposed through JavaScript (like the MSE API,
   used for media buffering).
 
+  Note that both of those interactions are done indirectly:
+  - Running in a WebWorker, it only interacts with `ts-main` through
+    `postMessage` calls.
+  - `rs-core` being another language compiled to WebAssembly, it interacts with
+    it only through glue code present in the `wasm` directory.
+
+- **wasm**: The Webassembly module once compiled sits there, alongside the
+  JavaScript glue code to interact with it (in `wasm/js`).
+
 - **ts-transmux**: mpeg2ts to fmp4 transmuxer, initially forked from the one in
   [mux.js](https://github.com/videojs/mux.js/). I however (tried) to rewrite in
   TypeScript and go from its Event-based approach to a procedural one to get the

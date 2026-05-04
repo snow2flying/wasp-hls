@@ -16,7 +16,7 @@ import initializeWasm, {
   OtherErrorCode,
   PushedSegmentErrorCode,
   StartingPosition,
-} from "../wasm/wasp_hls";
+} from "../wasm";
 import { stopObservingPlayback } from "./bindings";
 import type { ContentInfo, WorkerInitializationOptions } from "./globals";
 import {

@@ -15,11 +15,7 @@ import {
   InitializationErrorCode,
   WorkerMessageType,
 } from "../ts-common/types";
-import {
-  MediaType,
-  PlaylistNature,
-  StartingPositionType,
-} from "../wasm/wasp_hls";
+import { MediaType, PlaylistNature, StartingPositionType } from "../wasm";
 import DEFAULT_CONFIG from "./default_config";
 import type { WaspError } from "./errors";
 import { WaspInitializationError } from "./errors";

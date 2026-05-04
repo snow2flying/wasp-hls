@@ -1,6 +1,6 @@
 import type { SourceBufferOperation } from "../../ts-common/QueuedSourceBuffer";
-import type { MediaType } from "../../wasm/wasp_hls";
-import { PushedSegmentErrorCode } from "../../wasm/wasp_hls";
+import type { MediaType } from "../../wasm";
+import { PushedSegmentErrorCode } from "../../wasm";
 import type { WaspErrorCode } from "./common";
 
 /**

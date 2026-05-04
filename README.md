@@ -419,9 +419,6 @@ You also need to add the rust wasm32 target and some rust dependencies:
 # Add wasm32 target (needs rustup that you most likely took with rust)
 rustup target add wasm32-unknown-unknown
 
-# Add wasm-bindgen CLI (needs cargo, generally installed with rust)
-cargo install wasm-bindgen-cli
-
 # Optionally, you may also need clippy, for checking Rust code mistakes
 rustup component add clippy
 ```

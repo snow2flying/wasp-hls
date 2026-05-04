@@ -3,7 +3,7 @@ import logger from "../ts-common/logger";
 import type QueuedSourceBuffer from "../ts-common/QueuedSourceBuffer";
 import type { SourceBufferId, WaspHlsPlayerConfig } from "../ts-common/types";
 import type Transmuxer from "../ts-transmux";
-import { Dispatcher, type InitOutput, type MediaType } from "../wasm/wasp_hls";
+import { Dispatcher, type InitOutput, type MediaType } from "../wasm";
 
 export interface WorkerInitializationOptions {
   hasMseInWorker: boolean;

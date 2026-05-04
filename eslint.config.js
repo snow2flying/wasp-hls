@@ -1,10 +1,10 @@
-const path = require("path");
-const js = require("@eslint/js");
-const { FlatCompat } = require("@eslint/eslintrc");
-const tsParser = require("@typescript-eslint/parser");
+import path from "path";
+import js from "@eslint/js";
+import { FlatCompat } from "@eslint/eslintrc";
+import tsParser from "@typescript-eslint/parser";
 
 const compat = new FlatCompat({
-  baseDirectory: __dirname,
+  baseDirectory: import.meta.dirname,
   recommendedConfig: js.configs.recommended,
   allConfig: js.configs.all,
 });
@@ -231,7 +231,7 @@ const baseLegacyConfig = {
   },
 };
 
-module.exports = [
+export default [
   {
     ignores: [
       "build/**",
@@ -248,7 +248,7 @@ module.exports = [
       parserOptions: {
         project: "./tsconfig.json",
         sourceType: "module",
-        tsconfigRootDir: path.join(__dirname, "src/ts-main"),
+        tsconfigRootDir: path.join(import.meta.dirname, "src/ts-main"),
       },
     },
   },
@@ -259,7 +259,7 @@ module.exports = [
       parserOptions: {
         project: "./tsconfig.json",
         sourceType: "module",
-        tsconfigRootDir: path.join(__dirname, "src/ts-worker"),
+        tsconfigRootDir: path.join(import.meta.dirname, "src/ts-worker"),
       },
     },
   },
@@ -270,7 +270,7 @@ module.exports = [
       parserOptions: {
         project: "./tsconfig.json",
         sourceType: "module",
-        tsconfigRootDir: path.join(__dirname, "src/ts-transmux"),
+        tsconfigRootDir: path.join(import.meta.dirname, "src/ts-transmux"),
       },
     },
     rules: {
@@ -290,7 +290,7 @@ module.exports = [
       parserOptions: {
         project: "../ts-worker/tsconfig.json",
         sourceType: "module",
-        tsconfigRootDir: path.join(__dirname, "src/ts-common"),
+        tsconfigRootDir: path.join(import.meta.dirname, "src/ts-common"),
       },
     },
   },
@@ -301,7 +301,7 @@ module.exports = [
       parserOptions: {
         project: "./tsconfig.json",
         sourceType: "module",
-        tsconfigRootDir: path.join(__dirname, "demo"),
+        tsconfigRootDir: path.join(import.meta.dirname, "demo"),
       },
     },
     rules: {

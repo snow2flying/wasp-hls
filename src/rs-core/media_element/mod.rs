@@ -3,7 +3,7 @@ use self::source_buffers::SourceBufferQueueElement;
 use crate::bindings::{
     jsAttachMediaSource, jsEndOfStream, jsRemoveMediaSource, jsSeek, jsSetMediaOffset,
     jsSetPlaybackRate, jsStartRebuffering, jsStopRebuffering, AddSourceBufferErrorCode,
-    AttachMediaSourceErrorCode, JsResult, MediaType, SourceBufferId,
+    AttachMediaSourceErrorCode, MediaType, SourceBufferId,
 };
 use crate::dispatcher::{JsMemoryBlob, JsTimeRanges, MediaObservation, MediaSourceReadyState};
 use crate::parser::SegmentTimeInfo;
@@ -102,7 +102,7 @@ impl MediaElementReference {
     ///
     /// To call once you want to stop the content.
     pub(crate) fn reset(&mut self) {
-        jsRemoveMediaSource();
+        let _ = jsRemoveMediaSource();
         self.queued_seek = None;
         self.last_observation = None;
         self.media_source_ready_state = Some(MediaSourceReadyState::Closed);
@@ -137,7 +137,7 @@ impl MediaElementReference {
     /// This is a necessary step before creating media buffers on it.
     pub(crate) fn attach_media_source(&mut self) -> Result<(), AttachMediaSourceError> {
         self.reset();
-        Ok(jsAttachMediaSource().result()?)
+        Ok(jsAttachMediaSource()?)
     }
 
     /// Returns the currently wanted playlist position.
@@ -686,7 +686,7 @@ impl MediaElementReference {
             && self.is_buffer_ended(MediaType::Video)
             && self.media_source_ready_state != Some(MediaSourceReadyState::Closed)
         {
-            jsEndOfStream();
+            let _ = jsEndOfStream();
         }
     }
 

@@ -5,21 +5,20 @@ use crate::{
     requester::{PlaylistFileType, Requester},
     segment_selector::NextSegmentSelectors,
     utils::url::Url,
-    wasm_bindgen, Logger,
+    Logger,
 };
+use std::slice;
 
-use super::{Dispatcher, PlayerReadyState, StartingPosition};
+use super::{Dispatcher, PlayerReadyState, StartingPosition, StartingPositionType};
 
 /// Methods exposed to the JavaScript-side.
 ///
 /// Note that these are not the only methods callable by JavaScript. There's
 /// also "event_listeners" which as its name point at, should be called when particular
 /// events happen. Such "event_listeners" are defined in its own file.
-#[wasm_bindgen]
 impl Dispatcher {
     /// Create a new `Dispatcher` allowing to load a content on the HTMLMediaElement that should be
     /// linked to it on the JavaScript-side.
-    #[wasm_bindgen(constructor)]
     pub fn new(initial_bandwidth: f64) -> Self {
         Dispatcher {
             ready_state: PlayerReadyState::Stopped,
@@ -168,4 +167,162 @@ impl Dispatcher {
     pub fn set_media_playlist_backoff_max(&mut self, max: f64) {
         self.requester.config_mut().media_playlist_backoff_max = max;
     }
+}
+
+fn string_from_abi(ptr: *const u8, len: u32) -> String {
+    let bytes = unsafe { slice::from_raw_parts(ptr, len as usize) };
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+fn dispatcher_mut<'a>(ptr: u32) -> &'a mut Dispatcher {
+    unsafe { &mut *(ptr as *mut Dispatcher) }
+}
+
+fn dispatcher_ref<'a>(ptr: u32) -> &'a Dispatcher {
+    unsafe { &*(ptr as *const Dispatcher) }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_new(initial_bandwidth: f64) -> u32 {
+    Box::into_raw(Box::new(Dispatcher::new(initial_bandwidth))) as u32
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_free(ptr: u32) {
+    if ptr != 0 {
+        unsafe {
+            drop(Box::from_raw(ptr as *mut Dispatcher));
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_load_content(
+    ptr: u32,
+    content_url_ptr: *const u8,
+    content_url_len: u32,
+    has_starting_pos: u32,
+    start_type: u32,
+    start_position: f64,
+) {
+    let content_url = string_from_abi(content_url_ptr, content_url_len);
+    let starting_pos = if has_starting_pos != 0 {
+        Some(StartingPosition::new(
+            StartingPositionType::from_raw(start_type),
+            start_position,
+        ))
+    } else {
+        None
+    };
+    dispatcher_mut(ptr).load_content(content_url, starting_pos);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_minimum_position(ptr: u32) -> f64 {
+    dispatcher_ref(ptr).minimum_position().unwrap_or(f64::NAN)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_maximum_position(ptr: u32) -> f64 {
+    dispatcher_ref(ptr).maximum_position().unwrap_or(f64::NAN)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_set_wanted_speed(ptr: u32, speed: f64) {
+    dispatcher_mut(ptr).set_wanted_speed(speed);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_set_buffer_goal(ptr: u32, buffer_goal: f64) {
+    dispatcher_mut(ptr).set_buffer_goal(buffer_goal);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_stop(ptr: u32) {
+    dispatcher_mut(ptr).stop();
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_lock_variant(ptr: u32, variant_id: u32) {
+    dispatcher_mut(ptr).lock_variant(variant_id);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_unlock_variant(ptr: u32) {
+    dispatcher_mut(ptr).unlock_variant();
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_set_audio_track(ptr: u32, track_id: u32) {
+    dispatcher_mut(ptr).set_audio_track(if track_id == u32::MAX {
+        None
+    } else {
+        Some(track_id)
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_set_segment_request_max_retry(ptr: u32, max_retry: i32) {
+    dispatcher_mut(ptr).set_segment_request_max_retry(max_retry);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_set_segment_request_timeout(ptr: u32, timeout: f64) {
+    dispatcher_mut(ptr).set_segment_request_timeout(timeout);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_set_segment_backoff_base(ptr: u32, base: f64) {
+    dispatcher_mut(ptr).set_segment_backoff_base(base);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_set_segment_backoff_max(ptr: u32, max: f64) {
+    dispatcher_mut(ptr).set_segment_backoff_max(max);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_set_multi_variant_playlist_request_max_retry(
+    ptr: u32,
+    max_retry: i32,
+) {
+    dispatcher_mut(ptr).set_multi_variant_playlist_request_max_retry(max_retry);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_set_multi_variant_playlist_request_timeout(
+    ptr: u32,
+    timeout: f64,
+) {
+    dispatcher_mut(ptr).set_multi_variant_playlist_request_timeout(timeout);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_set_multi_variant_playlist_backoff_base(ptr: u32, base: f64) {
+    dispatcher_mut(ptr).set_multi_variant_playlist_backoff_base(base);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_set_multi_variant_playlist_backoff_max(ptr: u32, max: f64) {
+    dispatcher_mut(ptr).set_multi_variant_playlist_backoff_max(max);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_set_media_playlist_request_max_retry(ptr: u32, max_retry: i32) {
+    dispatcher_mut(ptr).set_media_playlist_request_max_retry(max_retry);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_set_media_playlist_request_timeout(ptr: u32, timeout: f64) {
+    dispatcher_mut(ptr).set_media_playlist_request_timeout(timeout);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_set_media_playlist_backoff_base(ptr: u32, base: f64) {
+    dispatcher_mut(ptr).set_media_playlist_backoff_base(base);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_dispatcher_set_media_playlist_backoff_max(ptr: u32, max: f64) {
+    dispatcher_mut(ptr).set_media_playlist_backoff_max(max);
 }

@@ -1,6 +1,6 @@
 /target
 /node_modules
-/src/wasm
+/src/wasm/wasp_hls_bg.wasm
 /build/*
 !/build/index.html
 !/build/style.css

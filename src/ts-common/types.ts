@@ -10,8 +10,8 @@ import type {
   StartingPositionType,
   PlaylistNature,
   AddSourceBufferErrorCode,
-} from "../wasm/wasp_hls";
-import { MediaSourceReadyState, PlaybackTickReason } from "../wasm/wasp_hls";
+} from "../wasm";
+import { MediaSourceReadyState, PlaybackTickReason } from "../wasm";
 import type { LoggerLevel } from "./logger";
 import type { SourceBufferOperation } from "./QueuedSourceBuffer";
 

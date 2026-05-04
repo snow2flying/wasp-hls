@@ -1,17 +1,19 @@
 use std::{iter::Map, ops::Index, slice::Chunks};
 
+// XXX TODO: COMMENTS HAVE BEEN REMOVED, DRAMATIC!!!!!!!
+
 use crate::{
     bindings::{
-        jsFreeResource, jsGetResourceData, AddSourceBufferErrorCode, PushedSegmentErrorCode,
-        RequestId, ResourceId, SourceBufferId, TimerId, TimerReason,
+        f64_vec_from_abi, jsFreeResource, jsGetResourceData, AddSourceBufferErrorCode,
+        MediaSourceReadyState, PlaybackTickReason, PushedSegmentErrorCode, RequestId, ResourceId,
+        SourceBufferId, TimerId, TimerReason,
     },
-    dispatcher::{Dispatcher, MediaSourceReadyState},
+    dispatcher::Dispatcher,
     utils::url::Url,
-    wasm_bindgen, Logger,
+    Logger,
 };
 
 /// Methods triggered on JavaScript events by the JavaScript code.
-#[wasm_bindgen]
 impl Dispatcher {
     /// The JS code should call this method each time an HTTP(S) request started with
     /// `jsFetch` finished with success.
@@ -190,39 +192,6 @@ impl Dispatcher {
     }
 }
 
-/// Identify the event that lead to the `MediaObservation` being sent.
-#[wasm_bindgen]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PlaybackTickReason {
-    /// This is the initial observation emitted, right after it was started.
-    Init,
-    /// This designates MediaObservation sent after an interval without any
-    /// of the other events.
-    RegularInterval,
-    /// The HTMLMediaElement's "seeking" event has just been triggered
-    Seeking,
-    /// The HTMLMediaElement's "seeked" event has just been triggered
-    Seeked,
-    /// The HTMLMediaElement's "loadeddata" event has just been triggered
-    LoadedData,
-    /// The HTMLMediaElement's "loadedmetadata" event has just been triggered
-    LoadedMetadata,
-    /// The HTMLMediaElement's "canplay" event has just been triggered
-    CanPlay,
-    /// The HTMLMediaElement's "canplaythrough" event has just been triggered
-    CanPlayThrough,
-    /// The HTMLMediaElement's "ended" event has just been triggered
-    Ended,
-    /// The HTMLMediaElement's "pause" event has just been triggered
-    Pause,
-    /// The HTMLMediaElement's "play" event has just been triggered
-    Play,
-    /// The HTMLMediaElement's "ratechange" event has just been triggered
-    RateChange,
-    /// The HTMLMediaElement's "stalled" event has just been triggered
-    Stalled,
-}
-
 /// Special structure to handle data that is only present in JavaScript's
 /// memory.
 ///
@@ -259,14 +228,11 @@ impl Drop for JsMemoryBlob {
     }
 }
 
-#[wasm_bindgen]
 pub struct JsTimeRanges {
     buffered: Vec<f64>,
 }
 
-#[wasm_bindgen]
 impl JsTimeRanges {
-    #[wasm_bindgen(constructor)]
     pub fn new(buffered: Vec<f64>) -> Self {
         if buffered.len() % 2 != 0 {
             Logger::error("Incorrect JsTimeRanges object");
@@ -342,7 +308,6 @@ impl<'a> IntoIterator for &'a JsTimeRanges {
     }
 }
 
-#[wasm_bindgen]
 pub struct MediaObservation {
     reason: PlaybackTickReason,
     current_time: f64,
@@ -356,10 +321,8 @@ pub struct MediaObservation {
     video_buffered: Option<JsTimeRanges>,
 }
 
-#[wasm_bindgen]
 impl MediaObservation {
     #[allow(clippy::too_many_arguments)]
-    #[wasm_bindgen(constructor)]
     pub fn new(
         reason: PlaybackTickReason,
         current_time: f64,
@@ -437,4 +400,167 @@ impl MediaObservation {
     pub fn video_buffered(&self) -> Option<&JsTimeRanges> {
         self.video_buffered.as_ref()
     }
+}
+
+fn dispatcher_mut<'a>(dispatcher_ptr: u32) -> &'a mut Dispatcher {
+    unsafe { &mut *(dispatcher_ptr as *mut Dispatcher) }
+}
+
+fn string_from_abi(ptr: *const u8, len: u32) -> String {
+    let bytes = unsafe { std::slice::from_raw_parts(ptr, len as usize) };
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+fn maybe_time_ranges(ptr: *const f64, len: u32) -> Option<JsTimeRanges> {
+    if len == u32::MAX {
+        None
+    } else {
+        Some(JsTimeRanges::new(f64_vec_from_abi(ptr, len as usize)))
+    }
+}
+
+// JS bindings:
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __web_event__request_finished(
+    dispatcher_ptr: u32,
+    request_id: RequestId,
+    resource_id: ResourceId,
+    resource_size: u32,
+    final_url_ptr: *const u8,
+    final_url_len: u32,
+    duration_ms: f64,
+) {
+    dispatcher_mut(dispatcher_ptr).on_request_finished(
+        request_id,
+        resource_id,
+        resource_size,
+        string_from_abi(final_url_ptr, final_url_len),
+        duration_ms,
+    );
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __web_event__request_failed(
+    dispatcher_ptr: u32,
+    request_id: RequestId,
+    has_timeouted: u32,
+    status: u32,
+) {
+    dispatcher_mut(dispatcher_ptr).on_request_failed(
+        request_id,
+        has_timeouted != 0,
+        if status == u32::MAX {
+            None
+        } else {
+            Some(status)
+        },
+    );
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __web_event__media_source_state_change(dispatcher_ptr: u32, state: u32) {
+    dispatcher_mut(dispatcher_ptr)
+        .on_media_source_state_change(MediaSourceReadyState::from_raw(state));
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __web_event__source_buffer_update(
+    dispatcher_ptr: u32,
+    source_buffer_id: SourceBufferId,
+    buffered_ptr: *const f64,
+    buffered_len: u32,
+) {
+    dispatcher_mut(dispatcher_ptr).on_source_buffer_update(
+        source_buffer_id,
+        JsTimeRanges::new(f64_vec_from_abi(buffered_ptr, buffered_len as usize)),
+    );
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __web_event__source_buffer_creation_error(
+    dispatcher_ptr: u32,
+    source_buffer_id: SourceBufferId,
+    code: u32,
+    msg_ptr: *const u8,
+    msg_len: u32,
+) {
+    dispatcher_mut(dispatcher_ptr).on_source_buffer_creation_error(
+        source_buffer_id,
+        AddSourceBufferErrorCode::from_raw(code),
+        string_from_abi(msg_ptr, msg_len),
+    );
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __web_event__append_buffer_error(
+    dispatcher_ptr: u32,
+    source_buffer_id: SourceBufferId,
+    code: u32,
+    buffered_ptr: *const f64,
+    buffered_len: u32,
+) {
+    dispatcher_mut(dispatcher_ptr).on_append_buffer_error(
+        source_buffer_id,
+        match code {
+            0 => PushedSegmentErrorCode::BufferFull,
+            _ => PushedSegmentErrorCode::UnknownError,
+        },
+        JsTimeRanges::new(f64_vec_from_abi(buffered_ptr, buffered_len as usize)),
+    );
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __web_event__remove_buffer_error(
+    dispatcher_ptr: u32,
+    source_buffer_id: SourceBufferId,
+    buffered_ptr: *const f64,
+    buffered_len: u32,
+) {
+    dispatcher_mut(dispatcher_ptr).on_remove_buffer_error(
+        source_buffer_id,
+        JsTimeRanges::new(f64_vec_from_abi(buffered_ptr, buffered_len as usize)),
+    );
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __web_event__playback_tick(
+    dispatcher_ptr: u32,
+    reason: u32,
+    current_time: f64,
+    ready_state: u32,
+    buffered_ptr: *const f64,
+    buffered_len: u32,
+    paused: u32,
+    seeking: u32,
+    ended: u32,
+    duration: f64,
+    audio_buffered_ptr: *const f64,
+    audio_buffered_len: u32,
+    video_buffered_ptr: *const f64,
+    video_buffered_len: u32,
+) {
+    let observation = MediaObservation::new(
+        PlaybackTickReason::from_raw(reason),
+        current_time,
+        ready_state as u8,
+        JsTimeRanges::new(f64_vec_from_abi(buffered_ptr, buffered_len as usize)),
+        paused != 0,
+        seeking != 0,
+        ended != 0,
+        duration,
+        maybe_time_ranges(audio_buffered_ptr, audio_buffered_len),
+        maybe_time_ranges(video_buffered_ptr, video_buffered_len),
+    );
+    dispatcher_mut(dispatcher_ptr).on_playback_tick(observation);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __web_event__timer_ended(dispatcher_ptr: u32, id: TimerId, reason: u32) {
+    dispatcher_mut(dispatcher_ptr).on_timer_ended(id, TimerReason::from_raw(reason));
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn __web_event__codecs_support_update(dispatcher_ptr: u32) {
+    dispatcher_mut(dispatcher_ptr).on_codecs_support_update();
 }

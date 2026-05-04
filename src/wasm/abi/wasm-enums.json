@@ -1,0 +1,208 @@
+{
+  "enums": {
+    "PlaylistType": {
+      "default": "MultivariantPlaylist",
+      "members": {
+        "MultivariantPlaylist": 0,
+        "MediaPlaylist": 1
+      }
+    },
+    "OtherErrorCode": {
+      "default": "Unknown",
+      "members": {
+        "NoSupportedVariant": 0,
+        "UnfoundLockedVariant": 1,
+        "MediaSourceAttachmentError": 2,
+        "Unknown": 3
+      }
+    },
+    "SourceBufferCreationErrorCode": {
+      "default": "Unknown",
+      "members": {
+        "AlreadyCreatedWithSameType": 0,
+        "CantPlayType": 1,
+        "EmptyMimeType": 2,
+        "MediaSourceIsClosed": 3,
+        "NoMediaSourceAttached": 4,
+        "QuotaExceededError": 5,
+        "Unknown": 6
+      }
+    },
+    "RequestErrorReason": {
+      "default": "Other",
+      "members": {
+        "Timeout": 0,
+        "Status": 1,
+        "Error": 2,
+        "Other": 3
+      }
+    },
+    "RemoveMediaSourceErrorCode": {
+      "default": "UnknownError",
+      "members": {
+        "NoMediaSourceAttached": 0,
+        "UnknownError": 1
+      }
+    },
+    "MediaSourceDurationUpdateErrorCode": {
+      "default": "UnknownError",
+      "members": {
+        "NoMediaSourceAttached": 0,
+        "UnknownError": 1
+      }
+    },
+    "AttachMediaSourceErrorCode": {
+      "default": "UnknownError",
+      "members": {
+        "UnknownError": 0,
+        "NoContentLoaded": 1
+      }
+    },
+    "RemoveBufferErrorCode": {
+      "default": "UnknownError",
+      "members": {
+        "SourceBufferNotFound": 0,
+        "UnknownError": 1
+      }
+    },
+    "EndOfStreamErrorCode": {
+      "default": "UnknownError",
+      "members": {
+        "NoMediaSourceAttached": 0,
+        "UnknownError": 1
+      }
+    },
+    "MultivariantPlaylistParsingErrorCode": {
+      "default": "Unknown",
+      "members": {
+        "MissingExtM3uHeader": 0,
+        "MultivariantPlaylistWithoutVariant": 1,
+        "MissingUriLineAfterVariant": 2,
+        "UnableToReadVariantUri": 3,
+        "VariantMissingBandwidth": 4,
+        "InvalidValue": 5,
+        "MediaTagMissingType": 6,
+        "MediaTagMissingName": 7,
+        "MediaTagMissingGroupId": 8,
+        "UnableToReadLine": 9,
+        "Unknown": 10
+      }
+    },
+    "MediaPlaylistParsingErrorCode": {
+      "default": "Unknown",
+      "members": {
+        "UnparsableExtInf": 0,
+        "UriMissingInMap": 1,
+        "MissingTargetDuration": 2,
+        "UriWithoutExtInf": 3,
+        "UnparsableByteRange": 4,
+        "Unknown": 5
+      }
+    },
+    "AddSourceBufferErrorCode": {
+      "default": "UnknownError",
+      "members": {
+        "NoMediaSourceAttached": 0,
+        "MediaSourceIsClosed": 1,
+        "QuotaExceededError": 2,
+        "TypeNotSupportedError": 3,
+        "EmptyMimeType": 4,
+        "UnknownError": 5
+      }
+    },
+    "SegmentParsingErrorCode": {
+      "default": "UnknownError",
+      "members": {
+        "NoResource": 0,
+        "NoSourceBuffer": 1,
+        "TransmuxerError": 2,
+        "UnknownError": 3
+      }
+    },
+    "PushedSegmentErrorCode": {
+      "default": "UnknownError",
+      "members": {
+        "BufferFull": 0,
+        "UnknownError": 1
+      }
+    },
+    "PlaybackObservationReason": {
+      "default": "Error",
+      "members": {
+        "Init": 0,
+        "Seeked": 1,
+        "Seeking": 2,
+        "Ended": 3,
+        "ReadyStateChanged": 4,
+        "RegularInterval": 5,
+        "Error": 6
+      }
+    },
+    "TimerReason": {
+      "default": "MediaPlaylistRefresh",
+      "members": {
+        "MediaPlaylistRefresh": 0,
+        "RetryRequest": 1
+      }
+    },
+    "LogLevel": {
+      "default": "Error",
+      "members": {
+        "Error": 0,
+        "Warn": 1,
+        "Info": 2,
+        "Debug": 3
+      }
+    },
+    "MediaType": {
+      "default": "Audio",
+      "members": {
+        "Audio": 0,
+        "Video": 1
+      }
+    },
+    "PlaylistNature": {
+      "default": "Unknown",
+      "members": {
+        "Event": 0,
+        "VoD": 1,
+        "Live": 2,
+        "Unknown": 3
+      }
+    },
+    "MediaSourceReadyState": {
+      "default": "Closed",
+      "members": {
+        "Closed": 0,
+        "Ended": 1,
+        "Open": 2
+      }
+    },
+    "StartingPositionType": {
+      "default": "Absolute",
+      "members": {
+        "Absolute": 0,
+        "FromBeginning": 1,
+        "FromEnd": 2
+      }
+    },
+    "PlaybackTickReason": {
+      "default": "Init",
+      "members": {
+        "Init": 0,
+        "RegularInterval": 1,
+        "Seeking": 2,
+        "Seeked": 3,
+        "LoadedData": 4,
+        "LoadedMetadata": 5,
+        "CanPlay": 6,
+        "CanPlayThrough": 7,
+        "Ended": 8,
+        "Pause": 9,
+        "Play": 10,
+        "RateChange": 11,
+        "Stalled": 12
+      }
+    }
+  }
+}

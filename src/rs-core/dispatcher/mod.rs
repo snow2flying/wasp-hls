@@ -5,20 +5,18 @@ use crate::{
     playlist_store::PlaylistStore,
     requester::{PlaylistFileType, Requester},
     segment_selector::NextSegmentSelectors,
-    wasm_bindgen,
 };
+// XXX TODO: COMMENTS HAVE BEEN REMOVED, DRAMATIC!!!!!!!
 
 mod api;
 mod core;
 mod event_listeners;
 
-pub(crate) use event_listeners::{
-    JsMemoryBlob, JsTimeRanges, MediaObservation, PlaybackTickReason,
-};
+pub(crate) use crate::bindings::{MediaSourceReadyState, PlaybackTickReason, StartingPositionType};
+pub(crate) use event_listeners::{JsMemoryBlob, JsTimeRanges, MediaObservation};
 
 /// The `Dispatcher` is the player Interface exported to the JavaScript-side,
 /// providing an API to load contents and influence various parameters about playback.
-#[wasm_bindgen]
 pub struct Dispatcher {
     /// Current `PlayerReadyState` the `Dispatcher` is in.
     ready_state: PlayerReadyState,
@@ -58,18 +56,6 @@ pub struct Dispatcher {
     playlist_refresh_timers: Vec<(TimerId, PlaylistFileType)>,
 }
 
-/// Identify the JavaScript `readyState` of a created `MediaSource` instance.
-#[wasm_bindgen]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum MediaSourceReadyState {
-    /// Corresponds to the "closed" JavaScript MediaSource's `readyState`
-    Closed = 0,
-    /// Corresponds to the "ended" JavaScript MediaSource's `readyState`
-    Ended = 1,
-    /// Corresponds to the "open" JavaScript MediaSource's `readyState`
-    Open = 2,
-}
-
 /// Identify the playback-related state the `Dispatcher` is in.
 #[derive(Clone, Debug)]
 enum PlayerReadyState {
@@ -97,28 +83,17 @@ impl PlayerReadyState {
     }
 }
 
-#[wasm_bindgen]
 #[derive(Clone, Debug)]
 pub struct StartingPosition {
     start_type: StartingPositionType,
     position: f64,
 }
 
-#[wasm_bindgen]
 impl StartingPosition {
-    #[wasm_bindgen(constructor)]
     pub fn new(start_type: StartingPositionType, position: f64) -> Self {
         Self {
             start_type,
             position,
         }
     }
-}
-
-#[wasm_bindgen]
-#[derive(Clone, Debug)]
-pub enum StartingPositionType {
-    Absolute,
-    FromBeginning,
-    FromEnd,
 }

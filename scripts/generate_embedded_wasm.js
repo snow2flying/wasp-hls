@@ -36,11 +36,14 @@
  * URL (it basically still is).
  */
 
-const fs = require("fs");
-const path = require("path");
+import fs from "fs";
+import path from "path";
 
-const originalWasmFilePath = path.join(__dirname, "../build/wasp_hls_bg.wasm");
-const destinationDirPath = path.join(__dirname, "../build/embedded");
+const originalWasmFilePath = path.join(
+  import.meta.dirname,
+  "../build/wasp_hls_bg.wasm",
+);
+const destinationDirPath = path.join(import.meta.dirname, "../build/embedded");
 const destinationJsPath = path.join(destinationDirPath, "wasm.js");
 const destinationDeclPath = path.join(destinationDirPath, "wasm.d.ts");
 const declarationFile = `declare const EmbeddedWasm: string;
