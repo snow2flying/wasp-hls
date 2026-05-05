@@ -74,8 +74,8 @@ export default async function checkPackageExports() {
         .filter(Boolean),
     );
     const requiredFiles = [
-      "build/es6/index.js",
-      "build/es6/index.d.ts",
+      "build/es6/ts-main/index.js",
+      "build/es6/ts-main/index.d.ts",
       "build/embedded/wasm.js",
       "build/embedded/wasm.d.ts",
       "build/embedded/worker.js",
@@ -237,8 +237,8 @@ function execOutsideRepo(command, args, cwd, npmCacheDir) {
 function assertExports(packageJson) {
   const expectedExports = {
     ".": {
-      types: "./build/es6/index.d.ts",
-      default: "./build/es6/index.js",
+      types: "./build/es6/ts-main/index.d.ts",
+      default: "./build/es6/ts-main/index.js",
     },
     "./wasm": {
       types: "./build/embedded/wasm.d.ts",

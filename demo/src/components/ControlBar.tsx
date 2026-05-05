@@ -1,6 +1,6 @@
 import * as React from "react";
-import type WaspHlsPlayer from "../../../src";
-import { PlayerState } from "../../../src";
+import type WaspHlsPlayer from "../../../src/ts-main";
+import { PlayerState } from "../../../src/ts-main";
 import FullScreenButton from "./FullScreenButton";
 import PlayButton from "./PlayButton";
 import PositionIndicator from "./PositionIndicator";

@@ -91,7 +91,7 @@ jobs:
         run: npm ci
 
       - name: Build debug artifacts
-        run: npm run build:all
+        run: npm run build
 
       - name: Typecheck and lint
         run: npm run check

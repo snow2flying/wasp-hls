@@ -1,5 +1,5 @@
 import * as React from "react";
-import WaspHlsPlayer, { PlayerState } from "../../../src";
+import WaspHlsPlayer, { PlayerState } from "../../../src/ts-main";
 import BufferSizeChart from "./BufferSizeChart";
 import ContentBar from "./ContentBar";
 import BufferContentGraph from "./MediaBufferContentGraph";

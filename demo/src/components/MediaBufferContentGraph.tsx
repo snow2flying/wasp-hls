@@ -1,6 +1,6 @@
 import * as React from "react";
-import type WaspHlsPlayer from "../../../src";
-import { PlayerState } from "../../../src";
+import type WaspHlsPlayer from "../../../src/ts-main";
+import { PlayerState } from "../../../src/ts-main";
 
 const { useEffect, useMemo, useRef, useState } = React;
 

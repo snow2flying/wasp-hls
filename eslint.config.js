@@ -238,6 +238,8 @@ export default [
       "node_modules/**",
       "demo/build/**",
       "**/tsconfig.json",
+      "src/ts-common/**/*.d.ts",
+      "src/ts-common/**/*.js",
     ],
   },
   ...compat.config(baseLegacyConfig),
@@ -288,7 +290,7 @@ export default [
     languageOptions: {
       parser: tsParser,
       parserOptions: {
-        project: "../ts-worker/tsconfig.json",
+        project: "./tsconfig.json",
         sourceType: "module",
         tsconfigRootDir: path.join(import.meta.dirname, "src/ts-common"),
       },

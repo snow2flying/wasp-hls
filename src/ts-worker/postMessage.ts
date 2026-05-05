@@ -6,7 +6,6 @@ export default function postMessageToMain(
   transferables?: Transferable[],
 ) {
   logger.debug("<-- sending to main:", msg.type);
-  // Written that way due to TypeScript shenanigans
   if (transferables === undefined) {
     postMessage(msg);
   } else {

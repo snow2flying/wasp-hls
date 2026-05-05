@@ -49,7 +49,9 @@ function groupNalsIntoFrames(nalUnits: ParsedNalUnit[]): any[] {
   // have nothing better to go on
   if (
     frames.length > 0 &&
-    (currentFrame.duration == null || currentFrame.duration <= 0)
+    (currentFrame.duration === null ||
+      currentFrame.duration === undefined ||
+      currentFrame.duration <= 0)
   ) {
     currentFrame.duration = frames[frames.length - 1].duration;
   }

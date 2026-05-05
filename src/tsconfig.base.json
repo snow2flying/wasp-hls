@@ -1,10 +1,9 @@
 {
-  "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "allowJs": true,
     "declaration": true,
     "target": "es2017",
-    "lib": ["es2017", "WebWorker"],
+    "lib": ["es2017", "dom"],
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": false,
@@ -16,8 +15,8 @@
     "noUnusedLocals": true,
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "rewriteRelativeImportExtensions": true
-  },
-  "files": ["../mse-in-worker.d.ts"],
-  "include": ["./*.ts", "./**/*.ts", "../ts-common/**/*.ts"]
+    "rewriteRelativeImportExtensions": true,
+    "rootDir": "..",
+    "typeRoots": ["./node_modules/@types"]
+  }
 }

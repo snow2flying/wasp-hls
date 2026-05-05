@@ -1,23 +1,4 @@
 {
-  "compilerOptions": {
-    "allowJs": true,
-    "declaration": true,
-    "target": "es2017",
-    "lib": ["es2017", "dom"],
-    "exactOptionalPropertyTypes": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": false,
-    "module": "nodenext",
-    "noImplicitAny": true,
-    "strict": true,
-    "strictNullChecks": true,
-    "strictPropertyInitialization": true,
-    "noUnusedParameters": true,
-    "noUnusedLocals": true,
-    "moduleResolution": "nodenext",
-    "rewriteRelativeImportExtensions": true,
-    "rootDir": "..",
-    "typeRoots": ["./node_modules/@types"]
-  },
+  "extends": "../tsconfig.base.json",
   "include": ["./*.ts", "./**/*.ts", "../ts-common/**/*.ts"]
 }

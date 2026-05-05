@@ -282,7 +282,7 @@ export default class Mp4VideoSegmentGenerator {
     const halfSecond = 45000; // Half-a-second in a 90khz clock
     const allowableOverlap = 10000; // About 3 frames @ 30fps
     let nearestDistance = Infinity;
-    let nearestGopObj: any | undefined;
+    let nearestGopObj: any;
 
     // Search for the GOP nearest to the beginning of this nal unit
     this._gopCache.forEach((currentGopObj) => {
@@ -291,11 +291,13 @@ export default class Mp4VideoSegmentGenerator {
       // Reject Gops with different SPS or PPS
       if (
         !(
-          this._trackInfo.pps != null &&
+          this._trackInfo.pps !== null &&
+          this._trackInfo.pps !== undefined &&
           arrayEquals(this._trackInfo.pps[0], currentGopObj.pps[0])
         ) ||
         !(
-          this._trackInfo.sps != null &&
+          this._trackInfo.sps !== null &&
+          this._trackInfo.sps !== undefined &&
           arrayEquals(this._trackInfo.sps[0], currentGopObj.sps[0])
         )
       ) {

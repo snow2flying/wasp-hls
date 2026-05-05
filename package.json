@@ -61,7 +61,7 @@
     "lint:common": "cd src/ts-common && eslint .",
     "lint:demo": "cd demo && eslint src/**/*",
     "lint:main": "cd src/ts-main && eslint .",
-    "lint:transmux": "cd src/ts-worker && eslint .",
+    "lint:transmux": "cd src/ts-transmux && eslint .",
     "lint:worker": "cd src/ts-worker && eslint .",
     "list": "node ./scripts/list-npm-scripts.mjs",
     "move:wasm": "cp target/wasm32-unknown-unknown/debug/wasp_hls.wasm src/wasm/wasp_hls_bg.wasm && cp target/wasm32-unknown-unknown/debug/wasp_hls.wasm build/wasp_hls_bg.wasm",

@@ -94,7 +94,7 @@ export function onAttachMediaSourceMessage(
   }
 
   if (msg.value.handle !== undefined) {
-    mediaElement.srcObject = msg.value.handle;
+    mediaElement.srcObject = msg.value.handle as unknown as MediaProvider;
   } else if (msg.value.src !== undefined) {
     mediaElement.src = msg.value.src;
   } else {

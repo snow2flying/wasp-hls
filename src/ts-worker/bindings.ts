@@ -677,7 +677,10 @@ export function removeMediaSource(): RemoveMediaSourceResult {
     removeEventListeners();
 
     if (mediaSource !== null && mediaSource.readyState !== "closed") {
-      const { readyState, sourceBuffers } = mediaSource;
+      const { readyState } = mediaSource;
+      const { sourceBuffers } = mediaSource as MediaSource & {
+        sourceBuffers: ArrayLike<SourceBuffer>;
+      };
       for (let i = sourceBuffers.length - 1; i >= 0; i--) {
         const sourceBuffer = sourceBuffers[i];
 

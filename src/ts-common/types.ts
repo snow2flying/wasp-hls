@@ -556,7 +556,7 @@ export interface AttachMediaSourceWorkerMessage {
      * The `MediaSource`'s handle to attach to the HTMLMediaElement.
      * Can be `undefined` in wich case a `src is provided instead.
      */
-    handle: MediaProvider | undefined;
+    handle: MediaSourceHandle | undefined;
     /**
      * The `MediaSource`'s local URL to link to the HTMLMediaElement.
      * Can be `undefined` in wich case a `handle is provided instead.

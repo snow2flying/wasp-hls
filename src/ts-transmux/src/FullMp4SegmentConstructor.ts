@@ -43,12 +43,12 @@ export default class FullMp4SegmentConstructor {
   public pushSegment(output: any): undefined {
     // buffer incoming captions until the associated video segment
     // finishes
-    if (output.text != null) {
+    if (output.text !== null && output.text !== undefined) {
       this.pendingCaptions.push(output);
       return;
     }
     // buffer incoming id3 tags until the final flush
-    if (output.frames != null) {
+    if (output.frames !== null && output.frames !== undefined) {
       this.pendingMetadata.push(output);
       return;
     }
@@ -104,19 +104,22 @@ export default class FullMp4SegmentConstructor {
     ] as const;
 
     let timelineStartPts: number | undefined;
-    if (this.videoTrack != null) {
+    if (this.videoTrack !== null && this.videoTrack !== undefined) {
       timelineStartPts = this.videoTrack.timelineStartInfo.pts;
       VIDEO_PROPERTIES.forEach((prop) => {
         seg.info[prop] = this.videoTrack[prop];
       }, this);
-    } else if (this.audioTrack != null) {
+    } else if (this.audioTrack !== null && this.audioTrack !== undefined) {
       timelineStartPts = this.audioTrack.timelineStartInfo.pts;
       AUDIO_PROPERTIES.forEach((prop) => {
         seg.info[prop] = this.audioTrack[prop];
       }, this);
     }
 
-    if (this.videoTrack != null || this.audioTrack != null) {
+    if (
+      (this.videoTrack !== null && this.videoTrack !== undefined) ||
+      (this.audioTrack !== null && this.audioTrack !== undefined)
+    ) {
       if (this.pendingTracks.length === 1) {
         seg.type = this.pendingTracks[0].type;
       } else {

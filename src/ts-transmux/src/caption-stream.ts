@@ -13,6 +13,7 @@ import { NalUnitType } from "./H264NalUnitProducer.ts";
 // TODO Convert it and use it?
 
 const PADDING = 0x0000;
+type Cea608Mode = "popOn" | "rollUp" | "paintOn";
 
 function trimLineBreaksAtBeginningAndEnd(str: string): string {
   let trimmed = str;
@@ -159,9 +160,9 @@ class CaptionStream extends EventEmitter<CaptionStreamEvents> {
   }
 
   flushCCStreams(flushType: string): void {
-    this.ccStreams_.forEach(function (cc) {
+    this.ccStreams_.forEach((cc) => {
       return flushType === "flush" ? cc.flush() : cc.partialFlush();
-    }, this);
+    });
   }
 
   flushStream(flushType: string): void {
@@ -173,7 +174,7 @@ class CaptionStream extends EventEmitter<CaptionStreamEvents> {
 
     // In Chrome, the Array#sort function is not stable so add a
     // presortIndex that we can use to ensure we get a stable-sort
-    this._captionPackets.forEach(function (elem, idx) {
+    this._captionPackets.forEach((elem, idx) => {
       elem.presortIndex = idx;
     });
 
@@ -185,7 +186,7 @@ class CaptionStream extends EventEmitter<CaptionStreamEvents> {
       return a.pts - b.pts;
     });
 
-    this._captionPackets.forEach(function (packet) {
+    this._captionPackets.forEach((packet) => {
       if (packet.type < 2) {
         // Dispatch packet to the right Cea608Stream
         this.dispatchCea608Packet(packet);
@@ -193,7 +194,7 @@ class CaptionStream extends EventEmitter<CaptionStreamEvents> {
         // Dispatch packet to the Cea708Stream
         this.dispatchCea708Packet(packet);
       }
-    }, this);
+    });
 
     this._captionPackets.length = 0;
     this.flushCCStreams(flushType);
@@ -295,7 +296,7 @@ class CaptionStream extends EventEmitter<CaptionStreamEvents> {
 // unicode character, so a fairly similar unicode character was
 // chosen in it's place.
 /* eslint-disable @typescript-eslint/naming-convention */
-const CHARACTER_TRANSLATION_708 = {
+const CHARACTER_TRANSLATION_708: Record<number, number> = {
   0x7f: 0x266a, // ♪
   0x1020: 0x20, // Transparent Space
   0x1021: 0xa0, // Nob-breaking Transparent Space
@@ -544,7 +545,7 @@ export interface Cea708StreamEvents {
 
 class Cea708Stream extends EventEmitter<Cea708StreamEvents> {
   private _serviceEncodings: any;
-  private _current708Packet: any | null;
+  private _current708Packet: any;
   private _services: Record<number, Cea708Service>;
   constructor(options: any = {}) {
     super();
@@ -1237,7 +1238,7 @@ class Cea708Stream extends EventEmitter<Cea708StreamEvents> {
 // can be performed regardless of the field and data channel on which the
 // character code was received.
 /* eslint-disable @typescript-eslint/naming-convention */
-const CHARACTER_TRANSLATION = {
+const CHARACTER_TRANSLATION: Record<number, number> = {
   0x2a: 0xe1, // á
   0x5c: 0xe9, // é
   0x5e: 0xed, // í
@@ -1367,6 +1368,7 @@ export interface Cea608StreamEvents {
   partialdone: null;
   reset: null;
   endedtimeline: null;
+  log: { level: string; message: string };
 }
 
 class Cea608Stream extends EventEmitter<Cea608StreamEvents> {
@@ -1388,7 +1390,7 @@ class Cea608Stream extends EventEmitter<Cea608StreamEvents> {
   private BACKSPACE_: number;
   private ERASE_DISPLAYED_MEMORY_: number;
   private ERASE_NON_DISPLAYED_MEMORY_: number;
-  private mode_: string;
+  private mode_: Cea608Mode;
   private topRow_: number;
   private startPts_: number;
   private displayed_: string[];
@@ -1550,7 +1552,7 @@ class Cea608Stream extends EventEmitter<Cea608StreamEvents> {
       // entire character code to `getCharFromCode`.
       char0 = (char0 & 0x03) << 8;
       const text = getCharFromCode(char0 | char1);
-      this[this.mode_](packet.pts, text);
+      this.writeText(packet.pts, text);
 
       // Append extended characters to caption text
     } else if (this.isExtCharacter(char0, char1)) {
@@ -1575,7 +1577,7 @@ class Cea608Stream extends EventEmitter<Cea608StreamEvents> {
       // entire character code to `getCharFromCode`.
       char0 = (char0 & 0x03) << 8;
       const text = getCharFromCode(char0 | char1);
-      this[this.mode_](packet.pts, text);
+      this.writeText(packet.pts, text);
 
       // Process mid-row codes
     } else if (this.isMidRowCode(char0, char1)) {
@@ -1584,7 +1586,7 @@ class Cea608Stream extends EventEmitter<Cea608StreamEvents> {
 
       // According to the standard, mid-row codes
       // should be replaced with spaces, so add one now
-      this[this.mode_](packet.pts, " ");
+      this.writeText(packet.pts, " ");
 
       if ((char1 & 0xe) === 0xe) {
         this.addFormatting(packet.pts, ["i"]);
@@ -1653,7 +1655,7 @@ class Cea608Stream extends EventEmitter<Cea608StreamEvents> {
       }
       let text = getCharFromCode(char0);
       text += getCharFromCode(char1);
-      this[this.mode_](packet.pts, text);
+      this.writeText(packet.pts, text);
     } // finish data processing
   }
 
@@ -1693,7 +1695,7 @@ class Cea608Stream extends EventEmitter<Cea608StreamEvents> {
   public flushDisplayed(pts: number): void {
     let content = this.displayed_
       // remove spaces from the start and end of the string
-      .map(function (row, index) {
+      .map((row, index) => {
         try {
           return row.trim();
         } catch (e) {
@@ -1706,7 +1708,7 @@ class Cea608Stream extends EventEmitter<Cea608StreamEvents> {
           });
           return "";
         }
-      }, this)
+      })
       // combine all text rows to display in one cue
       .join("\n");
 
@@ -1874,7 +1876,7 @@ class Cea608Stream extends EventEmitter<Cea608StreamEvents> {
     const text = format.reduce(function (txt, fmt) {
       return txt + "<" + fmt + ">";
     }, "");
-    this[this.mode_](pts, text);
+    this.writeText(pts, text);
   }
 
   // Adds HTML closing tags for current formatting to caption text and
@@ -1888,7 +1890,23 @@ class Cea608Stream extends EventEmitter<Cea608StreamEvents> {
       return txt + "</" + format + ">";
     }, "");
     this.formatting_ = [];
-    this[this.mode_](pts, text);
+    this.writeText(pts, text);
+  }
+
+  private writeText(pts: number, text: string): void {
+    switch (this.mode_) {
+      case "popOn":
+        this.popOn(pts, text);
+        return;
+      case "rollUp":
+        this.rollUp(pts, text);
+        return;
+      case "paintOn":
+        this.paintOn(pts, text);
+        return;
+      default:
+        throw new Error("Unknown CEA-608 mode");
+    }
   }
 
   // Mode Implementations

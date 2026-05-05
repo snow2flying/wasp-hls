@@ -46,8 +46,8 @@ export interface TransmuxerOptions {
 
 export default class Transmuxer {
   private _options: TransmuxerOptions;
-  private _videoTrack: any | null;
-  private _audioTrack: any | null;
+  private _videoTrack: any;
+  private _audioTrack: any;
   private _baseMediaDecodeTime: number;
   private _currentPipeline: AacPipelineElements | TsPipelineElements | null;
 
