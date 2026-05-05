@@ -39,7 +39,7 @@ jobs:
         run: npm ci
 
       - name: Check formatting
-        run: npm run fmt:check
+        run: npm run check:fmt
 
   code_quality:
     name: Typecheck, lint, clippy, and debug build
@@ -90,17 +90,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build debug artifacts
+      - name: Build artifacts
         run: npm run build
 
       - name: Typecheck and lint
         run: npm run check
 
       - name: Run clippy
-        run: npm run clippy
+        run: npm run check:rust
 
   release_build:
-    name: Release build
+    name: Release artifacts and package
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -146,5 +146,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build release artifacts
-        run: npm run build:release
+      - name: Build package and release artifacts
+        run: npm run package

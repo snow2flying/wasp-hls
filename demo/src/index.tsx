@@ -16,7 +16,7 @@ logger.setLevel(LoggerLevel.Debug);
 window.onload = function (): void {
   const rootElt = document.getElementById("main");
   if (rootElt === null) {
-    console.error("Error: missing `main` element");
+    logger.error("Error: missing `main` element");
     return;
   }
   const root = ReactDOM.createRoot(rootElt);

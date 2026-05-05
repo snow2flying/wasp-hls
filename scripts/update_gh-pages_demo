@@ -29,9 +29,9 @@ fi
 
 # Generate demo
 npm install
-npm run build:release
-npm run build:demo:release
-npm run doc
+npm run build
+npm run demo:release
+npm run docs
 
 if [ -n "$(git status --porcelain)" ]; then
   echo "ERROR: Please commit your modifications to main"
@@ -97,4 +97,3 @@ else
 fi
 
 git checkout main
-

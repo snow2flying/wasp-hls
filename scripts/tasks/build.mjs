@@ -1,0 +1,173 @@
+import { copyFileSync, mkdirSync, rmSync } from "fs";
+import { dirname, join } from "path";
+import { exec } from "../utils/exec.mjs";
+import { cleanBuildDirectory, copyRecursive } from "../utils/fs.mjs";
+import { reportStep } from "./report.mjs";
+
+/**
+ * @param {string} root
+ * @param {{ release: boolean, skipGenerate?: boolean }} options
+ */
+export async function buildWasm(root, { release, skipGenerate = false }) {
+  if (!skipGenerate) {
+    await generateWasmAbi(root);
+  }
+  reportStep(
+    "BUILD",
+    "Building WebAssembly module" +
+      (release ? " in release mode..." : "in debug mode..."),
+  );
+  await exec(
+    "cargo",
+    [
+      "build",
+      ...(release ? ["--release"] : []),
+      "--target=wasm32-unknown-unknown",
+    ],
+    { cwd: root },
+  );
+  const mode = release ? "release" : "debug";
+  const source = join(
+    root,
+    "target",
+    "wasm32-unknown-unknown",
+    mode,
+    "wasp_hls.wasm",
+  );
+  const destinations = [
+    join(root, "src", "wasm", "wasp_hls_bg.wasm"),
+    join(root, "build", "wasp_hls_bg.wasm"),
+  ];
+  mkdirSync(join(root, "build"), { recursive: true });
+  for (const destination of destinations) {
+    mkdirSync(dirname(destination), { recursive: true });
+    copyFileSync(source, destination);
+  }
+  reportStep("BUILD", "Checking ABI correctness...");
+  await exec("node", ["./scripts/check_wasm_abi.mjs"], { cwd: root });
+  if (release) {
+    reportStep("BUILD", "Stripping WASM debug symbols...");
+    await exec("node", ["./scripts/wasm-strip.js", "build/wasp_hls_bg.wasm"], {
+      cwd: root,
+    });
+  }
+}
+
+/**
+ * @param {string} root
+ * @param {{ release: boolean }} options
+ */
+export async function buildWorker(root, { release }) {
+  const args = [
+    join(root, "src/ts-worker/index.ts"),
+    "--bundle",
+    "--outfile=build/worker.js",
+    `--tsconfig=${join(root, "src/ts-worker/tsconfig.json")}`,
+  ];
+  if (release) {
+    args.push("--minify");
+  }
+  reportStep("BUILD", "building worker file...");
+  await exec("esbuild", args, { cwd: root });
+}
+
+/**
+ * @param {string} root
+ * @param {{ release: boolean }} options
+ */
+export async function buildMain(root, { release }) {
+  const args = [
+    join(root, "src/ts-main/index.ts"),
+    "--bundle",
+    "--outfile=build/main.js",
+    `--tsconfig=${join(root, "src/ts-main/tsconfig.json")}`,
+  ];
+  if (release) {
+    args.push("--minify");
+  }
+  reportStep("BUILD", "building main file bundle...");
+  await exec("esbuild", args, { cwd: root });
+}
+
+/**
+ * @param {string} root
+ * @param {{ release: boolean }} options
+ */
+export async function buildDemoBundle(root, { release }) {
+  const args = [
+    join(root, "demo/src/index.tsx"),
+    "--bundle",
+    "--outfile=build/demo.js",
+    `--tsconfig=${join(root, "demo/tsconfig.json")}`,
+  ];
+  if (release) {
+    args.push("--minify");
+  }
+  reportStep("BUILD", "building demo bundle...");
+  await exec("esbuild", args, { cwd: root });
+}
+
+/**
+ * @param {string} root
+ * @param {{ release: boolean, includeMainBundle: boolean }} options
+ */
+export async function buildLibrary(root, { release, includeMainBundle }) {
+  await generateWasmAbi(root);
+  cleanBuildDirectory(join(root, "build"), { preserveDemoBundle: false });
+  await buildWasm(root, { release, skipGenerate: true });
+  await buildWorker(root, { release });
+  if (includeMainBundle) {
+    await buildMain(root, { release });
+  }
+}
+
+/**
+ * @param {string} root
+ * @param {{ release: boolean }} options
+ */
+export async function buildPackageArtifacts(root, { release }) {
+  await generateWasmAbi(root);
+  await buildWasm(root, { release, skipGenerate: true });
+  await buildWorker(root, { release });
+  reportStep("BUILD", "removing previous ES6 build artefacts...");
+  rmSync(join(root, "build", "es6"), { force: true, recursive: true });
+  rmSync(join(root, "build", "embedded"), { force: true, recursive: true });
+  reportStep("BUILD", "generating ES6 build...");
+  await exec(
+    "tsc",
+    [
+      "-p",
+      join(root, "src/ts-main/tsconfig.json"),
+      "--rootDir",
+      join(root, "src"),
+      "--outDir",
+      "./build/es6",
+    ],
+    { cwd: root },
+  );
+  copyRecursive(join(root, "src", "wasm"), join(root, "build", "es6", "wasm"));
+  reportStep("BUILD", "generating Embedded WASM JS file...");
+  await exec("node", ["./scripts/generate_embedded_wasm.js"], { cwd: root });
+  reportStep("BUILD", "generating Embedded Worker JS file...");
+  await exec("node", ["./scripts/generate_embedded_worker.js"], { cwd: root });
+  reportStep("BUILD", "checking all exports...");
+  await exec("node", ["./scripts/check_package_exports.mjs"], { cwd: root });
+}
+
+/**
+ * @param {string} root
+ */
+export async function buildDocs(root) {
+  reportStep("BUILD", "removing previous generated doc...");
+  rmSync(join(root, "doc", "generated"), { force: true, recursive: true });
+  reportStep("BUILD", "generating new doc...");
+  await exec("docgen.ico", ["doc", "build/doc"], { cwd: root });
+}
+
+/**
+ * @param {string} root
+ */
+export async function generateWasmAbi(root) {
+  reportStep("BUILD", "Generating ABI enums...");
+  await exec("node", ["./scripts/generate_wasm_abi_enums.mjs"], { cwd: root });
+}

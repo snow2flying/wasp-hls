@@ -425,127 +425,79 @@ rustup component add clippy
 
 ## Build
 
-The building of the Wasp-hls player may be performed by module, if you just
-updated one area of the code (the Rust code for example), or as a whole.
+The build commands are intentionally split between a small set of common
+workflows and an advanced task runner for targeted rebuilds.
 
-### The Rust (WebAssembly) code
+### Common workflows
 
-To build only the Rust code in `src/rs-core/` to its destination WebAssembly
-file (`build/wasp_hls_bg.wasm`), you can run any of the following commands:
-
-```sh
-# Build in debug mode, which leads to a bigger file and slower code, but is
-# more useful and quicker to build when developping
-npm run build:wasm
-
-# Build in release mode, which is the actual delivered result
-npm run build:wasm:release
-```
-
-### The TypeScript Worker code
-
-To build only the Worker code in `src/ts-worker` to its destination JavaScript
-file (`build/worker.js`), you can run any of the following commands:
+For day-to-day development, these are the main commands to remember:
 
 ```sh
-# Build in debug mode, which leads to a bigger file though much easier to debug
-npm run build:worker
+# Build everything the demo needs at runtime:
+# the wasm binary, the worker bundle, and the demo bundle itself
+npm run demo
 
-# Build in release mode, which is the actual delivered minified result
-npm run build:worker:release
+# Same as above, then watch demo, worker, and wasm-related sources
+npm run start
+
+# Build the demo in release mode
+npm run demo:release
+
+# Build hosted release artifacts
+# (wasm + worker + standalone build/main.js bundle)
+npm run build
+
+# Build the npm package artifact tree
+npm run package
 ```
 
-### The Main (API) code
-
-To build only the code running in the main thread present in `src/ts-main` to
-its destination JavaScript file (`build/main.js`), you can run any of the
-following commands:
-
-```sh
-# Build in debug mode, which leads to a bigger file though much easier to debug
-npm run build:main
-
-# Build in release mode, which is the actual delivered minified result
-npm run build:main:release
-```
-
-### The Demo
-
-To build only the demo application showcasing the Wasp-hls player, whose code
-is present in the (`demo/`) directory, to its destination JavaScript file
-(`build/demo.js`), you can run any of the following commands:
-
-```sh
-# Build in debug mode, which leads to a bigger file though much easier to debug
-npm run build:demo
-
-# Build in debug mode, with a "watcher" rebuilding each time one of its files
-# changes
-npm run build:demo:watch
-
-# Build in release mode, which is the actual delivered minified result
-npm run build:demo:release
-```
-
-Then to perform your tests, you generally want to serve the demo. You can do so
-with:
+To test locally once the bundles are built:
 
 ```sh
 npm run serve
 ```
 
-### Combinations
+`demo` does not build `build/main.js`, because the demo imports
+`src/ts-main` directly in its own bundle and only needs the worker and wasm
+artifacts as separate runtime files.
 
-If you just want to build the whole Wasp-hls player code, without the demo, you
-may call:
+`package` generates the publishable package tree under `build/es6` and
+the embedded helper entrypoints under `build/embedded`, while also producing
+the hosted release artifacts used alongside them.
 
-```sh
-npm run build:all
-```
+### Build only one area
 
-If you want to build all that code AND the demo:
-
-```sh
-npm run build:all && npm run build:demo
-```
-
-Though what you most likely want to do here is build the full code used by
-the demo to perform your tests, here just write:
+If you only changed one part of the codebase, use the task runner directly:
 
 ```sh
-npm run build:all:demo
+# Rebuild only the Rust/WASM artifact
+node scripts/tasks.mjs build wasm
+
+# Rebuild only the worker bundle
+node scripts/tasks.mjs build worker
+
+# Rebuild only the main-thread bundle
+node scripts/tasks.mjs build main
+
+# Add --release for the minified/release variant
+node scripts/tasks.mjs build wasm --release
 ```
 
-That last script bypass the generation of the `build/main.js` file, as the demo
-file (`build/demo.js`) already includes the content of that file anyway.
+### Documentation
 
-To build everything in release mode, for an actual release or for tests in
-production conditions, write:
+The documentation written in `doc/` can be built to `build/doc` with:
 
 ```sh
-# WebAssembly + Worker + Main in release mode
-npm run build:release
-
-# If you also want the demo in release mode
-npm run build:demo:release
+npm run docs
 ```
 
-### The Documentation
-
-The documentation, written in `doc/` may also be built to its final directory
-(`build/doc`), through the following command:
-
-```sh
-npm run doc
-```
-
-It may then be served, so it can be read on a web browser, through:
+You can then read it locally through:
 
 ```sh
 npm run serve
 ```
 
-And then requesting the `/doc` path.
+And by opening the `/doc` path.
 
 ## Update the code
 
@@ -556,39 +508,43 @@ directory, as for the documentation, it's in the `doc` directory.
 
 ## Check the code
 
-To check the TypeScript types of TypeScript files and their code style with
-the `eslint` package, you can run:
+To typecheck and lint the TypeScript codebase, you can run:
 
 ```sh
-# Check all TypeScript files in the project
+# Check the whole TypeScript project
 npm run check
 
-# OR, check only the Worker code
+# Check only the worker-related code
 npm run check:worker
 
-# OR, check only the Main code
+# Check only the main-thread code
 npm run check:main
 
-# OR, check only the Demo code
+# Check only the demo
 npm run check:demo
 ```
 
-To check the Rust code, with clippy, you can run:
+If you need more targeted checks, the task runner also supports:
 
 ```sh
-# Check all Rust files in the project
-npm run clippy
+node scripts/tasks.mjs check common
 ```
 
-You also might want to format automatically the code before commiting:
+To check the Rust code with clippy:
 
 ```sh
-# Format all TypeScript, JavaScript, Markdown and HTML files in the project
-npm run fmtt
+npm run check:rust
+```
 
-# Format all Rust code
-npm run fmtr
+To check formatting without rewriting files:
 
-# Do both
+```sh
+npm run check:fmt
+```
+
+You might also want to format automatically the code before committing:
+
+```sh
+# Format Rust and JS/TS/Markdown/HTML
 npm run fmt
 ```

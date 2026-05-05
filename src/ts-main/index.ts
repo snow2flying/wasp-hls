@@ -1,4 +1,6 @@
-import logger, { LoggerLevel as innerLoggerLevel } from "../ts-common/logger.ts";
+import logger, {
+  LoggerLevel as innerLoggerLevel,
+} from "../ts-common/logger.ts";
 import type { WaspHlsPlayerConfig } from "../ts-common/types.ts";
 import WaspHlsPlayer from "./api.ts";
 import { PlayerState as innerPlayerState } from "./types.ts";
