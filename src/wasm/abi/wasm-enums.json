@@ -39,119 +39,459 @@
     },
     "RemoveMediaSourceErrorCode": {
       "default": "UnknownError",
+      "doc": [
+        "Errors that can arise when attempting to remove a MediaSource previously attached",
+        "to a media element."
+      ],
       "members": {
-        "NoMediaSourceAttached": 0,
-        "UnknownError": 1
+        "NoMediaSourceAttached": {
+          "value": 0,
+          "doc": [
+            "Could not remove MediaSource from the media element because this `WaspHlsPlayer`",
+            "had no MediaSource attached to its media element."
+          ]
+        },
+        "UnknownError": {
+          "value": 1,
+          "doc": [
+            "Could not remove MediaSource from the media element because of an unknown error."
+          ]
+        }
       }
     },
     "MediaSourceDurationUpdateErrorCode": {
       "default": "UnknownError",
+      "doc": [
+        "Errors that can arise when attempting to update the duration of a MediaSource.",
+        "TODO defined errors when the MediaSource is closed and so on?"
+      ],
       "members": {
-        "NoMediaSourceAttached": 0,
-        "UnknownError": 1
+        "NoMediaSourceAttached": {
+          "value": 0,
+          "doc": [
+            "The `WaspHlsPlayer` had no MediaSource attached to its media element."
+          ]
+        },
+        "UnknownError": {
+          "value": 1,
+          "doc": [
+            "An unknown error arised"
+          ]
+        }
       }
     },
     "AttachMediaSourceErrorCode": {
       "default": "UnknownError",
+      "doc": [
+        "Errors (or success) that can arise when attempting to \"attach\" a MediaSource to a media",
+        "element."
+      ],
       "members": {
-        "UnknownError": 0,
-        "NoContentLoaded": 1
+        "UnknownError": {
+          "value": 0,
+          "doc": [
+            "Could not attach MediaSource to the media element because of an unknown error."
+          ]
+        },
+        "NoContentLoaded": {
+          "value": 1,
+          "doc": [
+            "Could not attach MediaSource to the media element because no content is currently",
+            "loaded."
+          ]
+        }
       }
     },
     "RemoveBufferErrorCode": {
       "default": "UnknownError",
+      "doc": [
+        "Errors that can arise when calling the `jsRemoveBuffer` JavaScript function."
+      ],
       "members": {
-        "SourceBufferNotFound": 0,
-        "UnknownError": 1
+        "SourceBufferNotFound": {
+          "value": 0,
+          "doc": [
+            "The operation failed because the SourceBuffer instance linked to the given",
+            "`SourceBufferId` was not found."
+          ]
+        },
+        "UnknownError": {
+          "value": 1,
+          "doc": [
+            "The operation failed because of an unknown error."
+          ]
+        }
       }
     },
     "EndOfStreamErrorCode": {
       "default": "UnknownError",
+      "doc": [
+        "Errors that can arise when calling the `jsEndOfStream` JavaScript function."
+      ],
       "members": {
-        "NoMediaSourceAttached": 0,
-        "UnknownError": 1
+        "NoMediaSourceAttached": {
+          "value": 0,
+          "doc": [
+            "The `WaspHlsPlayer` linked had no MediaSource attached to its media",
+            "element."
+          ]
+        },
+        "UnknownError": {
+          "value": 1,
+          "doc": [
+            "The operation failed because of an unknown error."
+          ]
+        }
       }
     },
     "MultivariantPlaylistParsingErrorCode": {
       "default": "Unknown",
+      "doc": [
+        "Error that might arise when parsing the Multivariant Playlist."
+      ],
       "members": {
-        "MissingExtM3uHeader": 0,
-        "MultivariantPlaylistWithoutVariant": 1,
-        "MissingUriLineAfterVariant": 2,
-        "UnableToReadVariantUri": 3,
-        "VariantMissingBandwidth": 4,
-        "InvalidValue": 5,
-        "MediaTagMissingType": 6,
-        "MediaTagMissingName": 7,
-        "MediaTagMissingGroupId": 8,
-        "UnableToReadLine": 9,
-        "Unknown": 10
+        "MissingExtM3uHeader": {
+          "value": 0,
+          "doc": [
+            "The first line of the MultivariantPlaylist is not #EXTM3U.",
+            "",
+            "Are you sure this is a Multivariant Playlist?"
+          ]
+        },
+        "MultivariantPlaylistWithoutVariant": {
+          "value": 1,
+          "doc": [
+            "The Multivariant Playlist has no variant.",
+            "",
+            "Are you sure this is a Multivariant Playlist and not a Media Playlist?"
+          ]
+        },
+        "MissingUriLineAfterVariant": {
+          "value": 2,
+          "doc": [
+            "An `EXT-X-STREAM-INF` tag announced in the Multivariant Playlist,",
+            "describing an HLS variant, had no URI associated to it. It should be",
+            "mandatory."
+          ]
+        },
+        "UnableToReadVariantUri": {
+          "value": 3,
+          "doc": [
+            "An `EXT-X-STREAM-INF` tag announced in the Multivariant Playlist,",
+            "describing an HLS variant, had an unreadable URI associated to it."
+          ]
+        },
+        "VariantMissingBandwidth": {
+          "value": 4,
+          "doc": [
+            "An `EXT-X-STREAM-INF` tag announced in the Multivariant Playlist,",
+            "describing an HLS variant, had no `BANDWIDTH` attribute associated to it.",
+            "It should be mandatory."
+          ]
+        },
+        "InvalidValue": {
+          "value": 5,
+          "doc": [
+            "A value in the Multivariant Playlist was in an invalid format."
+          ]
+        },
+        "MediaTagMissingType": {
+          "value": 6,
+          "doc": [
+            "An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing",
+            "an HLS variant, had no `TYPE` attribute associated to it. It should be",
+            "mandatory."
+          ]
+        },
+        "MediaTagMissingName": {
+          "value": 7,
+          "doc": [
+            "An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing",
+            "an HLS variant, had no `NAME` attribute associated to it. It should be",
+            "mandatory."
+          ]
+        },
+        "MediaTagMissingGroupId": {
+          "value": 8,
+          "doc": [
+            "An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing",
+            "an HLS variant, had no `GROUP-ID` attribute associated to it. It should be",
+            "mandatory."
+          ]
+        },
+        "UnableToReadLine": {
+          "value": 9,
+          "doc": [
+            "A line could not be read."
+          ]
+        },
+        "Unknown": {
+          "value": 10,
+          "doc": [
+            "Another, uncategorized, error arised."
+          ]
+        }
       }
     },
     "MediaPlaylistParsingErrorCode": {
       "default": "Unknown",
+      "doc": [
+        "Error that might arise when parsing the Media Playlist."
+      ],
       "members": {
-        "UnparsableExtInf": 0,
-        "UriMissingInMap": 1,
-        "MissingTargetDuration": 2,
-        "UriWithoutExtInf": 3,
-        "UnparsableByteRange": 4,
-        "Unknown": 5
+        "UnparsableExtInf": {
+          "value": 0,
+          "doc": [
+            "An `#EXTINF` tag announced in the Media Playlist was not in the right",
+            "format."
+          ]
+        },
+        "UriMissingInMap": {
+          "value": 1,
+          "doc": [
+            "An `#EXT-X-MAP` tag in the Media Playlist didn't its mandatory `URI`",
+            "attribute."
+          ]
+        },
+        "MissingTargetDuration": {
+          "value": 2,
+          "doc": [
+            "There was no `#EXT-X-TARGETDURATION` tag in the Media Playlist."
+          ]
+        },
+        "UriWithoutExtInf": {
+          "value": 3,
+          "doc": [
+            "One of the URI found in the Media Playlist wasn't associated to any",
+            "`#EXTINF` tag."
+          ]
+        },
+        "UnparsableByteRange": {
+          "value": 4,
+          "doc": [
+            "A `#EXT-X-BYTERANGE` tag or a `BYTERANGE` attribute in the Media Playlist",
+            "was not in the right format."
+          ]
+        },
+        "Unknown": {
+          "value": 5,
+          "doc": [
+            "Another, uncategorized, error arised."
+          ]
+        }
       }
     },
     "AddSourceBufferErrorCode": {
       "default": "UnknownError",
+      "doc": [
+        "Error that might arise when adding a SourceBuffer through a MediaSource instance."
+      ],
       "members": {
-        "NoMediaSourceAttached": 0,
-        "MediaSourceIsClosed": 1,
-        "QuotaExceededError": 2,
-        "TypeNotSupportedError": 3,
-        "EmptyMimeType": 4,
-        "UnknownError": 5
+        "NoMediaSourceAttached": {
+          "value": 0,
+          "doc": [
+            "The `WaspHlsPlayer` linked to it had no MediaSource attached to its media",
+            "element."
+          ]
+        },
+        "MediaSourceIsClosed": {
+          "value": 1,
+          "doc": [
+            "The `MediaSource` instance linked to this `WaspHlsPlayer` is in a \"closed\" state."
+          ]
+        },
+        "QuotaExceededError": {
+          "value": 2,
+          "doc": [
+            "A `QuotaExceededError` was received while trying to add the `SourceBuffer`",
+            "",
+            "Such errors are often encountered when another SourceBuffer attached to the same",
+            "MediaSource instance was already updated through a buffer operation."
+          ]
+        },
+        "TypeNotSupportedError": {
+          "value": 3,
+          "doc": [
+            "The given mime-type and codec combination is not supported"
+          ]
+        },
+        "EmptyMimeType": {
+          "value": 4,
+          "doc": [
+            "The given mime-type and codec combination is empty"
+          ]
+        },
+        "UnknownError": {
+          "value": 5,
+          "doc": [
+            "An unknown error happened."
+          ]
+        }
       }
     },
     "SegmentParsingErrorCode": {
       "default": "UnknownError",
+      "doc": [
+        "Errors that can arise when calling the `jsAppendBuffer` JavaScript function."
+      ],
       "members": {
-        "NoResource": 0,
-        "NoSourceBuffer": 1,
-        "TransmuxerError": 2,
-        "UnknownError": 3
+        "NoResource": {
+          "value": 0,
+          "doc": [
+            "The operation failed because the resource to append was not found.",
+            "",
+            "This error is only returned for cases where the data to push resides in JavaScript's",
+            "memory (as opposed to given by the WebAssembly code)."
+          ]
+        },
+        "NoSourceBuffer": {
+          "value": 1,
+          "doc": [
+            "The operation failed because the SourceBuffer instance linked to the",
+            "given `SourceBufferId` was not found."
+          ]
+        },
+        "TransmuxerError": {
+          "value": 2,
+          "doc": [
+            "The operation failed at the transmuxing stage."
+          ]
+        },
+        "UnknownError": {
+          "value": 3,
+          "doc": [
+            "The operation failed because of an unknown error."
+          ]
+        }
       }
     },
     "PushedSegmentErrorCode": {
       "default": "UnknownError",
+      "doc": [
+        "Errors that can arise after a SourceBuffer's `appendBuffer` call."
+      ],
       "members": {
-        "BufferFull": 0,
-        "UnknownError": 1
+        "BufferFull": {
+          "value": 0,
+          "doc": [
+            "We could not push the segment because the `SourceBuffer`'s buffer seems full."
+          ]
+        },
+        "UnknownError": {
+          "value": 1,
+          "doc": [
+            "We could not push the segment because of another, unknown error."
+          ]
+        }
       }
     },
     "PlaybackObservationReason": {
       "default": "Error",
+      "doc": [
+        "Reason that triggered a `PlaybackObservation`"
+      ],
       "members": {
-        "Init": 0,
-        "Seeked": 1,
-        "Seeking": 2,
-        "Ended": 3,
-        "ReadyStateChanged": 4,
-        "RegularInterval": 5,
-        "Error": 6
+        "Init": {
+          "value": 0,
+          "doc": [
+            "First observation given initially, not linked to any particular event."
+          ]
+        },
+        "Seeked": {
+          "value": 1,
+          "doc": [
+            "Observation sent right after a \"seeked\" event has been received on the",
+            "HTMLMediaElement."
+          ]
+        },
+        "Seeking": {
+          "value": 2,
+          "doc": [
+            "Observation sent right after a \"seeking\" event has been received on the",
+            "HTMLMediaElement."
+          ]
+        },
+        "Ended": {
+          "value": 3,
+          "doc": [
+            "Observation sent right after an \"ended\" event has been received on the",
+            "HTMLMediaElement."
+          ]
+        },
+        "ReadyStateChanged": {
+          "value": 4,
+          "doc": [
+            "Observation sent right after a the HTMLMediaElement's `readyState`",
+            "attribute changed"
+          ]
+        },
+        "RegularInterval": {
+          "value": 5,
+          "doc": [
+            "Observation sent regularly, at a set interval without any event."
+          ]
+        },
+        "Error": {
+          "value": 6,
+          "doc": [
+            "Observation sent as an error has been received on the HTMLMediaElement."
+          ]
+        }
       }
     },
     "TimerReason": {
       "default": "MediaPlaylistRefresh",
+      "doc": [
+        "\"Reason\" associated to a timer started by the WaspHlsPlayer.",
+        "",
+        "This can then help to identify what the timer was for once resolved."
+      ],
       "members": {
-        "MediaPlaylistRefresh": 0,
-        "RetryRequest": 1
+        "MediaPlaylistRefresh": {
+          "value": 0,
+          "doc": [
+            "The timer is linked to the MediaPlaylistRefresh's mechanism, meaning",
+            "that the wanted MediaPlaylist may have to be reloaded."
+          ]
+        },
+        "RetryRequest": {
+          "value": 1,
+          "doc": [
+            "The timer is linked to a failed request that has to be retried."
+          ]
+        }
       }
     },
     "LogLevel": {
       "default": "Error",
+      "doc": [
+        "Levels with which a log can be emitted."
+      ],
       "members": {
-        "Error": 0,
-        "Warn": 1,
-        "Info": 2,
-        "Debug": 3
+        "Error": {
+          "value": 0,
+          "doc": [
+            "Log level reserved for very important errors and highly unexpected events."
+          ]
+        },
+        "Warn": {
+          "value": 1,
+          "doc": [
+            "Log level reserved for less important errors and unexpected events."
+          ]
+        },
+        "Info": {
+          "value": 2,
+          "doc": [
+            "Log level reserved for important events"
+          ]
+        },
+        "Debug": {
+          "value": 3,
+          "doc": [
+            "Log level used when debugging. Small-ish yet impactful events should be logged with it."
+          ]
+        }
       }
     },
     "MediaType": {
@@ -172,10 +512,28 @@
     },
     "MediaSourceReadyState": {
       "default": "Closed",
+      "doc": [
+        "Identify the JavaScript `readyState` of a created `MediaSource` instance."
+      ],
       "members": {
-        "Closed": 0,
-        "Ended": 1,
-        "Open": 2
+        "Closed": {
+          "value": 0,
+          "doc": [
+            "Corresponds to the \"closed\" JavaScript MediaSource's `readyState`"
+          ]
+        },
+        "Ended": {
+          "value": 1,
+          "doc": [
+            "Corresponds to the \"ended\" JavaScript MediaSource's `readyState`"
+          ]
+        },
+        "Open": {
+          "value": 2,
+          "doc": [
+            "Corresponds to the \"open\" JavaScript MediaSource's `readyState`"
+          ]
+        }
       }
     },
     "StartingPositionType": {
@@ -188,20 +546,89 @@
     },
     "PlaybackTickReason": {
       "default": "Init",
+      "doc": [
+        "Identify the event that lead to the `MediaObservation` being sent."
+      ],
       "members": {
-        "Init": 0,
-        "RegularInterval": 1,
-        "Seeking": 2,
-        "Seeked": 3,
-        "LoadedData": 4,
-        "LoadedMetadata": 5,
-        "CanPlay": 6,
-        "CanPlayThrough": 7,
-        "Ended": 8,
-        "Pause": 9,
-        "Play": 10,
-        "RateChange": 11,
-        "Stalled": 12
+        "Init": {
+          "value": 0,
+          "doc": [
+            "This is the initial observation emitted, right after it was started."
+          ]
+        },
+        "RegularInterval": {
+          "value": 1,
+          "doc": [
+            "This designates MediaObservation sent after an interval without any",
+            "of the other events."
+          ]
+        },
+        "Seeking": {
+          "value": 2,
+          "doc": [
+            "The HTMLMediaElement's \"seeking\" event has just been triggered"
+          ]
+        },
+        "Seeked": {
+          "value": 3,
+          "doc": [
+            "The HTMLMediaElement's \"seeked\" event has just been triggered"
+          ]
+        },
+        "LoadedData": {
+          "value": 4,
+          "doc": [
+            "The HTMLMediaElement's \"loadeddata\" event has just been triggered"
+          ]
+        },
+        "LoadedMetadata": {
+          "value": 5,
+          "doc": [
+            "The HTMLMediaElement's \"loadedmetadata\" event has just been triggered"
+          ]
+        },
+        "CanPlay": {
+          "value": 6,
+          "doc": [
+            "The HTMLMediaElement's \"canplay\" event has just been triggered"
+          ]
+        },
+        "CanPlayThrough": {
+          "value": 7,
+          "doc": [
+            "The HTMLMediaElement's \"canplaythrough\" event has just been triggered"
+          ]
+        },
+        "Ended": {
+          "value": 8,
+          "doc": [
+            "The HTMLMediaElement's \"ended\" event has just been triggered"
+          ]
+        },
+        "Pause": {
+          "value": 9,
+          "doc": [
+            "The HTMLMediaElement's \"pause\" event has just been triggered"
+          ]
+        },
+        "Play": {
+          "value": 10,
+          "doc": [
+            "The HTMLMediaElement's \"play\" event has just been triggered"
+          ]
+        },
+        "RateChange": {
+          "value": 11,
+          "doc": [
+            "The HTMLMediaElement's \"ratechange\" event has just been triggered"
+          ]
+        },
+        "Stalled": {
+          "value": 12,
+          "doc": [
+            "The HTMLMediaElement's \"stalled\" event has just been triggered"
+          ]
+        }
       }
     }
   }

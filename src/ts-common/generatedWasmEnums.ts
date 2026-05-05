@@ -37,117 +37,353 @@ export const RequestErrorReason = Object.freeze({
 export type RequestErrorReason =
   (typeof RequestErrorReason)[keyof typeof RequestErrorReason];
 
+/**
+ * Errors that can arise when attempting to remove a MediaSource previously attached
+ * to a media element.
+ */
 export const RemoveMediaSourceErrorCode = Object.freeze({
+  /**
+   * Could not remove MediaSource from the media element because this `WaspHlsPlayer`
+   * had no MediaSource attached to its media element.
+   */
   NoMediaSourceAttached: 0,
+  /**
+   * Could not remove MediaSource from the media element because of an unknown error.
+   */
   UnknownError: 1,
 } as const);
 export type RemoveMediaSourceErrorCode =
   (typeof RemoveMediaSourceErrorCode)[keyof typeof RemoveMediaSourceErrorCode];
 
+/**
+ * Errors that can arise when attempting to update the duration of a MediaSource.
+ * TODO defined errors when the MediaSource is closed and so on?
+ */
 export const MediaSourceDurationUpdateErrorCode = Object.freeze({
+  /**
+   * The `WaspHlsPlayer` had no MediaSource attached to its media element.
+   */
   NoMediaSourceAttached: 0,
+  /**
+   * An unknown error arised
+   */
   UnknownError: 1,
 } as const);
 export type MediaSourceDurationUpdateErrorCode =
   (typeof MediaSourceDurationUpdateErrorCode)[keyof typeof MediaSourceDurationUpdateErrorCode];
 
+/**
+ * Errors (or success) that can arise when attempting to "attach" a MediaSource to a media
+ * element.
+ */
 export const AttachMediaSourceErrorCode = Object.freeze({
+  /**
+   * Could not attach MediaSource to the media element because of an unknown error.
+   */
   UnknownError: 0,
+  /**
+   * Could not attach MediaSource to the media element because no content is currently
+   * loaded.
+   */
   NoContentLoaded: 1,
 } as const);
 export type AttachMediaSourceErrorCode =
   (typeof AttachMediaSourceErrorCode)[keyof typeof AttachMediaSourceErrorCode];
 
+/**
+ * Errors that can arise when calling the `jsRemoveBuffer` JavaScript function.
+ */
 export const RemoveBufferErrorCode = Object.freeze({
+  /**
+   * The operation failed because the SourceBuffer instance linked to the given
+   * `SourceBufferId` was not found.
+   */
   SourceBufferNotFound: 0,
+  /**
+   * The operation failed because of an unknown error.
+   */
   UnknownError: 1,
 } as const);
 export type RemoveBufferErrorCode =
   (typeof RemoveBufferErrorCode)[keyof typeof RemoveBufferErrorCode];
 
+/**
+ * Errors that can arise when calling the `jsEndOfStream` JavaScript function.
+ */
 export const EndOfStreamErrorCode = Object.freeze({
+  /**
+   * The `WaspHlsPlayer` linked had no MediaSource attached to its media
+   * element.
+   */
   NoMediaSourceAttached: 0,
+  /**
+   * The operation failed because of an unknown error.
+   */
   UnknownError: 1,
 } as const);
 export type EndOfStreamErrorCode =
   (typeof EndOfStreamErrorCode)[keyof typeof EndOfStreamErrorCode];
 
+/**
+ * Error that might arise when parsing the Multivariant Playlist.
+ */
 export const MultivariantPlaylistParsingErrorCode = Object.freeze({
+  /**
+   * The first line of the MultivariantPlaylist is not #EXTM3U.
+   *
+   * Are you sure this is a Multivariant Playlist?
+   */
   MissingExtM3uHeader: 0,
+  /**
+   * The Multivariant Playlist has no variant.
+   *
+   * Are you sure this is a Multivariant Playlist and not a Media Playlist?
+   */
   MultivariantPlaylistWithoutVariant: 1,
+  /**
+   * An `EXT-X-STREAM-INF` tag announced in the Multivariant Playlist,
+   * describing an HLS variant, had no URI associated to it. It should be
+   * mandatory.
+   */
   MissingUriLineAfterVariant: 2,
+  /**
+   * An `EXT-X-STREAM-INF` tag announced in the Multivariant Playlist,
+   * describing an HLS variant, had an unreadable URI associated to it.
+   */
   UnableToReadVariantUri: 3,
+  /**
+   * An `EXT-X-STREAM-INF` tag announced in the Multivariant Playlist,
+   * describing an HLS variant, had no `BANDWIDTH` attribute associated to it.
+   * It should be mandatory.
+   */
   VariantMissingBandwidth: 4,
+  /**
+   * A value in the Multivariant Playlist was in an invalid format.
+   */
   InvalidValue: 5,
+  /**
+   * An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing
+   * an HLS variant, had no `TYPE` attribute associated to it. It should be
+   * mandatory.
+   */
   MediaTagMissingType: 6,
+  /**
+   * An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing
+   * an HLS variant, had no `NAME` attribute associated to it. It should be
+   * mandatory.
+   */
   MediaTagMissingName: 7,
+  /**
+   * An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing
+   * an HLS variant, had no `GROUP-ID` attribute associated to it. It should be
+   * mandatory.
+   */
   MediaTagMissingGroupId: 8,
+  /**
+   * A line could not be read.
+   */
   UnableToReadLine: 9,
+  /**
+   * Another, uncategorized, error arised.
+   */
   Unknown: 10,
 } as const);
 export type MultivariantPlaylistParsingErrorCode =
   (typeof MultivariantPlaylistParsingErrorCode)[keyof typeof MultivariantPlaylistParsingErrorCode];
 
+/**
+ * Error that might arise when parsing the Media Playlist.
+ */
 export const MediaPlaylistParsingErrorCode = Object.freeze({
+  /**
+   * An `#EXTINF` tag announced in the Media Playlist was not in the right
+   * format.
+   */
   UnparsableExtInf: 0,
+  /**
+   * An `#EXT-X-MAP` tag in the Media Playlist didn't its mandatory `URI`
+   * attribute.
+   */
   UriMissingInMap: 1,
+  /**
+   * There was no `#EXT-X-TARGETDURATION` tag in the Media Playlist.
+   */
   MissingTargetDuration: 2,
+  /**
+   * One of the URI found in the Media Playlist wasn't associated to any
+   * `#EXTINF` tag.
+   */
   UriWithoutExtInf: 3,
+  /**
+   * A `#EXT-X-BYTERANGE` tag or a `BYTERANGE` attribute in the Media Playlist
+   * was not in the right format.
+   */
   UnparsableByteRange: 4,
+  /**
+   * Another, uncategorized, error arised.
+   */
   Unknown: 5,
 } as const);
 export type MediaPlaylistParsingErrorCode =
   (typeof MediaPlaylistParsingErrorCode)[keyof typeof MediaPlaylistParsingErrorCode];
 
+/**
+ * Error that might arise when adding a SourceBuffer through a MediaSource instance.
+ */
 export const AddSourceBufferErrorCode = Object.freeze({
+  /**
+   * The `WaspHlsPlayer` linked to it had no MediaSource attached to its media
+   * element.
+   */
   NoMediaSourceAttached: 0,
+  /**
+   * The `MediaSource` instance linked to this `WaspHlsPlayer` is in a "closed" state.
+   */
   MediaSourceIsClosed: 1,
+  /**
+   * A `QuotaExceededError` was received while trying to add the `SourceBuffer`
+   *
+   * Such errors are often encountered when another SourceBuffer attached to the same
+   * MediaSource instance was already updated through a buffer operation.
+   */
   QuotaExceededError: 2,
+  /**
+   * The given mime-type and codec combination is not supported
+   */
   TypeNotSupportedError: 3,
+  /**
+   * The given mime-type and codec combination is empty
+   */
   EmptyMimeType: 4,
+  /**
+   * An unknown error happened.
+   */
   UnknownError: 5,
 } as const);
 export type AddSourceBufferErrorCode =
   (typeof AddSourceBufferErrorCode)[keyof typeof AddSourceBufferErrorCode];
 
+/**
+ * Errors that can arise when calling the `jsAppendBuffer` JavaScript function.
+ */
 export const SegmentParsingErrorCode = Object.freeze({
+  /**
+   * The operation failed because the resource to append was not found.
+   *
+   * This error is only returned for cases where the data to push resides in JavaScript's
+   * memory (as opposed to given by the WebAssembly code).
+   */
   NoResource: 0,
+  /**
+   * The operation failed because the SourceBuffer instance linked to the
+   * given `SourceBufferId` was not found.
+   */
   NoSourceBuffer: 1,
+  /**
+   * The operation failed at the transmuxing stage.
+   */
   TransmuxerError: 2,
+  /**
+   * The operation failed because of an unknown error.
+   */
   UnknownError: 3,
 } as const);
 export type SegmentParsingErrorCode =
   (typeof SegmentParsingErrorCode)[keyof typeof SegmentParsingErrorCode];
 
+/**
+ * Errors that can arise after a SourceBuffer's `appendBuffer` call.
+ */
 export const PushedSegmentErrorCode = Object.freeze({
+  /**
+   * We could not push the segment because the `SourceBuffer`'s buffer seems full.
+   */
   BufferFull: 0,
+  /**
+   * We could not push the segment because of another, unknown error.
+   */
   UnknownError: 1,
 } as const);
 export type PushedSegmentErrorCode =
   (typeof PushedSegmentErrorCode)[keyof typeof PushedSegmentErrorCode];
 
+/**
+ * Reason that triggered a `PlaybackObservation`
+ */
 export const PlaybackObservationReason = Object.freeze({
+  /**
+   * First observation given initially, not linked to any particular event.
+   */
   Init: 0,
+  /**
+   * Observation sent right after a "seeked" event has been received on the
+   * HTMLMediaElement.
+   */
   Seeked: 1,
+  /**
+   * Observation sent right after a "seeking" event has been received on the
+   * HTMLMediaElement.
+   */
   Seeking: 2,
+  /**
+   * Observation sent right after an "ended" event has been received on the
+   * HTMLMediaElement.
+   */
   Ended: 3,
+  /**
+   * Observation sent right after a the HTMLMediaElement's `readyState`
+   * attribute changed
+   */
   ReadyStateChanged: 4,
+  /**
+   * Observation sent regularly, at a set interval without any event.
+   */
   RegularInterval: 5,
+  /**
+   * Observation sent as an error has been received on the HTMLMediaElement.
+   */
   Error: 6,
 } as const);
 export type PlaybackObservationReason =
   (typeof PlaybackObservationReason)[keyof typeof PlaybackObservationReason];
 
+/**
+ * "Reason" associated to a timer started by the WaspHlsPlayer.
+ *
+ * This can then help to identify what the timer was for once resolved.
+ */
 export const TimerReason = Object.freeze({
+  /**
+   * The timer is linked to the MediaPlaylistRefresh's mechanism, meaning
+   * that the wanted MediaPlaylist may have to be reloaded.
+   */
   MediaPlaylistRefresh: 0,
+  /**
+   * The timer is linked to a failed request that has to be retried.
+   */
   RetryRequest: 1,
 } as const);
 export type TimerReason = (typeof TimerReason)[keyof typeof TimerReason];
 
+/**
+ * Levels with which a log can be emitted.
+ */
 export const LogLevel = Object.freeze({
+  /**
+   * Log level reserved for very important errors and highly unexpected events.
+   */
   Error: 0,
+  /**
+   * Log level reserved for less important errors and unexpected events.
+   */
   Warn: 1,
+  /**
+   * Log level reserved for important events
+   */
   Info: 2,
+  /**
+   * Log level used when debugging. Small-ish yet impactful events should be logged with it.
+   */
   Debug: 3,
 } as const);
 export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
@@ -167,9 +403,21 @@ export const PlaylistNature = Object.freeze({
 export type PlaylistNature =
   (typeof PlaylistNature)[keyof typeof PlaylistNature];
 
+/**
+ * Identify the JavaScript `readyState` of a created `MediaSource` instance.
+ */
 export const MediaSourceReadyState = Object.freeze({
+  /**
+   * Corresponds to the "closed" JavaScript MediaSource's `readyState`
+   */
   Closed: 0,
+  /**
+   * Corresponds to the "ended" JavaScript MediaSource's `readyState`
+   */
   Ended: 1,
+  /**
+   * Corresponds to the "open" JavaScript MediaSource's `readyState`
+   */
   Open: 2,
 } as const);
 export type MediaSourceReadyState =
@@ -183,19 +431,62 @@ export const StartingPositionType = Object.freeze({
 export type StartingPositionType =
   (typeof StartingPositionType)[keyof typeof StartingPositionType];
 
+/**
+ * Identify the event that lead to the `MediaObservation` being sent.
+ */
 export const PlaybackTickReason = Object.freeze({
+  /**
+   * This is the initial observation emitted, right after it was started.
+   */
   Init: 0,
+  /**
+   * This designates MediaObservation sent after an interval without any
+   * of the other events.
+   */
   RegularInterval: 1,
+  /**
+   * The HTMLMediaElement's "seeking" event has just been triggered
+   */
   Seeking: 2,
+  /**
+   * The HTMLMediaElement's "seeked" event has just been triggered
+   */
   Seeked: 3,
+  /**
+   * The HTMLMediaElement's "loadeddata" event has just been triggered
+   */
   LoadedData: 4,
+  /**
+   * The HTMLMediaElement's "loadedmetadata" event has just been triggered
+   */
   LoadedMetadata: 5,
+  /**
+   * The HTMLMediaElement's "canplay" event has just been triggered
+   */
   CanPlay: 6,
+  /**
+   * The HTMLMediaElement's "canplaythrough" event has just been triggered
+   */
   CanPlayThrough: 7,
+  /**
+   * The HTMLMediaElement's "ended" event has just been triggered
+   */
   Ended: 8,
+  /**
+   * The HTMLMediaElement's "pause" event has just been triggered
+   */
   Pause: 9,
+  /**
+   * The HTMLMediaElement's "play" event has just been triggered
+   */
   Play: 10,
+  /**
+   * The HTMLMediaElement's "ratechange" event has just been triggered
+   */
   RateChange: 11,
+  /**
+   * The HTMLMediaElement's "stalled" event has just been triggered
+   */
   Stalled: 12,
 } as const);
 export type PlaybackTickReason =

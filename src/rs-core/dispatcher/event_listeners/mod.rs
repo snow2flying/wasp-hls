@@ -1,7 +1,5 @@
 use std::{iter::Map, ops::Index, slice::Chunks};
 
-// XXX TODO: COMMENTS HAVE BEEN REMOVED, DRAMATIC!!!!!!!
-
 use crate::{
     bindings::{
         f64_vec_from_abi, jsFreeResource, jsGetResourceData, AddSourceBufferErrorCode,
@@ -418,8 +416,6 @@ fn maybe_time_ranges(ptr: *const f64, len: u32) -> Option<JsTimeRanges> {
         Some(JsTimeRanges::new(f64_vec_from_abi(ptr, len as usize)))
     }
 }
-
-// JS bindings:
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __web_event__request_finished(

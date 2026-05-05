@@ -6,7 +6,6 @@ use crate::{
     requester::{PlaylistFileType, Requester},
     segment_selector::NextSegmentSelectors,
 };
-// XXX TODO: COMMENTS HAVE BEEN REMOVED, DRAMATIC!!!!!!!
 
 mod api;
 mod core;
