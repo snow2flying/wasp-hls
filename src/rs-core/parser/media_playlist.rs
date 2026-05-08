@@ -1,21 +1,25 @@
+use super::{
+    multi_variant_playlist::MediaPlaylistContext,
+    value_parsers::{
+        parse_byte_range, parse_decimal_floating_point, parse_decimal_integer,
+        parse_start_attribute, ByteRange,
+    },
+    variable_substitution::VariableDefinition,
+};
 use crate::{
     bindings::{MediaType, PlaylistNature},
+    parser::{
+        attribute_list::{parse_enumerated_string, AttributeListIter},
+        value_parsers::{parse_iso_8601_date, StartAttribute},
+        variable_substitution::{
+            parse_define_tag, parse_substituted_quoted_string, VariableDefinitionError,
+            VariableStore,
+        },
+    },
     utils::url::Url,
     Logger,
 };
 use std::{error, fmt, io::BufRead};
-
-use super::{
-    multi_variant_playlist::MediaPlaylistContext,
-    utils::{
-        parse_byte_range, parse_decimal_floating_point, parse_decimal_integer, parse_define_tag,
-        parse_enumerated_string, parse_iso_8601_date, parse_start_attribute,
-        parse_substituted_quoted_string, AttributeListIter, StartAttribute, VariableDefinition,
-        VariableDefinitionError, VariableStore,
-    },
-};
-
-pub use super::utils::ByteRange;
 
 /// Object storing the time information on a single media segment.
 #[derive(Clone, Debug)]

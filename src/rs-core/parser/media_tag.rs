@@ -1,9 +1,9 @@
 use super::{
+    attribute_list::{parse_enumerated_string, AttributeListIter},
     media_playlist::MediaPlaylistParsingError,
     multi_variant_playlist::MediaPlaylistContext,
-    utils::{
-        parse_enumerated_string, parse_substituted_comma_separated_list,
-        parse_substituted_quoted_string, AttributeListIter, VariableStore,
+    variable_substitution::{
+        parse_substituted_comma_separated_list, parse_substituted_quoted_string, VariableStore,
     },
     MediaPlaylist,
 };
@@ -147,9 +147,7 @@ impl MediaTag {
         for item in AttributeListIter::new(media_line, "#EXT-X-MEDIA:".len()) {
             match item.name {
                 "TYPE" => {
-                    let (parsed, end_offset) =
-                        parse_enumerated_string(media_line, item.value_start_offset);
-                    let _ = end_offset;
+                    let (parsed, _) = parse_enumerated_string(media_line, item.value_start_offset);
                     match parsed {
                         "AUDIO" => typ = Some(MediaTagType::Audio),
                         "VIDEO" => typ = Some(MediaTagType::Video),
@@ -260,18 +258,14 @@ impl MediaTag {
                     characteristics.dedup();
                 }
                 "BIT-DEPTH" => {
-                    let (parsed, end_offset) =
-                        parse_enumerated_string(media_line, item.value_start_offset);
-                    let _ = end_offset;
+                    let (parsed, _) = parse_enumerated_string(media_line, item.value_start_offset);
                     match parsed.parse::<u32>() {
                         Ok(val) => bit_depth = Some(val),
                         Err(_) => Logger::warn("Unparsable BIT-DEPTH value"),
                     }
                 }
                 "SAMPLE-RATE" => {
-                    let (parsed, end_offset) =
-                        parse_enumerated_string(media_line, item.value_start_offset);
-                    let _ = end_offset;
+                    let (parsed, _) = parse_enumerated_string(media_line, item.value_start_offset);
                     match parsed.parse::<u32>() {
                         Ok(val) => sample_rate = Some(val),
                         Err(_) => Logger::warn("Unparsable SAMPLE-RATE value"),

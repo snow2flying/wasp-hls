@@ -1,15 +1,22 @@
-use std::io::BufRead;
-
 use super::{
+    attribute_list::AttributeListIter,
     media_playlist::{MediaPlaylist, MediaPlaylistParsingError},
     multi_variant_playlist::MediaPlaylistContext,
-    utils::{
-        parse_decimal_floating_point, parse_decimal_integer, parse_enumerated_string,
-        parse_resolution, parse_substituted_comma_separated_list, parse_substituted_quoted_string,
-        AttributeListIter, VariableStore,
-    },
+    variable_substitution::VariableStore,
 };
-use crate::{bindings::MediaType, utils::url::Url, Logger};
+use crate::{
+    bindings::MediaType,
+    parser::{
+        attribute_list::parse_enumerated_string,
+        value_parsers::{parse_decimal_floating_point, parse_decimal_integer, parse_resolution},
+        variable_substitution::{
+            parse_substituted_comma_separated_list, parse_substituted_quoted_string,
+        },
+    },
+    utils::url::Url,
+    Logger,
+};
+use std::io::BufRead;
 
 /// Stucture representing the HLS concept of a "variant stream".
 #[derive(Debug)]
@@ -338,25 +345,24 @@ impl VariantStream {
             // #EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=746000,BANDWIDTH=886211,RESOLUTION=512x288,FRAME-RATE=25.000,CODECS="avc1.4D4015,mp4a.40.2",CLOSED-CAPTIONS=NONE,AUDIO="AUDIO_96000"
             match item.name {
                 "AVERAGE-BANDWIDTH" => {
-                    let (parsed, end_offset) =
-                        parse_decimal_integer(variant_line, item.value_start_offset);
-                    let _ = end_offset;
-                    if let Ok(val) = parsed {
+                    if let (Ok(val), _) =
+                        parse_decimal_integer(variant_line, item.value_start_offset)
+                    {
                         average_bandwitdh = Some(val);
                     } else {
                         Logger::warn("Unparsable AVERAGE-BANDWIDTH value");
                     }
                 }
                 "BANDWIDTH" => {
-                    let (parsed, end_offset) =
-                        parse_decimal_integer(variant_line, item.value_start_offset);
-                    let _ = end_offset;
-                    if let Ok(val) = parsed {
+                    if let (Ok(val), _) =
+                        parse_decimal_integer(variant_line, item.value_start_offset)
+                    {
                         bandwidth = Some(val);
                     } else {
                         Logger::warn("Unparsable BANDWIDTH value");
                     }
                 }
+
                 "CODECS" => {
                     let parsed_codecs = parse_substituted_comma_separated_list(
                         variant_line,
@@ -370,19 +376,18 @@ impl VariantStream {
                         .collect();
                 }
                 "FRAME-RATE" => {
-                    let (parsed, end_offset) =
-                        parse_decimal_floating_point(variant_line, item.value_start_offset);
-                    let _ = end_offset;
-                    if let Ok(val) = parsed {
+                    if let (Ok(val), _) =
+                        parse_decimal_floating_point(variant_line, item.value_start_offset)
+                    {
                         frame_rate = Some(val);
                     } else {
                         Logger::warn("Unparsable FRAME-RATE value");
                     }
                 }
+
                 "HDCP-LEVEL" => {
-                    let (parsed, end_offset) =
+                    let (parsed, _) =
                         parse_enumerated_string(variant_line, item.value_start_offset);
-                    let _ = end_offset;
                     hdcp_level = match parsed {
                         "TYPE-0" => HdcpLevel::Type0,
                         "TYPE-1" => HdcpLevel::Type1,
@@ -391,20 +396,16 @@ impl VariantStream {
                     };
                 }
                 "PROGRAM-ID" => {
-                    let (parsed, end_offset) =
-                        parse_decimal_integer(variant_line, item.value_start_offset);
-                    let _ = end_offset;
-                    if let Ok(val) = parsed {
+                    if let (Ok(val), _) =
+                        parse_decimal_integer(variant_line, item.value_start_offset)
+                    {
                         program_id = Some(val);
                     } else {
                         Logger::warn("Unparsable PROGRAM-ID value");
                     }
                 }
                 "RESOLUTION" => {
-                    let (parsed, end_offset) =
-                        parse_resolution(variant_line, item.value_start_offset);
-                    let _ = end_offset;
-                    if let Ok(res) = parsed {
+                    if let (Ok(res), _) = parse_resolution(variant_line, item.value_start_offset) {
                         resolution = Some(VideoResolution {
                             height: res.height,
                             width: res.width,
@@ -414,10 +415,9 @@ impl VariantStream {
                     }
                 }
                 "SCORE" => {
-                    let (parsed, end_offset) =
-                        parse_decimal_floating_point(variant_line, item.value_start_offset);
-                    let _ = end_offset;
-                    if let Ok(val) = parsed {
+                    if let (Ok(val), _) =
+                        parse_decimal_floating_point(variant_line, item.value_start_offset)
+                    {
                         score = Some(val);
                     } else {
                         Logger::warn("Unparsable SCORE value");
@@ -482,9 +482,8 @@ impl VariantStream {
                     }
                 }
                 "VIDEO-RANGE" => {
-                    let (parsed, end_offset) =
+                    let (parsed, _) =
                         parse_enumerated_string(variant_line, item.value_start_offset);
-                    let _ = end_offset;
                     video_range = Some(parsed.to_owned());
                 }
                 "PATHWAY-ID" => {

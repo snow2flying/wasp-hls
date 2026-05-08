@@ -1,6 +1,8 @@
 use super::MediaTag;
-use std::collections::BTreeSet;
-use std::ops::{Deref, DerefMut};
+use std::{
+    collections::BTreeSet,
+    ops::{Deref, DerefMut},
+};
 
 /// Allows to translate various `EXT-X-MEDIA` tag found inside a Multivariant Playlist into well
 /// defined audio tracks that make more sense in a player API.

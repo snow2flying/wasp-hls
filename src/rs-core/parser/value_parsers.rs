@@ -1,308 +1,8 @@
-use crate::utils::url::Url;
-use std::{
-    borrow::Cow,
-    collections::HashMap,
-    num::{ParseFloatError, ParseIntError},
+use super::attribute_list::{
+    find_attribute_end, parse_enumerated_string, skip_attribute_list_value,
 };
-
 use crate::Logger;
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum VariableDefinitionError {
-    DuplicateName,
-    MissingImportedVariable,
-    MissingQueryParam,
-    InvalidName,
-    InvalidPercentEncoding,
-    InvalidValue,
-    InvalidDefinition,
-}
-
-#[derive(Clone, Debug, Default)]
-pub(crate) struct VariableStore {
-    variables: HashMap<String, String>,
-    query_params: HashMap<String, String>,
-}
-
-impl VariableStore {
-    pub(crate) fn from_url(url: &Url) -> Self {
-        Self {
-            variables: HashMap::new(),
-            query_params: parse_query_params(url),
-        }
-    }
-
-    pub(crate) fn define(
-        &mut self,
-        name: String,
-        value: String,
-    ) -> Result<(), VariableDefinitionError> {
-        validate_variable_name(&name)?;
-        validate_variable_value(&value)?;
-        if self.variables.contains_key(&name) {
-            return Err(VariableDefinitionError::DuplicateName);
-        }
-        self.variables.insert(name, value);
-        Ok(())
-    }
-
-    pub(crate) fn import(
-        &mut self,
-        name: &str,
-        imported_variables: &HashMap<String, String>,
-    ) -> Result<(), VariableDefinitionError> {
-        validate_variable_name(name)?;
-        let value = imported_variables
-            .get(name)
-            .ok_or(VariableDefinitionError::MissingImportedVariable)?;
-        self.define(name.to_owned(), value.clone())
-    }
-
-    pub(crate) fn define_query_param(&mut self, name: &str) -> Result<(), VariableDefinitionError> {
-        validate_variable_name(name)?;
-        let value = self
-            .query_params
-            .get(name)
-            .ok_or(VariableDefinitionError::MissingQueryParam)?
-            .clone();
-        self.define(name.to_owned(), value)
-    }
-
-    pub(crate) fn substitute<'a>(
-        &self,
-        value: &'a str,
-    ) -> Result<Cow<'a, str>, VariableDefinitionError> {
-        let Some(first_idx) = value.find("{$") else {
-            return Ok(Cow::Borrowed(value));
-        };
-
-        let mut substituted = String::with_capacity(value.len());
-        substituted.push_str(&value[..first_idx]);
-        let mut offset = first_idx;
-        while offset < value.len() {
-            match value[offset..].find("{$") {
-                None => {
-                    substituted.push_str(&value[offset..]);
-                    break;
-                }
-                Some(relative_start) => {
-                    let start = offset + relative_start;
-                    substituted.push_str(&value[offset..start]);
-                    let after_start = start + 2;
-                    let Some(relative_end) = value[after_start..].find('}') else {
-                        return Err(VariableDefinitionError::InvalidDefinition);
-                    };
-                    let end = after_start + relative_end;
-                    let variable_name = &value[after_start..end];
-                    validate_variable_name(variable_name)?;
-                    let variable_value = self
-                        .variables
-                        .get(variable_name)
-                        .ok_or(VariableDefinitionError::InvalidDefinition)?;
-                    substituted.push_str(variable_value);
-                    offset = end + 1;
-                }
-            }
-        }
-        Ok(Cow::Owned(substituted))
-    }
-
-    pub(crate) fn definitions(&self) -> &HashMap<String, String> {
-        &self.variables
-    }
-}
-
-pub(crate) enum VariableDefinition {
-    Name { name: String, value: String },
-    Import { name: String },
-    QueryParam { name: String },
-}
-
-pub(crate) struct AttributeListIter<'a> {
-    line: &'a str,
-    offset: usize,
-}
-
-pub(crate) struct AttributeListItem<'a> {
-    pub(crate) name: &'a str,
-    pub(crate) value_start_offset: usize,
-}
-
-impl<'a> AttributeListIter<'a> {
-    pub(crate) fn new(line: &'a str, offset: usize) -> Self {
-        Self { line, offset }
-    }
-}
-
-impl<'a> Iterator for AttributeListIter<'a> {
-    type Item = AttributeListItem<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.offset >= self.line.len() {
-            return None;
-        }
-        let idx = self.line[self.offset..].find('=')?;
-        let item = AttributeListItem {
-            name: &self.line[self.offset..self.offset + idx],
-            value_start_offset: self.offset + idx + 1,
-        };
-        self.offset = skip_attribute_list_value(self.line, item.value_start_offset) + 1;
-        Some(item)
-    }
-}
-
-pub(crate) fn parse_substituted_quoted_string<'a>(
-    line: &'a str,
-    value_start_offset: usize,
-    variable_store: &VariableStore,
-) -> Result<Cow<'a, str>, VariableDefinitionError> {
-    let (parsed, _) = parse_quoted_string(line, value_start_offset);
-    let parsed = parsed.map_err(|_| VariableDefinitionError::InvalidDefinition)?;
-    variable_store.substitute(parsed)
-}
-
-pub(crate) fn parse_substituted_comma_separated_list<'a>(
-    line: &'a str,
-    value_start_offset: usize,
-    variable_store: &VariableStore,
-) -> Result<Vec<Cow<'a, str>>, VariableDefinitionError> {
-    let (parsed, _) = parse_comma_separated_list(line, value_start_offset);
-    let parsed = parsed.map_err(|_| VariableDefinitionError::InvalidDefinition)?;
-    parsed
-        .into_iter()
-        .map(|value| variable_store.substitute(value))
-        .collect()
-}
-
-pub(crate) fn parse_define_tag(line: &str) -> Result<VariableDefinition, VariableDefinitionError> {
-    let mut name: Option<String> = None;
-    let mut value: Option<String> = None;
-    let mut import: Option<String> = None;
-    let mut query_param: Option<String> = None;
-    for item in AttributeListIter::new(line, "#EXT-X-DEFINE:".len()) {
-        let (parsed_value, _) = parse_quoted_string(line, item.value_start_offset);
-        let parsed_value = parsed_value.map_err(|_| VariableDefinitionError::InvalidDefinition)?;
-        match item.name {
-            "NAME" => name = Some(parsed_value.to_owned()),
-            "VALUE" => value = Some(parsed_value.to_owned()),
-            "IMPORT" => import = Some(parsed_value.to_owned()),
-            "QUERYPARAM" => query_param = Some(parsed_value.to_owned()),
-            _ => {}
-        }
-    }
-
-    let alternatives_count = usize::from(name.is_some())
-        + usize::from(import.is_some())
-        + usize::from(query_param.is_some());
-    if alternatives_count != 1 {
-        return Err(VariableDefinitionError::InvalidDefinition);
-    }
-
-    if let Some(name) = name {
-        if let Some(value) = value {
-            validate_variable_name(&name)?;
-            validate_variable_value(&value)?;
-            Ok(VariableDefinition::Name { name, value })
-        } else {
-            Err(VariableDefinitionError::InvalidDefinition)
-        }
-    } else if let Some(name) = import {
-        validate_variable_name(&name)?;
-        Ok(VariableDefinition::Import { name })
-    } else if let Some(name) = query_param {
-        validate_variable_name(&name)?;
-        Ok(VariableDefinition::QueryParam { name })
-    } else {
-        Err(VariableDefinitionError::InvalidDefinition)
-    }
-}
-
-fn validate_variable_name(name: &str) -> Result<(), VariableDefinitionError> {
-    if name.is_empty() {
-        return Err(VariableDefinitionError::InvalidName);
-    }
-    if name
-        .bytes()
-        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-    {
-        Ok(())
-    } else {
-        Err(VariableDefinitionError::InvalidName)
-    }
-}
-
-fn validate_variable_value(value: &str) -> Result<(), VariableDefinitionError> {
-    if value.contains('"') || value.contains('\r') || value.contains('\n') {
-        Err(VariableDefinitionError::InvalidValue)
-    } else {
-        Ok(())
-    }
-}
-
-fn parse_query_params(url: &Url) -> HashMap<String, String> {
-    let input = url.get_ref();
-    let Some(query_start) = input.find('?') else {
-        return HashMap::new();
-    };
-    let query = match input[query_start + 1..].find('#') {
-        Some(hash_offset) => &input[query_start + 1..query_start + 1 + hash_offset],
-        None => &input[query_start + 1..],
-    };
-
-    let mut result = HashMap::new();
-    for pair in query.split('&') {
-        if pair.is_empty() {
-            continue;
-        }
-        let Some(eq_idx) = pair.find('=') else {
-            continue;
-        };
-        let key = &pair[..eq_idx];
-        let val = &pair[eq_idx + 1..];
-        if result.contains_key(key) {
-            continue;
-        }
-        match percent_decode(val) {
-            Ok(decoded) => {
-                if validate_variable_value(&decoded).is_ok() {
-                    result.insert(key.to_owned(), decoded);
-                }
-            }
-            Err(_) => continue,
-        }
-    }
-    result
-}
-
-fn percent_decode(input: &str) -> Result<String, VariableDefinitionError> {
-    let mut result = Vec::with_capacity(input.len());
-    let bytes = input.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' {
-            if i + 2 >= bytes.len() {
-                return Err(VariableDefinitionError::InvalidPercentEncoding);
-            }
-            let high = from_hex(bytes[i + 1])?;
-            let low = from_hex(bytes[i + 2])?;
-            result.push(high * 16 + low);
-            i += 3;
-        } else {
-            result.push(bytes[i]);
-            i += 1;
-        }
-    }
-    String::from_utf8(result).map_err(|_| VariableDefinitionError::InvalidPercentEncoding)
-}
-
-fn from_hex(byte: u8) -> Result<u8, VariableDefinitionError> {
-    match byte {
-        b'0'..=b'9' => Ok(byte - b'0'),
-        b'a'..=b'f' => Ok(byte - b'a' + 10),
-        b'A'..=b'F' => Ok(byte - b'A' + 10),
-        _ => Err(VariableDefinitionError::InvalidPercentEncoding),
-    }
-}
+use std::num::{ParseFloatError, ParseIntError};
 
 /// Parse decimal integer value as defined by the HLS specification:
 /// From the `value_start_offset` (which is the byte offset in `line` at which
@@ -316,89 +16,6 @@ pub(super) fn parse_decimal_integer(
     match line[value_start_offset..end].parse::<u64>() {
         Ok(val) => (Ok(val), end),
         Err(x) => (Err(x), end),
-    }
-}
-
-/// Parse enumerated string value as defined by the HLS specification:
-/// From the `value_start_offset` (which is the byte offset in `line` at which
-/// the value starts), to either the next encountered comma, or the end of `line`,
-/// whichever comes sooner.
-///
-/// More than parsing enumerated string values, this function actually just parse
-/// a string without quotes. As such it can be used for any value respecting that
-/// criteria.
-pub(super) fn parse_enumerated_string(line: &str, value_start_offset: usize) -> (&str, usize) {
-    let end = find_attribute_end(line, value_start_offset);
-    (line[value_start_offset..end].as_ref(), end)
-}
-
-pub(super) enum QuotedStringParsingError {
-    NoStartingQuote,
-    NoEndingQuote,
-}
-
-#[inline]
-pub(super) fn find_attribute_end(line: &str, offset: usize) -> usize {
-    line[offset..].find(',').map_or(line.len(), |x| x + offset)
-}
-
-pub(super) fn parse_quoted_string(
-    line: &str,
-    value_start_offset: usize,
-) -> (Result<&str, QuotedStringParsingError>, usize) {
-    if &line[value_start_offset..value_start_offset + 1] != "\"" {
-        let end = find_attribute_end(line, value_start_offset);
-        (Err(QuotedStringParsingError::NoStartingQuote), end)
-    } else {
-        match line[value_start_offset + 1..].find('"') {
-            Some(relative_end_quote_idx) => {
-                let end_quote_idx = value_start_offset + 1 + relative_end_quote_idx;
-                let end = find_attribute_end(line, end_quote_idx + 1);
-                (Ok(&line[value_start_offset + 1..end_quote_idx]), end)
-            }
-            None => {
-                let end = find_attribute_end(line, value_start_offset + 1);
-                (Err(QuotedStringParsingError::NoEndingQuote), end)
-            }
-        }
-    }
-}
-
-pub(super) fn parse_comma_separated_list(
-    line: &str,
-    value_start_offset: usize,
-) -> (Result<Vec<&str>, QuotedStringParsingError>, usize) {
-    let parsed = parse_quoted_string(line, value_start_offset);
-    let splitted = parsed.0.map(|s| s.split(',').collect());
-    (splitted, parsed.1)
-}
-
-pub(super) fn skip_attribute_list_value(line: &str, value_start_offset: usize) -> usize {
-    if line.len() <= value_start_offset {
-        return value_start_offset;
-    }
-
-    // Check if the attribute list value is a quoted one
-    if &line[value_start_offset..value_start_offset + 1] == "\"" {
-        match line[value_start_offset + 1..].find('\"') {
-            Some(relative_end_quote_idx) => {
-                let end_quote_idx = value_start_offset + relative_end_quote_idx;
-
-                // Technically, a comma (',') character should always be found
-                // here if we're not at the end of the attribute list.
-                // Still, check where it is for resilience
-                match line[end_quote_idx + 1..].find(',') {
-                    Some(idx) => end_quote_idx + idx + 1,
-                    None => line.len(),
-                }
-            }
-            None => line.len(),
-        }
-    } else {
-        match line[value_start_offset..].find(',') {
-            Some(idx) => value_start_offset + idx,
-            None => line.len(),
-        }
     }
 }
 
@@ -643,6 +260,82 @@ pub fn parse_byte_range(
         first_byte: range_base,
         last_byte: range_base + range_size - 1,
     })
+}
+
+/// Value of the "EXT-X-START" tag as specified by the HLS specification.
+///
+/// Indicates at which position a player should start this Media Playlist
+#[derive(Clone, Debug)]
+pub(crate) struct StartAttribute {
+    /// A positive number indicates a time offset in seconds from the beginning of the Playlist.
+    /// A negative number indicates a negative time offset in seconds from the end of the last
+    /// media segment in the Playlist.
+    pub(super) time_offset: f64,
+    /// If `true`, we should start playing at exactly the calculated time offset.
+    ///
+    /// If `false`, we should start playing at the beginning of the segment which includes the
+    /// calculated time offset.
+    pub(super) precise: bool,
+}
+
+pub(super) enum StartAttributeParsingError {
+    NoTimeOffset,
+    TimeOffsetParsingError(ParseFloatError),
+    InvalidPreciseValue,
+}
+
+pub(super) fn parse_start_attribute(
+    start_line: &str,
+) -> Result<StartAttribute, StartAttributeParsingError> {
+    let mut time_offset: Option<f64> = None;
+    let mut precise = false;
+
+    let mut offset = "#EXT-X-START:".len();
+    loop {
+        if offset >= start_line.len() {
+            break;
+        }
+        match start_line[offset..].find('=') {
+            None => {
+                Logger::warn("Attribute Name not followed by equal sign");
+                break;
+            }
+            Some(idx) => match &start_line[offset..offset + idx] {
+                "PRECISE" => {
+                    let (parsed, end_offset) =
+                        parse_enumerated_string(start_line, offset + idx + 1);
+                    offset = end_offset + 1;
+                    match parsed {
+                        "YES" => precise = true,
+                        "NO" => precise = false,
+                        _ => {
+                            return Err(StartAttributeParsingError::InvalidPreciseValue);
+                        }
+                    };
+                }
+                "TIME-OFFSET" => {
+                    let (parsed, end_offset) =
+                        parse_decimal_floating_point(start_line, offset + idx + 1);
+                    offset = end_offset + 1;
+                    match parsed {
+                        Err(x) => {
+                            return Err(StartAttributeParsingError::TimeOffsetParsingError(x));
+                        }
+                        Ok(x) => time_offset = Some(x),
+                    }
+                }
+                _ => offset = skip_attribute_list_value(start_line, offset + idx + 1) + 1,
+            },
+        }
+    }
+    if let Some(time_offset) = time_offset {
+        Ok(StartAttribute {
+            time_offset,
+            precise,
+        })
+    } else {
+        Err(StartAttributeParsingError::NoTimeOffset)
+    }
 }
 
 fn read_integer_until(value: &[u8], base_offset: usize, ending_char: u8) -> (Option<u64>, usize) {
@@ -935,81 +628,5 @@ mod tests {
         assert_eq!(parse_iso_8601_date("1968-03-2916:01:21.050Z", 0), None);
         assert_eq!(parse_iso_8601_date("1968-02-29R20:54:56.810Z", 0), None);
         assert_eq!(parse_iso_8601_date("1968-0229T16:01:21.050Z", 0), None);
-    }
-}
-
-/// Value of the "EXT-X-START" tag as specified by the HLS specification.
-///
-/// Indicates at which position a player should start this Media Playlist
-#[derive(Clone, Debug)]
-pub(crate) struct StartAttribute {
-    /// A positive number indicates a time offset in seconds from the beginning of the Playlist.
-    /// A negative number indicates a negative time offset in seconds from the end of the last
-    /// media segment in the Playlist.
-    pub(super) time_offset: f64,
-    /// If `true`, we should start playing at exactly the calculated time offset.
-    ///
-    /// If `false`, we should start playing at the beginning of the segment which includes the
-    /// calculated time offset.
-    pub(super) precise: bool,
-}
-
-pub(super) enum StartAttributeParsingError {
-    NoTimeOffset,
-    TimeOffsetParsingError(ParseFloatError),
-    InvalidPreciseValue,
-}
-
-pub(super) fn parse_start_attribute(
-    start_line: &str,
-) -> Result<StartAttribute, StartAttributeParsingError> {
-    let mut time_offset: Option<f64> = None;
-    let mut precise = false;
-
-    let mut offset = "#EXT-X-START:".len();
-    loop {
-        if offset >= start_line.len() {
-            break;
-        }
-        match start_line[offset..].find('=') {
-            None => {
-                Logger::warn("Attribute Name not followed by equal sign");
-                break;
-            }
-            Some(idx) => match &start_line[offset..offset + idx] {
-                "PRECISE" => {
-                    let (parsed, end_offset) =
-                        parse_enumerated_string(start_line, offset + idx + 1);
-                    offset = end_offset + 1;
-                    match parsed {
-                        "YES" => precise = true,
-                        "NO" => precise = false,
-                        _ => {
-                            return Err(StartAttributeParsingError::InvalidPreciseValue);
-                        }
-                    };
-                }
-                "TIME-OFFSET" => {
-                    let (parsed, end_offset) =
-                        parse_decimal_floating_point(start_line, offset + idx + 1);
-                    offset = end_offset + 1;
-                    match parsed {
-                        Err(x) => {
-                            return Err(StartAttributeParsingError::TimeOffsetParsingError(x));
-                        }
-                        Ok(x) => time_offset = Some(x),
-                    }
-                }
-                _ => offset = skip_attribute_list_value(start_line, offset + idx + 1) + 1,
-            },
-        }
-    }
-    if let Some(time_offset) = time_offset {
-        Ok(StartAttribute {
-            time_offset,
-            precise,
-        })
-    } else {
-        Err(StartAttributeParsingError::NoTimeOffset)
     }
 }

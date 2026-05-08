@@ -1,16 +1,16 @@
-use super::audio_track_list::AudioTrackList;
-use super::media_playlist::{MediaPlaylist, MediaPlaylistParsingError};
-use super::media_tag::{MediaTag, MediaTagParsingError};
-use super::utils::{
-    parse_define_tag, StartAttribute, VariableDefinition, VariableDefinitionError, VariableStore,
+use super::{
+    audio_track_list::AudioTrackList,
+    media_playlist::{MediaPlaylist, MediaPlaylistParsingError},
+    media_tag::{MediaTag, MediaTagParsingError},
+    value_parsers::{parse_start_attribute, StartAttribute},
+    variable_substitution::{
+        parse_define_tag, VariableDefinition, VariableDefinitionError, VariableStore,
+    },
+    variant_stream::{VariantParsingError, VariantStream},
+    AudioTrack, MediaTagType,
 };
-use super::variant_stream::{VariantParsingError, VariantStream};
-use super::{AudioTrack, MediaTagType};
-use crate::parser::utils::parse_start_attribute;
-use crate::utils::url::Url;
-use crate::Logger;
-use std::collections::HashMap;
-use std::{error, fmt, io};
+use crate::{utils::url::Url, Logger};
+use std::{collections::HashMap, error, fmt, io};
 
 /// Represents a parsed HLS Multivariant Playlist (a.k.a. Master Playlist).
 ///
@@ -534,6 +534,8 @@ pub(crate) enum MultivariantPlaylistParsingError {
 
     UnableToReadLine,
 
+    // XXX TODO: Should we split those into each define error variants?
+    // Or would that be too much different error codes?
     VariableDefinition(VariableDefinitionError),
 
     Unknown,
