@@ -1,3 +1,7 @@
+/**
+ * Typecheck, lint, formatting, and Rust validation helpers for the repo.
+ */
+
 import { join } from "path";
 import { exec } from "../utils/exec.mjs";
 import { generateWasmAbi } from "./build.mjs";

@@ -1,3 +1,7 @@
+/**
+ * Build helpers for wasm, worker, main-thread, demo, and package artifacts.
+ */
+
 import { copyFileSync, mkdirSync, rmSync } from "fs";
 import { dirname, join } from "path";
 import { exec } from "../utils/exec.mjs";

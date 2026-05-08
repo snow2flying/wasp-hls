@@ -40,11 +40,40 @@
     "docs": "node scripts/tasks/index.mjs build docs",
     "fmt": "node scripts/tasks/index.mjs fmt",
     "generate": "node scripts/tasks/index.mjs generate",
-    "help": "node scripts/tasks/index.mjs help",
     "install:binaryen": "./scripts/install_binaryen.sh",
+    "list": "node scripts/list-npm-scripts.mjs",
     "package": "node scripts/tasks/index.mjs build package",
+    "scripts": "node scripts/list-npm-scripts.mjs",
     "serve": "http-server ./build",
     "start": "node scripts/tasks/index.mjs build demo --watch"
+  },
+  "scripts-list": {
+    "Build": {
+      "build": "Build the main hosted library artifacts in release mode.",
+      "demo": "Build the demo and its runtime dependencies in debug mode.",
+      "demo:release": "Build the demo and its runtime dependencies in release mode.",
+      "docs": "Build the documentation site.",
+      "package": "Build the npm package artifact tree."
+    },
+    "Checks": {
+      "check": "Run the standard TypeScript checks for the repo.",
+      "check:main": "Typecheck and lint the main-thread TypeScript code.",
+      "check:worker": "Typecheck and lint the worker and transmux TypeScript code.",
+      "check:demo": "Typecheck and lint the demo app.",
+      "check:fmt": "Check Rust and JS/TS/Markdown formatting.",
+      "check:rust": "Run clippy on the Rust code."
+    },
+    "Development": {
+      "start": "Watch and rebuild the demo during development.",
+      "serve": "Serve the build directory over HTTP.",
+      "scripts": "Open the interactive npm script picker."
+    },
+    "Maintenance": {
+      "fmt": "Format Rust and JS/TS/Markdown sources.",
+      "generate": "Regenerate wasm ABI enums.",
+      "clean": "Remove build artifacts.",
+      "install:binaryen": "Install a local Binaryen toolchain under ./tmp/binaryen."
+    }
   },
   "author": "peaberberian",
   "license": "MIT",

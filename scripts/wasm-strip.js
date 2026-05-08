@@ -52,6 +52,14 @@ import fs from "fs";
 // Promise versions will be easier to work with here
 import { access, stat } from "fs/promises";
 
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(`Usage: node ./scripts/wasm-strip.js <wasm-file>
+
+Removes custom sections such as debug symbols from the given wasm binary in
+place.`);
+  process.exit(0);
+}
+
 /** Magic number a WebAssembly file should start with. */
 const WASM_MAGIC_NUMBER = 0x0061736d;
 

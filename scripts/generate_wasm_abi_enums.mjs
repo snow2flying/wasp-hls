@@ -1,9 +1,25 @@
-// XXX TODO: Document script like others
+/**
+ * ============= generate_wasm_abi_enums =============
+ *
+ * Generates Rust and TypeScript enum definitions from
+ * `src/wasm/abi/wasm-enums.json`.
+ */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import prettier from "prettier";
+
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(`Usage: node ./scripts/generate_wasm_abi_enums.mjs
+
+Generates:
+  - src/rs-core/bindings/abi_types.rs
+  - src/ts-common/generatedWasmEnums.ts
+
+from src/wasm/abi/wasm-enums.json.`);
+  process.exit(0);
+}
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(dirname, "..");

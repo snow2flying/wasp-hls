@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * # list-npm-scripts
+ * ============= list-npm-scripts =============
  *
- * Script displaying a readable preview of all nom scripts by relying on the
+ * Displays a readable preview of all npm scripts by relying on the
  * `scripts-list` key in a package.json.
  *
- * The basic idea what to start from/take inspiration from what the
+ * The basic idea is to start from / take inspiration from what the
  * `npm-scripts-info` npm package does and adapt it to a case where a lot of
  * scripts for very different matters are present.
  */
@@ -14,6 +14,15 @@ import { existsSync, readFileSync } from "fs";
 import readline from "readline";
 import { join } from "path";
 import { spawn } from "child_process";
+
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(`Usage: node ./scripts/list-npm-scripts.mjs
+
+Shows the interactive npm script picker based on the "scripts-list" entry in
+package.json.`);
+  process.exit(0);
+}
+
 readline.emitKeypressEvents(process.stdin);
 
 run();

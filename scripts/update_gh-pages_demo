@@ -1,21 +1,19 @@
 #!/bin/bash
 
-# Update gh-pages demo
-# ====================
+# ============= update_gh-pages_demo =============
 #
-# This script allows to automatically update the full demo on the gh-pages
-# branch.
-#
-# To use it:
-#
-#   1. Be sure that you're on a clean (no staged files and no diff) main
-#      branch.
-#
-#   2. Call this script.
-#      Some user interactions will be needed to avoid doing unwanted commits.
-#
-#   3. That's it!
-#      A commit should have been pushed to the gh-pages.
+# Builds the demo and docs, switches to the `gh-pages` branch, replaces its
+# contents with the freshly built artifacts, and offers to commit/push them.
+
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+  cat <<'EOF'
+Usage: ./scripts/update_gh-pages_demo
+
+Run from a clean `main` checkout to rebuild the demo/docs and deploy them to
+the `gh-pages` branch.
+EOF
+  exit 0
+fi
 
 set -e
 

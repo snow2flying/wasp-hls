@@ -1,3 +1,10 @@
+/**
+ * ============= tasks/index =============
+ *
+ * Main task runner entrypoint used by npm scripts to build, check, clean, and
+ * serve project artifacts.
+ */
+
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import {
@@ -24,7 +31,12 @@ import { cleanBuildDirectory } from "../utils/fs.mjs";
 import { watchDemo } from "./watch.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const [command = "help", ...rest] = process.argv.slice(2);
+const rawArgs = process.argv.slice(2);
+const normalizedArgs =
+  rawArgs.length === 1 && (rawArgs[0] === "--help" || rawArgs[0] === "-h")
+    ? ["help"]
+    : rawArgs;
+const [command = "help", ...rest] = normalizedArgs;
 
 run().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));

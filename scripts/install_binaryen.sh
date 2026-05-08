@@ -1,6 +1,19 @@
 #!/bin/sh
 
-# TODO Documentation
+# ============= install_binaryen =============
+#
+# Installs a local Binaryen distribution under `./tmp/binaryen` for this repo.
+# This is a convenience helper for environments where Binaryen is not already
+# installed system-wide.
+
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+  cat <<'EOF'
+Usage: ./scripts/install_binaryen.sh
+
+Downloads and installs Binaryen into ./tmp/binaryen for the current checkout.
+EOF
+  exit 0
+fi
 
 # Log a line to stdout, prefixing it with the name of this script
 log() {

@@ -1,3 +1,7 @@
+/**
+ * Process execution helpers shared by build/check/watch scripts.
+ */
+
 import { spawn } from "child_process";
 import { delimiter, join } from "path";
 

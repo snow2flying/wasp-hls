@@ -1,4 +1,8 @@
 /**
+ * Small console reporting helpers shared by the task runner modules.
+ */
+
+/**
  * @param {string} namespace
  * @param {string} message
  */

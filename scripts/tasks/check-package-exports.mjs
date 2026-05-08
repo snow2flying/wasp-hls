@@ -1,3 +1,7 @@
+/**
+ * Validates the packed npm artifact from a consumer point of view.
+ */
+
 import {
   copyFileSync,
   mkdirSync,

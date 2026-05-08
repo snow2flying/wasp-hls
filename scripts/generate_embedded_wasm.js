@@ -39,6 +39,14 @@
 import fs from "fs";
 import path from "path";
 
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(`Usage: node ./scripts/generate_embedded_wasm.js
+
+Generates build/embedded/wasm.js and build/embedded/wasm.d.ts from
+build/wasp_hls_bg.wasm.`);
+  process.exit(0);
+}
+
 const originalWasmFilePath = path.join(
   import.meta.dirname,
   "../build/wasp_hls_bg.wasm",

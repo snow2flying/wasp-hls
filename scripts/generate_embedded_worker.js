@@ -41,6 +41,14 @@
 import fs from "fs";
 import path from "path";
 
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(`Usage: node ./scripts/generate_embedded_worker.js
+
+Generates build/embedded/worker.js and build/embedded/worker.d.ts from
+build/worker.js.`);
+  process.exit(0);
+}
+
 const originalWorkerFilePath = path.join(
   import.meta.dirname,
   "../build/worker.js",

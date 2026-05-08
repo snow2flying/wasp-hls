@@ -1,3 +1,7 @@
+/**
+ * Filesystem helpers shared by build and watch scripts.
+ */
+
 import {
   copyFileSync,
   existsSync,

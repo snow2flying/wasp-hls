@@ -1,3 +1,7 @@
+/**
+ * Watch-mode helpers for rebuilding the demo and its runtime dependencies.
+ */
+
 import { spawn } from "child_process";
 import { existsSync, readdirSync, watch } from "fs";
 import { join } from "path";
