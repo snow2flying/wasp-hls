@@ -5,6 +5,7 @@ import type {
   MultivariantPlaylistParsingErrorCode,
   OtherErrorCode,
   PlaylistNature,
+  PlaylistType,
   PushedSegmentErrorCode,
   RequestErrorReason,
   SegmentParsingErrorCode,
@@ -236,6 +237,7 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         );
       },
       __js_func__announce_fetched_content(
+        playlistType: number,
         variantInfoPtr: number,
         variantInfoLen: number,
         audioTracksInfoPtr: number,
@@ -243,6 +245,7 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
       ): void {
         const buffer = getWasmExports().memory.buffer;
         bindings.announceFetchedContent(
+          playlistType as PlaylistType,
           new Uint32Array(buffer, variantInfoPtr, variantInfoLen),
           new Uint32Array(buffer, audioTracksInfoPtr, audioTracksInfoLen),
         );
@@ -364,7 +367,7 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         bindings.sendMediaPlaylistParsingError(
           fatal !== 0,
           code as MediaPlaylistParsingErrorCode,
-          mediaType as MediaType,
+          rawOptionalId(mediaType) as MediaType | undefined,
           readString(messagePtr, messageLen),
         );
       },

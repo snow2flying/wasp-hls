@@ -3,9 +3,9 @@
 use super::{
     AddSourceBufferErrorCode, AttachMediaSourceErrorCode, EndOfStreamErrorCode, LogLevel,
     MediaPlaylistParsingErrorCode, MediaSourceDurationUpdateErrorCode, MediaType,
-    MultivariantPlaylistParsingErrorCode, OtherErrorCode, PlaylistNature, PushedSegmentErrorCode,
-    RemoveBufferErrorCode, RemoveMediaSourceErrorCode, RequestErrorReason, SegmentParsingErrorCode,
-    SourceBufferCreationErrorCode, TimerReason,
+    MultivariantPlaylistParsingErrorCode, OtherErrorCode, PlaylistNature, PlaylistType,
+    PushedSegmentErrorCode, RemoveBufferErrorCode, RemoveMediaSourceErrorCode, RequestErrorReason,
+    SegmentParsingErrorCode, SourceBufferCreationErrorCode, TimerReason,
 };
 use crate::{
     media_element::PushSegmentError,
@@ -103,6 +103,7 @@ unsafe extern "C" {
         playlist_nat: u32,
     );
     fn __js_func__announce_fetched_content(
+        playlist_type: u32,
         variant_info_ptr: *const u32,
         variant_info_len: u32,
         audio_tracks_info_ptr: *const u32,
@@ -623,9 +624,14 @@ pub fn jsUpdateContentInfo(
     }
 }
 
-pub fn jsAnnounceFetchedContent(variant_info: Vec<u32>, audio_tracks_info: Vec<u32>) {
+pub fn jsAnnounceFetchedContent(
+    playlist_type: PlaylistType,
+    variant_info: Vec<u32>,
+    audio_tracks_info: Vec<u32>,
+) {
     unsafe {
         __js_func__announce_fetched_content(
+            playlist_type as u32,
             variant_info.as_ptr(),
             variant_info.len() as u32,
             audio_tracks_info.as_ptr(),
@@ -768,14 +774,14 @@ pub fn jsSendMultivariantPlaylistParsingError(
 pub fn jsSendMediaPlaylistParsingError(
     fatal: bool,
     code: MediaPlaylistParsingErrorCode,
-    media_type: MediaType,
+    media_type: Option<MediaType>,
     message: &str,
 ) {
     unsafe {
         __js_func__send_media_playlist_parsing_error(
             bool_to_raw(fatal),
             code as u32,
-            media_type as u32,
+            opt_u32_to_raw(media_type.map(|m| m as u32)),
             message.as_ptr(),
             message.len() as u32,
         )
@@ -898,6 +904,12 @@ impl From<MediaPlaylistUpdateError> for MediaPlaylistParsingErrorCode {
             ) => MediaPlaylistParsingErrorCode::VariableDefinitionError,
             MediaPlaylistUpdateError::NotFound => MediaPlaylistParsingErrorCode::Unknown,
         }
+    }
+}
+
+impl From<MediaPlaylistParsingError> for MediaPlaylistParsingErrorCode {
+    fn from(value: MediaPlaylistParsingError) -> Self {
+        MediaPlaylistUpdateError::ParsingError(value).into()
     }
 }
 

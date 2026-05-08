@@ -37,6 +37,7 @@ import type {
   MultivariantPlaylistParsingErrorCode,
   OtherErrorCode,
   PlaylistNature,
+  PlaylistType,
   RequestErrorReason,
   SourceBufferCreationErrorCode,
   TimerReason,
@@ -282,7 +283,7 @@ export function sendMultivariantPlaylistParsingError(
 export function sendMediaPlaylistParsingError(
   fatal: boolean,
   code: MediaPlaylistParsingErrorCode,
-  mediaType: MediaType,
+  mediaType: MediaType | undefined,
   message: string,
 ): void {
   const contentId = playerInstance.getContentInfo()?.contentId;
@@ -1246,6 +1247,7 @@ export function updateContentInfo(
 }
 
 export function announceFetchedContent(
+  playlistType: PlaylistType,
   variantInfo: Uint32Array,
   audioTracksInfo: Uint32Array,
 ): void {
@@ -1384,9 +1386,10 @@ export function announceFetchedContent(
     }
   }
   postMessageToMain({
-    type: WorkerMessageType.MultivariantPlaylistParsed,
+    type: WorkerMessageType.TopLevelPlaylistParsed,
     value: {
       contentId: contentInfo.contentId,
+      playlistType,
       variants: variantInfoObj,
       audioTracks: audioTracksObj,
     },

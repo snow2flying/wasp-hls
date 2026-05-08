@@ -11,6 +11,7 @@ import type {
   OtherErrorCode,
   PlaybackTickReason,
   PlaylistNature,
+  PlaylistType,
   PushedSegmentErrorCode,
   RemoveBufferErrorCode,
   RemoveMediaSourceErrorCode,
@@ -78,6 +79,7 @@ export interface HostBindings {
     playlistNature: PlaylistNature,
   ): void;
   announceFetchedContent(
+    playlistType: PlaylistType,
     variantInfo: Uint32Array,
     audioTracksInfo: Uint32Array,
   ): void;
@@ -127,7 +129,7 @@ export interface HostBindings {
   sendMediaPlaylistParsingError(
     fatal: boolean,
     code: MediaPlaylistParsingErrorCode,
-    mediaType: MediaType,
+    mediaType: MediaType | undefined,
     message: string,
   ): void;
   sendSegmentParsingError(

@@ -42,7 +42,7 @@ impl Dispatcher {
         };
         let content_url = Url::new(content_url);
         self.requester
-            .fetch_playlist(content_url, PlaylistFileType::MultivariantPlaylist);
+            .fetch_playlist(content_url, PlaylistFileType::TopLevelPlaylist);
         Logger::info("Attaching MediaSource");
         if let Err(x) = self.media_element_ref.attach_media_source() {
             jsSendOtherError(

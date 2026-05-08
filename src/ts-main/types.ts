@@ -1,6 +1,6 @@
 import type QueuedSourceBuffer from "../ts-common/QueuedSourceBuffer.ts";
 import type { AudioTrackInfo, VariantInfo } from "../ts-common/types.ts";
-import type { PlaylistNature } from "../wasm/index.js";
+import type { PlaylistNature, PlaylistType } from "../wasm/index.js";
 import type { WaspError } from "./errors/index.ts";
 import type PlaybackObserver from "./observePlayback.ts";
 
@@ -156,6 +156,11 @@ export interface ContentMetadata {
    * The type of the Multivariant Playlist being played: is it live? Vod?
    */
   playlistType: PlaylistNature | undefined;
+
+  /**
+   * Type of the top-level playlist that was loaded for the content.
+   */
+  topLevelPlaylistType: PlaylistType | undefined;
 
   /**
    * Error encountered in the content which led to the playback being completely

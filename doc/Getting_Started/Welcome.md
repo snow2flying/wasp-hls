@@ -50,11 +50,12 @@ player
   .catch((err) => {
     console.error("Could not initialize WaspHlsPlayer:", err);
   });
-player.load(HLS_MULTIVARIANT_PLAYLIST_URL);
+player.load(HLS_PLAYLIST_URL);
 ```
 
-Where `HLS_MULTIVARIANT_PLAYLIST_URL` is the URL to the main playlist (called
-either the Multivariant Playlist or the Master Playlist) of your HLS content.
+Where `HLS_PLAYLIST_URL` is the URL to the top-level playlist of your HLS
+content, whether that is a Multivariant Playlist (also called Master Playlist)
+or a Media Playlist directly.
 
 Of course, once `initialize` has succeeded, you can play any HLS content you
 want on that `WaspHlsPlayer` instance.

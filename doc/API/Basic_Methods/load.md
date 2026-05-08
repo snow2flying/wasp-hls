@@ -18,8 +18,9 @@ player.load(url, {
 ```
 
 - **arguments**:
-  1. _url_ `string`: Url to the Multivariant Playlist of the content you want to
+  1. _url_ `string`: Url to the top-level playlist of the content you want to
      play.
+     That playlist can be either a Multivariant Playlist or a Media Playlist.
 
   2. _options_ `Object`: Optional argument to configure how the content will be
      loaded.

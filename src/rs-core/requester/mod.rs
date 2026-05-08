@@ -82,8 +82,8 @@ pub(crate) struct Requester {
 /// Identify a type of Playlist requested.
 #[derive(PartialEq)]
 pub(crate) enum PlaylistFileType {
-    /// This is a Multivariant Playlist
-    MultivariantPlaylist,
+    /// This is the top-level Playlist loaded through the public `load` API.
+    TopLevelPlaylist,
     /// This is a Media Playlist with this associated `id` and `MediaType`.
     MediaPlaylist {
         id: MediaPlaylistPermanentId,
@@ -91,7 +91,7 @@ pub(crate) enum PlaylistFileType {
     },
 }
 
-/// Metadata associated with a pending Playlist (either a Multivariant Playlist or a Media
+/// Metadata associated with a pending Playlist (either a top-level Playlist or a Media
 /// Playlist request.
 pub(crate) struct PlaylistRequestInfo {
     /// ID identifying the request on the JavaScript-side.
@@ -367,7 +367,7 @@ impl Requester {
     /// Once it succeeds, the `__web_event__request_finished` function will be called.
     pub(crate) fn fetch_playlist(&mut self, url: Url, playlist_type: PlaylistFileType) {
         let timeout = match playlist_type {
-            PlaylistFileType::MultivariantPlaylist => {
+            PlaylistFileType::TopLevelPlaylist => {
                 self.config.multi_variant_playlist_request_timeout
             }
             PlaylistFileType::MediaPlaylist { .. } => self.config.media_playlist_request_timeout,
@@ -509,7 +509,7 @@ impl Requester {
                 .position(|x| x.request_id == request_id)
             {
                 match self.pending_playlist_requests[pos].playlist_type {
-                    PlaylistFileType::MultivariantPlaylist => self.retry_playlist_request(
+                    PlaylistFileType::TopLevelPlaylist => self.retry_playlist_request(
                         pos,
                         reason,
                         status,
@@ -566,7 +566,7 @@ impl Requester {
                     if let Some(pla) = pla {
                         pla.is_waiting_for_retry = false;
                         let timeout = match pla.playlist_type {
-                            PlaylistFileType::MultivariantPlaylist => {
+                            PlaylistFileType::TopLevelPlaylist => {
                                 self.config.multi_variant_playlist_request_timeout
                             }
                             PlaylistFileType::MediaPlaylist { .. } => {
@@ -748,7 +748,7 @@ impl Requester {
             req.attempts_failed += 1;
             req.is_waiting_for_retry = true;
             let (base, max) = match req.playlist_type {
-                PlaylistFileType::MultivariantPlaylist => (
+                PlaylistFileType::TopLevelPlaylist => (
                     self.config.multi_variant_playlist_backoff_base,
                     self.config.multi_variant_playlist_backoff_max,
                 ),

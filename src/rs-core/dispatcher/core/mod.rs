@@ -15,11 +15,11 @@ use crate::{
         jsSendRemoveBufferError, jsSendSegmentParsingError, jsSendSegmentRequestError,
         jsSendSourceBufferCreationError, jsSetMediaSourceDuration, jsStartObservingPlayback,
         jsStopObservingPlayback, jsTimer, jsUpdateContentInfo, AddSourceBufferErrorCode, MediaType,
-        MultivariantPlaylistParsingErrorCode, OtherErrorCode, PlaylistNature,
+        MultivariantPlaylistParsingErrorCode, OtherErrorCode, PlaylistNature, PlaylistType,
         PushedSegmentErrorCode, RequestId, SourceBufferId, TimerId, TimerReason,
     },
     media_element::{SegmentQualityContext, SourceBufferCreationError},
-    parser::{MultivariantPlaylist, SegmentTimeInfo},
+    parser::{SegmentTimeInfo, TopLevelPlaylist, TopLevelPlaylistParsingError},
     playlist_store::{
         LockVariantResponse, MediaPlaylistPermanentId, PlaylistStore, PlaylistStoreError,
         SetAudioTrackResponse, VariantUpdateResult,
@@ -116,7 +116,7 @@ impl Dispatcher {
             let (_, playlist_type) = self.playlist_refresh_timers.remove(idx);
             if let Some(playlist_store) = &self.playlist_store {
                 match playlist_type {
-                    PlaylistFileType::MultivariantPlaylist => self
+                    PlaylistFileType::TopLevelPlaylist => self
                         .requester
                         .fetch_playlist(playlist_store.url().clone(), playlist_type),
                     PlaylistFileType::MediaPlaylist { ref id, .. } => {
@@ -222,7 +222,7 @@ impl Dispatcher {
                             status,
                         );
                     }
-                    PlaylistFileType::MultivariantPlaylist => {
+                    PlaylistFileType::TopLevelPlaylist => {
                         jsSendMultivariantPlaylistRequestError(
                             true,
                             x.url.get_ref(),
@@ -255,7 +255,7 @@ impl Dispatcher {
                 reason,
                 status,
             } => match request_info.playlist_type {
-                PlaylistFileType::MultivariantPlaylist => jsSendMultivariantPlaylistRequestError(
+                PlaylistFileType::TopLevelPlaylist => jsSendMultivariantPlaylistRequestError(
                     false,
                     request_info.url.get_ref(),
                     reason,
@@ -418,7 +418,8 @@ impl Dispatcher {
 
     /// Method to call when a new codec support report has been received.
     pub(super) fn on_codecs_support_update_core(&mut self) {
-        self.check_ready_to_load_media_playlists();
+        // XXX TODO: name bad
+        self.check_ready_after_top_level_playlist_loaded();
     }
 
     /// For each media type, check if segment need to be requested, and if that's the case, perform
@@ -526,26 +527,33 @@ impl Dispatcher {
         if let PlaylistFileType::MediaPlaylist { id, media_type } = playlist_type {
             self.on_media_playlist_loaded(id, result, media_type, final_url);
         } else {
-            self.on_multivariant_playlist_loaded(result, final_url);
+            self.on_top_level_playlist_loaded(result, final_url);
         }
     }
 
-    /// Method called once a Multivariant Playlist was loaded with success, with its response data
+    /// Method called once the top-level Playlist was loaded with success, with its response data
     /// and url as argument.
-    fn on_multivariant_playlist_loaded(&mut self, data: Vec<u8>, playlist_url: Url) {
-        match MultivariantPlaylist::parse(data.as_ref(), playlist_url) {
-            Err(e) => {
-                let message = e.to_string();
-                jsSendMultivariantPlaylistParsingError(true, e.into(), &message);
+    fn on_top_level_playlist_loaded(&mut self, data: Vec<u8>, playlist_url: Url) {
+        match TopLevelPlaylist::parse(data.as_ref(), playlist_url) {
+            Err(err) => {
+                let message = err.to_string();
+                match err {
+                    TopLevelPlaylistParsingError::Multivariant(err) => {
+                        jsSendMultivariantPlaylistParsingError(true, err.into(), &message);
+                    }
+                    TopLevelPlaylistParsingError::Media(err) => {
+                        jsSendMediaPlaylistParsingError(true, err.into(), None, &message);
+                    }
+                }
                 self.stop_current_content();
             }
             Ok(pl) => {
-                Logger::info("Core: Multivariant Playlist parsed successfully");
+                Logger::info("Core: Top-level playlist parsed successfully");
                 let estimate = self.adaptive_selector.get_estimate();
                 match PlaylistStore::try_new(pl, estimate) {
                     Ok(pl_store) => {
                         self.playlist_store = Some(pl_store);
-                        self.check_ready_to_load_media_playlists();
+                        self.check_ready_after_top_level_playlist_loaded();
                     }
                     Err(err) => {
                         match err {
@@ -584,7 +592,7 @@ impl Dispatcher {
             match playlist_store.update_media_playlist(&playlist_id, data.as_ref(), playlist_url) {
                 Err(e) => {
                     let err_message = e.to_string();
-                    jsSendMediaPlaylistParsingError(true, e.into(), media_type, &err_message);
+                    jsSendMediaPlaylistParsingError(true, e.into(), Some(media_type), &err_message);
                     self.stop_current_content();
                 }
                 Ok(p) => {
@@ -625,17 +633,17 @@ impl Dispatcher {
             jsSendOtherError(
                 true,
                 crate::bindings::OtherErrorCode::Unknown,
-                "Media playlist loaded but no MultivariantPlaylist",
+                "Media playlist loaded but no top-level playlist",
             );
             self.stop_current_content();
         }
     }
 
-    fn check_ready_to_load_media_playlists(&mut self) {
+    fn check_ready_after_top_level_playlist_loaded(&mut self) {
         let playlist_store = if let Some(playlist_store) = self.playlist_store.as_mut() {
             playlist_store
         } else {
-            // No PlaylistStore == no loaded Multivariant Playlist yet
+            // No PlaylistStore == no loaded top-level playlist yet
             return;
         };
 
@@ -661,7 +669,9 @@ impl Dispatcher {
             _ => {}
         }
 
-        if playlist_store.supported_variants().is_empty() {
+        if playlist_store.playlist_kind() == PlaylistType::MultivariantPlaylist
+            && playlist_store.supported_variants().is_empty()
+        {
             jsSendOtherError(
                 true,
                 crate::bindings::OtherErrorCode::NoSupportedVariant,
@@ -705,9 +715,20 @@ impl Dispatcher {
         } else {
             playlist_store.curr_audio_track_id()
         };
-        jsAnnounceFetchedContent(variants_info, audio_tracks_info);
-        jsAnnounceVariantUpdate(playlist_store.curr_variant().map(|v| v.id()));
-        jsAnnounceTrackUpdate(MediaType::Audio, curr_audio_track, is_selected);
+        jsAnnounceFetchedContent(
+            playlist_store.playlist_kind(),
+            variants_info,
+            audio_tracks_info,
+        );
+        // NOTE: We could also "invent" a variant id / audio track id from this point on?
+        if playlist_store.playlist_kind() == PlaylistType::MultivariantPlaylist {
+            jsAnnounceVariantUpdate(playlist_store.curr_variant().map(|v| v.id()));
+            jsAnnounceTrackUpdate(MediaType::Audio, curr_audio_track, is_selected);
+        }
+
+        if playlist_store.are_playlists_ready() {
+            self.check_ready_to_load_segments();
+        }
     }
 
     fn init_source_buffer(

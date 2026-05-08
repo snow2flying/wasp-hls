@@ -11,6 +11,7 @@ export {
   OtherErrorCode,
   PlaybackTickReason,
   PlaylistNature,
+  PlaylistType,
   PushedSegmentErrorCode,
   RemoveBufferErrorCode,
   RemoveMediaSourceErrorCode,
