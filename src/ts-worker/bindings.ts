@@ -32,6 +32,7 @@ import {
   SegmentParsingErrorCode,
 } from "../wasm/index.js";
 import type {
+  HostBindings,
   MediaPlaylistParsingErrorCode,
   MultivariantPlaylistParsingErrorCode,
   OtherErrorCode,
@@ -1543,4 +1544,48 @@ export function announceVariantLockStatusChange(
       lockedVariant: variantId ?? null,
     },
   });
+}
+
+export function getWaspHostCapabilities(): HostBindings {
+  return {
+    log,
+    timer,
+    clearTimer,
+    getResourceData,
+    fetch: doFetch,
+    abortRequest,
+    attachMediaSource,
+    removeMediaSource,
+    setMediaSourceDuration,
+    addSourceBuffer,
+    isTypeSupported,
+    appendBuffer,
+    removeBuffer,
+    endOfStream,
+    startObservingPlayback,
+    stopObservingPlayback,
+    freeResource,
+    setPlaybackRate,
+    seek,
+    flush,
+    setMediaOffset,
+    updateContentInfo,
+    announceFetchedContent,
+    announceVariantUpdate,
+    announceTrackUpdate,
+    announceVariantLockStatusChange,
+    startRebuffering,
+    stopRebuffering,
+    getRandom,
+    sendSegmentRequestError,
+    sendMultivariantPlaylistRequestError,
+    sendMediaPlaylistRequestError,
+    sendSourceBufferCreationError,
+    sendMultivariantPlaylistParsingError,
+    sendMediaPlaylistParsingError,
+    sendSegmentParsingError,
+    sendPushedSegmentError,
+    sendRemoveBufferError,
+    sendOtherError,
+  };
 }

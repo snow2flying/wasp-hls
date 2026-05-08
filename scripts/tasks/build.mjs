@@ -5,7 +5,7 @@
 import { copyFileSync, mkdirSync, rmSync } from "fs";
 import { dirname, join } from "path";
 import { exec } from "../utils/exec.mjs";
-import { cleanBuildDirectory, copyRecursive } from "../utils/fs.mjs";
+import { cleanBuildDirectory } from "../utils/fs.mjs";
 import { checkPackageExports } from "./check-package-exports.mjs";
 import { reportStep } from "./report.mjs";
 
@@ -150,7 +150,10 @@ export async function buildPackageArtifacts(root, { release }) {
     ],
     { cwd: root },
   );
-  copyRecursive(join(root, "src", "wasm"), join(root, "build", "es6", "wasm"));
+  copyFileSync(
+    join(root, "src", "wasm", "wasp_hls_bg.wasm"),
+    join(root, "build", "es6", "wasm", "wasp_hls_bg.wasm"),
+  );
   reportStep("BUILD", "generating Embedded WASM JS file...");
   await exec("node", ["./scripts/generate_embedded_wasm.js"], { cwd: root });
   reportStep("BUILD", "generating Embedded Worker JS file...");

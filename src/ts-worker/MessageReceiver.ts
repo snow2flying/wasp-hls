@@ -17,7 +17,7 @@ import initializeWasm, {
   PushedSegmentErrorCode,
   StartingPosition,
 } from "../wasm/index.js";
-import { stopObservingPlayback } from "./bindings.ts";
+import { getWaspHostCapabilities, stopObservingPlayback } from "./bindings.ts";
 import type { ContentInfo, WorkerInitializationOptions } from "./globals.ts";
 import {
   cachedCodecsSupport,
@@ -460,7 +460,7 @@ function initialize(
   config: WaspHlsPlayerConfig,
   opts: WorkerInitializationOptions,
 ): Promise<void> {
-  return initializeWasm(fetch(wasmUrl))
+  return initializeWasm(fetch(wasmUrl), getWaspHostCapabilities())
     .then((wasm) => {
       playerInstance.start(wasm, config, opts);
       postMessageToMain({ type: WorkerMessageType.Initialized, value: null });
