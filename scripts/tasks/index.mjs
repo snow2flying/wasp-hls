@@ -8,11 +8,10 @@
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import {
+  buildAll,
   buildDocs,
   buildDemoBundle,
-  buildLibrary,
   buildMain,
-  buildPackageArtifacts,
   buildWasm,
   buildWorker,
   generateWasmAbi,
@@ -21,7 +20,6 @@ import {
   checkAll,
   checkCommon,
   checkDemo,
-  checkFmt,
   checkMain,
   checkRust,
   checkWorker,
@@ -48,21 +46,16 @@ async function run() {
   switch (command) {
     case "build": {
       const { flags, scope } = parseArgs(rest, ["--release", "--watch"]);
-      switch (scope ?? "library") {
-        case "library":
+      switch (scope ?? "all") {
+        case "all":
           assertNoFlag(
             flags,
             "--watch",
             '"--watch" is only supported for "build demo".',
           );
-          await buildLibrary(ROOT, {
+          await buildAll(ROOT, {
             release: flags.has("--release"),
-            includeMainBundle: flags.has("--release"),
           });
-          return;
-        case "package":
-          assertNoFlags(flags, 'Flags are not supported for "build package".');
-          await buildPackageArtifacts(ROOT, { release: true });
           return;
         case "demo":
           if (flags.has("--watch")) {
@@ -122,9 +115,6 @@ async function run() {
           return;
         case "demo":
           await checkDemo(ROOT);
-          return;
-        case "fmt":
-          await checkFmt(ROOT);
           return;
         case "rust":
           await checkRust(ROOT);
@@ -242,8 +232,7 @@ function helpText() {
 
 Commands
   build [scope] [--release] [--watch]
-    library     Build hosted release artifacts (default)
-    package     Build the npm package artifact tree
+    all         Build every targets of the player (doesn't include doc and dmeo) (default)
     demo        Build the demo and its runtime dependencies
     wasm        Build only the wasm target
     worker      Build only the worker bundle
@@ -251,12 +240,11 @@ Commands
     docs        Build the documentation site
 
   check [scope]
-    all         Typecheck and lint the whole TypeScript codebase (default)
+    all         Typecheck and lint the whole TypeScript and Rust codebase (default)
     main        Check main-thread TypeScript
     worker      Check worker TypeScript
     common      Check common TypeScript
     demo        Check demo TypeScript
-    fmt         Check Rust and JS/TS/Markdown formatting
     rust        Run cargo clippy
 
   fmt [--check]   Format Rust and JS/TS/Markdown

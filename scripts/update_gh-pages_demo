@@ -27,8 +27,7 @@ fi
 
 # Generate demo
 npm install
-npm run build
-npm run demo:release
+npm run demo -- --release
 npm run docs
 
 if [ -n "$(git status --porcelain)" ]; then

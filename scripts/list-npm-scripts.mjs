@@ -1,27 +1,27 @@
 #!/usr/bin/env node
 /**
- * ============= list-npm-scripts =============
+ * # list-npm-scripts
  *
- * Displays a readable preview of all npm scripts by relying on the
+ * Script displaying a readable preview of all nom scripts by relying on the
  * `scripts-list` key in a package.json.
  *
- * The basic idea is to start from / take inspiration from what the
+ * The basic idea what to start from/take inspiration from what the
  * `npm-scripts-info` npm package does and adapt it to a case where a lot of
  * scripts for very different matters are present.
  */
 
+// @ts-check
+
 import { existsSync, readFileSync } from "fs";
 import readline from "readline";
 import { join } from "path";
-import { spawn } from "child_process";
+import { execSync } from "child_process";
 
-if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  console.log(`Usage: node ./scripts/list-npm-scripts.mjs
-
-Shows the interactive npm script picker based on the "scripts-list" entry in
-package.json.`);
-  process.exit(0);
-}
+/**
+ * @typedef {string | ScriptsListGroup} ScriptsListEntry
+ * @typedef {{ [key: string]: ScriptsListEntry }} ScriptsListGroup
+ * @typedef {{ "scripts-list"?: ScriptsListGroup }} PackageJsonContent
+ */
 
 readline.emitKeypressEvents(process.stdin);
 
@@ -36,15 +36,25 @@ async function run() {
 
   // Display groups
   const scriptsList = pkg["scripts-list"];
-  const groupNames = Object.keys(scriptsList);
+  if (scriptsList === undefined) {
+    console.log('No "scripts-list" key in the `package.json` file.');
+    process.exit(0);
+  }
+  const groupNames = Object.keys(scriptsList).filter((k) => {
+    return typeof scriptsList[k] === "object" && scriptsList[k] !== null;
+  });
   if (groupNames.length === 0) {
     console.log('Nothing found in "scripts-list" in the `package.json` file.');
     process.exit(0);
   }
-  console.log("\x1b[33m~~~~~~~~~~~~~~~~ WaspHLS scripts ~~~~~~~~~~~~~~~~\n");
+  console.log("\x1b[33m~~~~~~~~~~~~~~~~ WaspHLS scripts ~~~~~~~~~~~~~~~~~\n");
   console.log("\x1b[34m============ What do you want to do? =============\n");
   groupNames.forEach((key, groupIdx) => {
-    console.log(`\x1b[32m${groupIdx + 1}.\x1b[37m ${key}`);
+    const lineIndentedKey = addPrefixOnLineBreak(
+      key,
+      " ".repeat(String(groupIdx + 1).length + 2),
+    );
+    console.log(`\x1b[32m${groupIdx + 1}.\x1b[37m ${lineIndentedKey}`);
   });
   console.log("");
   const groupChoiceNum = await getChoice(groupNames.length);
@@ -53,6 +63,10 @@ async function run() {
   console.log(`\x1b[34m>>>> ${wantedGroupName}\x1b[37m`);
   console.log("");
   const subGroup = scriptsList[wantedGroupName];
+  if (typeof subGroup !== "object" || subGroup === null) {
+    console.error("Invalid scripts-list group.");
+    process.exit(1);
+  }
   const subGroupEntries = Object.entries(subGroup);
   if (subGroupEntries.length === 0) {
     console.log("Nothing found in in the chosen category.");
@@ -62,6 +76,7 @@ async function run() {
   // Display commands
   {
     let currCommandNb = 1;
+    /** @type {string[]} */
     const commandArray = [];
     recusivelyDiplayGroupCommands(subGroupEntries);
     const cmdChoiceNum = await getChoice(commandArray.length);
@@ -69,24 +84,39 @@ async function run() {
     console.log("\n");
     executeNpmScript(wantedScript);
 
+    // Ensure script is terminated here
+    process.exit(0);
+
+    /**
+     * @param {[string, ScriptsListEntry][]} groupEntries
+     * @param {string} [indentation]
+     */
     function recusivelyDiplayGroupCommands(groupEntries, indentation = "") {
       groupEntries.forEach(([name, val]) => {
         if (typeof val === "string") {
           commandArray.push(name);
-          console.log(
-            `${indentation}${emphasize(currCommandNb + ".")} [${emphasize(
-              `npm run ${name}`,
-            )}]:`,
+          const commandLineBeginningStr = `${indentation}${emphasize(currCommandNb + ".")} [`;
+          const numberOfSpacesForCommandNumber = String(currCommandNb).length;
+          const numberOfSpacesAtCommand =
+            indentation.length + numberOfSpacesForCommandNumber + 3;
+          const commandStr = addPrefixOnLineBreak(
+            emphasize(`npm run ${name}`),
+            " ".repeat(numberOfSpacesAtCommand),
           );
-          const nbLength = String(currCommandNb).length;
-          let numberSpace = "";
-          for (let i = 0; i < nbLength; i++) {
-            numberSpace += " ";
-          }
-          console.log(`${indentation}${numberSpace}  ${val}\n`);
+          console.log(commandLineBeginningStr + commandStr + "]:");
+
+          const numberOfSpacesForDescription =
+            indentation.length + numberOfSpacesForCommandNumber + 2;
+          const descriptionIndent = " ".repeat(numberOfSpacesForDescription);
+          console.log(
+            descriptionIndent +
+              addPrefixOnLineBreak(val, descriptionIndent) +
+              "\n",
+          );
           currCommandNb++;
         } else if (typeof val === "object") {
-          console.log(`${indentation}\x1b[33m${name}\x1b[37m\n`);
+          const indentedName = addPrefixOnLineBreak(name, indentation);
+          console.log(`${indentation}\x1b[33m${indentedName}\x1b[37m\n`);
           const deeper = Object.entries(val);
           recusivelyDiplayGroupCommands(deeper, indentation + "  ");
           console.log("");
@@ -94,6 +124,15 @@ async function run() {
       });
     }
   }
+}
+
+/**
+ * @param {string} str - The string which will be indented on line breaks.
+ * @param {string} prefix - The prefix you want to add at the beginning of each
+ * line break (e.g. spaces for indentation).
+ */
+function addPrefixOnLineBreak(str, prefix) {
+  return str.split("\n").join("\n" + prefix);
 }
 
 /**
@@ -136,25 +175,19 @@ async function getChoice(maxNb) {
  * Redirect its stdin and stdout to ours, communicate signals, and exit when
  * the script exits.
  *
- * @param {string} cmd
+ * @param {string} script
  */
 function executeNpmScript(script) {
   const emphasizedCmdStr = emphasize(`npm run ${script}`);
   console.log(`Executing: ${emphasizedCmdStr}`);
-  const cmd = spawn("npm", ["run", script], {
-    stdio: "inherit",
-    stderr: "inherit",
-  });
-  process.on("SIGINT", function () {
-    cmd.kill("SIGINT");
-  });
-  process.on("SIGTERM", function () {
-    cmd.kill("SIGTERM");
-  });
-  cmd.on("error", (d) => {
-    process.stderr.write(`Error while executing command: ${d}`);
-  });
-  cmd.on("exit", (c) => process.exit(c));
+  try {
+    execSync(`npm run ${script}`, {
+      stdio: ["inherit", "inherit", "inherit"],
+    });
+  } catch (err) {
+    const status = err instanceof Error && "status" in err ? err.status : 1;
+    process.exit(typeof status === "number" ? status : 1);
+  }
 }
 
 /**
@@ -195,6 +228,7 @@ function getSingleCharChoice() {
     process.stdin.setRawMode(true);
     process.stdout.write("Your choice (leave empty to exit): ");
     process.stdin.on("keypress", onKeyPress);
+    /** @param {string} char */
     function onKeyPress(char) {
       process.stdin.setRawMode(false);
       process.stdin.off("keypress", onKeyPress);
@@ -209,7 +243,7 @@ function getSingleCharChoice() {
  *
  * Throws if no `package.json` exists in the current directory.
  *
- * @returns {Object}
+ * @returns {PackageJsonContent}
  */
 function getPackageJSONContent() {
   const filename = join(process.cwd(), "package.json");
@@ -218,5 +252,7 @@ function getPackageJSONContent() {
       "`package.json` was not found in the current working directory.",
     );
   }
-  return JSON.parse(readFileSync(filename, "utf8"));
+  return /** @type {PackageJsonContent} */ (
+    JSON.parse(readFileSync(filename, "utf8"))
+  );
 }

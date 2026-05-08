@@ -433,55 +433,29 @@ workflows and an advanced task runner for targeted rebuilds.
 For day-to-day development, these are the main commands to remember:
 
 ```sh
-# Build everything the demo needs at runtime:
-# the wasm binary, the worker bundle, and the demo bundle itself
-npm run demo
-
-# Also build the demo but in watch mode, and serve it on localhost:8000
+# Build the player alongside its demo in watch mode and serve it on localhost:8000
+# Useful to test current developments in Wasp-hls's demo
 npm run start
 
-# Build the demo in release mode
-npm run demo:release
-
-# Build hosted release artifacts
-# (wasm + worker + standalone build/main.js bundle)
+# Generate all Wasp-hls builds (in development mode).
+# Useful to then test easily developments on other applications, e.g. by relying
+# on npm/yarn link
 npm run build
 
-# Build the npm package artifact tree
-npm run package
+# Run most checks (typings, linting)
+npm run check
+
+# Run formatting (prettier, cargo fmt)
+npm run fmt
 ```
 
-To test locally once the bundles are built:
+### Listing other scripts
 
-```sh
-npm run serve
-```
+There are many other specialized scripts for more specific needs, like only
+building or checking a subpart of the player (like its wasm), allowing you to
+iterate faster when you clearly identified what needs to be done.
 
-`demo` does not build `build/main.js`, because the demo imports
-`src/ts-main` directly in its own bundle and only needs the worker and wasm
-artifacts as separate runtime files.
-
-`package` generates the publishable package tree under `build/es6` and
-the embedded helper entrypoints under `build/embedded`, while also producing
-the hosted release artifacts used alongside them.
-
-### Build only one area
-
-If you only changed one part of the codebase, you can also use the task runner directly:
-
-```sh
-# Rebuild only the Rust/WASM artifact
-node scripts/tasks/index.mjs build wasm
-
-# Rebuild only the worker bundle
-node scripts/tasks/index.mjs build worker
-
-# Rebuild only the main-thread bundle
-node scripts/tasks/index.mjs build main
-
-# Add --release for the minified/release variant
-node scripts/tasks/index.mjs build wasm --release
-```
+Those other scripts can be listed, described and executed through `npm run list`.
 
 ### Documentation
 
@@ -511,40 +485,21 @@ directory, as for the documentation, it's in the `doc` directory.
 To typecheck and lint the TypeScript codebase, you can run:
 
 ```sh
-# Check the whole TypeScript project
+# Check the whole project
 npm run check
 
+# Check only the Rust code (through clippy)
+npm run check -- rust
+
 # Check only the worker-related code
-npm run check:worker
+npm run check -- worker
 
 # Check only the main-thread code
-npm run check:main
+npm run check -- main
 
 # Check only the demo
-npm run check:demo
+npm run check -- demo
 ```
 
-If you need more targeted checks, the task runner also supports:
-
-```sh
-node scripts/tasks.mjs check common
-```
-
-To check the Rust code with clippy:
-
-```sh
-npm run check:rust
-```
-
-To check formatting without rewriting files:
-
-```sh
-npm run check:fmt
-```
-
-You might also want to format automatically the code before committing:
-
-```sh
-# Format Rust and JS/TS/Markdown/HTML
-npm run fmt
-```
+If you need more targeted checks, here also you can run `npm run list` to list
+available scripts.

@@ -27,41 +27,37 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "node scripts/tasks/index.mjs build --release",
+    "build": "node scripts/tasks/index.mjs build",
     "check": "node scripts/tasks/index.mjs check",
-    "check:demo": "node scripts/tasks/index.mjs check demo",
-    "check:main": "node scripts/tasks/index.mjs check main",
-    "check:worker": "node scripts/tasks/index.mjs check worker",
-    "check:fmt": "node scripts/tasks/index.mjs check fmt",
-    "check:rust": "node scripts/tasks/index.mjs check rust",
     "clean": "node scripts/tasks/index.mjs clean",
     "demo": "node scripts/tasks/index.mjs build demo",
-    "demo:release": "node scripts/tasks/index.mjs build demo --release",
     "docs": "node scripts/tasks/index.mjs build docs",
     "fmt": "node scripts/tasks/index.mjs fmt",
     "generate": "node scripts/tasks/index.mjs generate",
     "install:binaryen": "./scripts/install_binaryen.sh",
     "list": "node scripts/list-npm-scripts.mjs",
-    "package": "node scripts/tasks/index.mjs build package",
     "scripts": "node scripts/list-npm-scripts.mjs",
     "serve": "node scripts/tasks/index.mjs serve",
     "start": "node scripts/tasks/index.mjs start"
   },
   "scripts-list": {
     "Build": {
-      "build": "Build the main hosted library artifacts in release mode.",
+      "build": "Generate all Wasp-hls builds (in development mode), excluding docs and demo",
+      "build -- --release": "Generate all Wasp-hls builds (in release mode)",
+      "build -- wasm": "Rebuild only the Rust/WASM file",
+      "build -- wasm --release": "Rebuild only the Rust/wasm file, in release mode",
+      "build -- worker": "Rebuild only the worker bundle",
+      "build -- main": "Rebuild only the main-thread bundle",
       "demo": "Build the demo and its runtime dependencies in debug mode.",
-      "demo:release": "Build the demo and its runtime dependencies in release mode.",
-      "docs": "Build the documentation site.",
-      "package": "Build the npm package artifact tree."
+      "demo -- --release": "Build the demo and its runtime dependencies in release mode.",
+      "docs": "Build the documentation site."
     },
     "Checks": {
       "check": "Run the standard TypeScript checks for the repo.",
-      "check:main": "Typecheck and lint the main-thread TypeScript code.",
-      "check:worker": "Typecheck and lint the worker and transmux TypeScript code.",
-      "check:demo": "Typecheck and lint the demo app.",
-      "check:fmt": "Check Rust and JS/TS/Markdown formatting.",
-      "check:rust": "Run clippy on the Rust code."
+      "check -- main": "Typecheck and lint the main-thread TypeScript code.",
+      "check -- worker": "Typecheck and lint the worker and transmux TypeScript code.",
+      "check -- demo": "Typecheck and lint the demo app.",
+      "check -- rust": "Run clippy on the Rust code."
     },
     "Development": {
       "start": "Serve build/ and watch-rebuild the demo during development.",

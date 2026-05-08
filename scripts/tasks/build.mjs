@@ -114,23 +114,9 @@ export async function buildDemoBundle(root, { release }) {
 
 /**
  * @param {string} root
- * @param {{ release: boolean, includeMainBundle: boolean }} options
- */
-export async function buildLibrary(root, { release, includeMainBundle }) {
-  await generateWasmAbi(root);
-  cleanBuildDirectory(join(root, "build"), { preserveDemoBundle: false });
-  await buildWasm(root, { release, skipGenerate: true });
-  await buildWorker(root, { release });
-  if (includeMainBundle) {
-    await buildMain(root, { release });
-  }
-}
-
-/**
- * @param {string} root
  * @param {{ release: boolean }} options
  */
-export async function buildPackageArtifacts(root, { release }) {
+export async function buildAll(root, { release }) {
   await generateWasmAbi(root);
   await buildWasm(root, { release, skipGenerate: true });
   await buildWorker(root, { release });

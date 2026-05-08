@@ -14,6 +14,7 @@ export async function checkAll(root) {
   await checkWorker(root);
   await checkCommon(root);
   await checkDemo(root);
+  await checkRust(root);
 }
 
 /** @param {string} root */
@@ -48,14 +49,6 @@ export async function checkDemo(root) {
   await exec("tsc", ["--project", "./demo", "--noEmit"], { cwd: root });
   reportStep("CHECK", "linting demo...");
   await exec("eslint", ["src/**/*"], { cwd: join(root, "demo") });
-}
-
-/** @param {string} root */
-export async function checkFmt(root) {
-  reportStep("CHECK", "check Rust code formatting...");
-  await exec("cargo", ["fmt", "--check"], { cwd: root });
-  reportStep("CHECK", "check JS code formatting...");
-  await exec("prettier", [".", "--check"], { cwd: root });
 }
 
 /** @param {string} root */
