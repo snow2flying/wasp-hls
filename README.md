@@ -467,20 +467,20 @@ the hosted release artifacts used alongside them.
 
 ### Build only one area
 
-If you only changed one part of the codebase, use the task runner directly:
+If you only changed one part of the codebase, you can also use the task runner directly:
 
 ```sh
 # Rebuild only the Rust/WASM artifact
-node scripts/tasks.mjs build wasm
+node scripts/tasks/index.mjs build wasm
 
 # Rebuild only the worker bundle
-node scripts/tasks.mjs build worker
+node scripts/tasks/index.mjs build worker
 
 # Rebuild only the main-thread bundle
-node scripts/tasks.mjs build main
+node scripts/tasks/index.mjs build main
 
 # Add --release for the minified/release variant
-node scripts/tasks.mjs build wasm --release
+node scripts/tasks/index.mjs build wasm --release
 ```
 
 ### Documentation
