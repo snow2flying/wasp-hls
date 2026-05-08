@@ -146,12 +146,12 @@ async function run() {
       return;
     case "serve":
       ensureNoArgs(rest);
-      await startStaticBuildServer();
+      await startStaticBuildServer(ROOT);
       return;
     case "start":
       ensureNoArgs(rest);
       {
-        const server = await startStaticBuildServer();
+        const server = await startStaticBuildServer(ROOT);
         try {
           await watchDemo(ROOT, { release: false });
         } finally {
@@ -176,11 +176,13 @@ async function buildDemoFull(root, { release }) {
   await buildDemoBundle(root, { release });
 }
 
-async function startStaticBuildServer() {
+async function startStaticBuildServer(root) {
   const server = launchStaticServer(join(ROOT, "build"), {
     verbose: true,
     httpPort: 8000,
     httpsPort: 8443,
+    certificatePath: join(root, "localhost.crt"),
+    keyPath: join(root, "localhost.key"),
   });
 
   try {

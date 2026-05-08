@@ -28,6 +28,7 @@
   ],
   "scripts": {
     "build": "node scripts/tasks/index.mjs build",
+    "certificate": "bash ./scripts/generate_certificate.sh",
     "check": "node scripts/tasks/index.mjs check",
     "clean": "node scripts/tasks/index.mjs clean",
     "demo": "node scripts/tasks/index.mjs build demo",
@@ -67,6 +68,7 @@
     "Maintenance": {
       "fmt": "Format Rust and JS/TS/Markdown sources.",
       "generate": "Regenerate wasm ABI enums.",
+      "certificate": "Generate a certificate to be able to use HTTPS locally for the demo pages (`npm run start` will then listen to HTTPS requests through a communicated port)",
       "clean": "Remove build artifacts.",
       "install:binaryen": "Install a local Binaryen toolchain under ./tmp/binaryen."
     }

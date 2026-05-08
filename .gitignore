@@ -7,4 +7,7 @@
 !/build/logo-white.png
 !/build/favicon.png
 
+/localhost.crt
+/localhost.key
+
 /tmp

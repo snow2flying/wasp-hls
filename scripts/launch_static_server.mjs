@@ -382,8 +382,8 @@ export default function launchStaticServer(path, config) {
      */
     function onHttpsConnectionError(err) {
       if (config.verbose) {
-        console.error(
-          `\x1b[31m[${getHumanReadableHours()}]\x1b[0m ` +
+        console.warn(
+          `\x1b[33m[${getHumanReadableHours()}]\x1b[0m ` +
             "Could not start static HTTPS server:",
           err.toString(),
         );
