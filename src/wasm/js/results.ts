@@ -11,9 +11,10 @@ import type {
 } from "./enums.js";
 import type { AppendBufferValue, HostResult } from "./types.js";
 
-class SimpleResult<Value, ErrorCode extends number>
-  implements HostResult<Value, ErrorCode>
-{
+class SimpleResult<Value, ErrorCode extends number> implements HostResult<
+  Value,
+  ErrorCode
+> {
   constructor(
     public value: Value | undefined,
     public errorCode: ErrorCode | undefined,
@@ -35,7 +36,11 @@ export class AddSourceBufferResult extends SimpleResult<
     error: AddSourceBufferErrorCode,
     description?: string | null,
   ): AddSourceBufferResult {
-    return new AddSourceBufferResult(undefined, error, description ?? undefined);
+    return new AddSourceBufferResult(
+      undefined,
+      error,
+      description ?? undefined,
+    );
   }
 }
 
@@ -77,11 +82,18 @@ export class AttachMediaSourceResult extends SimpleResult<
     error: AttachMediaSourceErrorCode,
     description?: string | null,
   ): AttachMediaSourceResult {
-    return new AttachMediaSourceResult(undefined, error, description ?? undefined);
+    return new AttachMediaSourceResult(
+      undefined,
+      error,
+      description ?? undefined,
+    );
   }
 }
 
-export class EndOfStreamResult extends SimpleResult<true, EndOfStreamErrorCode> {
+export class EndOfStreamResult extends SimpleResult<
+  true,
+  EndOfStreamErrorCode
+> {
   public static success(): EndOfStreamResult {
     return new EndOfStreamResult(true, undefined, undefined);
   }
@@ -114,7 +126,10 @@ export class MediaSourceDurationUpdateResult extends SimpleResult<
   }
 }
 
-export class RemoveBufferResult extends SimpleResult<true, RemoveBufferErrorCode> {
+export class RemoveBufferResult extends SimpleResult<
+  true,
+  RemoveBufferErrorCode
+> {
   public static success(): RemoveBufferResult {
     return new RemoveBufferResult(true, undefined, undefined);
   }
@@ -139,7 +154,11 @@ export class RemoveMediaSourceResult extends SimpleResult<
     error: RemoveMediaSourceErrorCode,
     description?: string | null,
   ): RemoveMediaSourceResult {
-    return new RemoveMediaSourceResult(undefined, error, description ?? undefined);
+    return new RemoveMediaSourceResult(
+      undefined,
+      error,
+      description ?? undefined,
+    );
   }
 }
 

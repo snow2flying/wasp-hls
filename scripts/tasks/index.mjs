@@ -50,7 +50,11 @@ async function run() {
       const { flags, scope } = parseArgs(rest, ["--release", "--watch"]);
       switch (scope ?? "library") {
         case "library":
-          assertNoFlag(flags, "--watch", '"--watch" is only supported for "build demo".');
+          assertNoFlag(
+            flags,
+            "--watch",
+            '"--watch" is only supported for "build demo".',
+          );
           await buildLibrary(ROOT, {
             release: flags.has("--release"),
             includeMainBundle: flags.has("--release"),
@@ -68,15 +72,27 @@ async function run() {
           }
           return;
         case "wasm":
-          assertNoFlag(flags, "--watch", '"--watch" is only supported for "build demo".');
+          assertNoFlag(
+            flags,
+            "--watch",
+            '"--watch" is only supported for "build demo".',
+          );
           await buildWasm(ROOT, { release: flags.has("--release") });
           return;
         case "worker":
-          assertNoFlag(flags, "--watch", '"--watch" is only supported for "build demo".');
+          assertNoFlag(
+            flags,
+            "--watch",
+            '"--watch" is only supported for "build demo".',
+          );
           await buildWorker(ROOT, { release: flags.has("--release") });
           return;
         case "main":
-          assertNoFlag(flags, "--watch", '"--watch" is only supported for "build demo".');
+          assertNoFlag(
+            flags,
+            "--watch",
+            '"--watch" is only supported for "build demo".',
+          );
           await buildMain(ROOT, { release: flags.has("--release") });
           return;
         case "docs":
@@ -90,13 +106,29 @@ async function run() {
     case "check": {
       const { scope } = parseArgs(rest, []);
       switch (scope ?? "all") {
-        case "all":      await checkAll(ROOT); return;
-        case "main":     await generateWasmAbi(ROOT); await checkMain(ROOT); return;
-        case "worker":   await generateWasmAbi(ROOT); await checkWorker(ROOT); return;
-        case "common":   await checkCommon(ROOT); return;
-        case "demo":     await checkDemo(ROOT); return;
-        case "fmt":      await checkFmt(ROOT); return;
-        case "rust":     await checkRust(ROOT); return;
+        case "all":
+          await checkAll(ROOT);
+          return;
+        case "main":
+          await generateWasmAbi(ROOT);
+          await checkMain(ROOT);
+          return;
+        case "worker":
+          await generateWasmAbi(ROOT);
+          await checkWorker(ROOT);
+          return;
+        case "common":
+          await checkCommon(ROOT);
+          return;
+        case "demo":
+          await checkDemo(ROOT);
+          return;
+        case "fmt":
+          await checkFmt(ROOT);
+          return;
+        case "rust":
+          await checkRust(ROOT);
+          return;
         default:
           throw new Error(`Unknown check scope "${scope}".\n\n${helpText()}`);
       }
@@ -108,7 +140,9 @@ async function run() {
         await exec("prettier", [".", "--check"], { cwd: ROOT });
       } else {
         await exec("cargo", ["fmt"], { cwd: ROOT });
-        await exec("prettier", ["--write", ".", "--loglevel", "warn"], { cwd: ROOT });
+        await exec("prettier", ["--write", ".", "--loglevel", "warn"], {
+          cwd: ROOT,
+        });
       }
       return;
     }

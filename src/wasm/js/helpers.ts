@@ -1,4 +1,8 @@
-import { getFloat64Memory, getUint32Memory, writeOptionalString } from "./memory.js";
+import {
+  getFloat64Memory,
+  getUint32Memory,
+  writeOptionalString,
+} from "./memory.js";
 import type { HostResult } from "./types.js";
 
 const OPTIONAL_ID_NONE = 0xffffffff;

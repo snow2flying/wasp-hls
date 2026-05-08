@@ -94,7 +94,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
           }
           normalizedPath = normalize(wantedDirectoryFile);
           if (!existsSync(normalizedPath)) {
-            console.error(`ERROR: root path not found: ${wantedDirectoryFile}\n`);
+            console.error(
+              `ERROR: root path not found: ${wantedDirectoryFile}\n`,
+            );
             displayHelp();
             process.exit(1);
           }
@@ -211,7 +213,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   }
 
   if (keyFile !== undefined && certificateFile === undefined) {
-    console.warn("⚠️ Private key communicated but no certificate. Not running in HTTPS.");
+    console.warn(
+      "⚠️ Private key communicated but no certificate. Not running in HTTPS.",
+    );
     keyFile = undefined;
   }
 
@@ -228,7 +232,10 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     if (keyFile !== undefined) {
       launchConfig.keyPath = keyFile;
     }
-    const { listeningPromise } = launchStaticServer(normalizedPath, launchConfig);
+    const { listeningPromise } = launchStaticServer(
+      normalizedPath,
+      launchConfig,
+    );
     listeningPromise.catch((err) => {
       console.error(`ERROR: ${err}\n`);
       process.exit(1);
@@ -288,7 +295,9 @@ export default function launchStaticServer(path, config) {
     Promise.all([readFile(certificatePath), readFile(keyPath)])
       .then(([certFile, keyFile]) => {
         if (certFile == null || keyFile == null) {
-          const err = new Error("Impossible to load the certificate and/or key file");
+          const err = new Error(
+            "Impossible to load the certificate and/or key file",
+          );
           onHttpsConnectionError(err);
           return;
         }
@@ -312,7 +321,9 @@ export default function launchStaticServer(path, config) {
           );
           onHttpsConnectionError(fileError);
         } else {
-          const fileError = new Error("Could not read key and certificate file.");
+          const fileError = new Error(
+            "Could not read key and certificate file.",
+          );
           onHttpsConnectionError(fileError);
         }
       });
@@ -344,7 +355,10 @@ export default function launchStaticServer(path, config) {
       httpServerStatus = "error";
       if (httpsServerStatus === "success") {
         res({ http: false, https: true });
-      } else if (httpsServerStatus === "error" || httpsServerStatus === "disabled") {
+      } else if (
+        httpsServerStatus === "error" ||
+        httpsServerStatus === "disabled"
+      ) {
         rej(err);
       }
       httpServer.close();

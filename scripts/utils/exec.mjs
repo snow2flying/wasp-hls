@@ -40,6 +40,9 @@ export function exec(commandName, args, options = {}) {
 export function spawnEnv(cwd) {
   const env = { ...process.env };
   const nodeModulesBin = join(cwd ?? process.cwd(), "node_modules", ".bin");
-  env.PATH = env.PATH == null ? nodeModulesBin : `${nodeModulesBin}${delimiter}${env.PATH}`;
+  env.PATH =
+    env.PATH == null
+      ? nodeModulesBin
+      : `${nodeModulesBin}${delimiter}${env.PATH}`;
   return env;
 }

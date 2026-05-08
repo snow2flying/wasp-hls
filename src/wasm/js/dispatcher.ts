@@ -1,8 +1,4 @@
-import {
-  getWasmExports,
-  withFloat64Array,
-  withString,
-} from "./memory.js";
+import { getWasmExports, withFloat64Array, withString } from "./memory.js";
 import { optionalIdToRaw } from "./helpers.js";
 import type {
   AddSourceBufferErrorCode,
@@ -299,48 +295,51 @@ export class Dispatcher {
   }
 
   public on_playback_tick(observation: MediaObservation): void {
-    withFloat64Array(observation.buffered.buffered, (bufferedPtr, bufferedLen) => {
-      const audioBuffered = observation.audio_buffered?.buffered;
-      const videoBuffered = observation.video_buffered?.buffered;
-      const invoke = (
-        audioPtr: number,
-        audioLen: number,
-        videoPtr: number,
-        videoLen: number,
-      ) =>
-        getWasmExports().__web_event__playback_tick(
-          this.__ptr,
-          observation.reason,
-          observation.current_time,
-          observation.ready_state,
-          bufferedPtr,
-          bufferedLen,
-          observation.paused ? 1 : 0,
-          observation.seeking ? 1 : 0,
-          observation.ended ? 1 : 0,
-          observation.duration,
-          audioPtr,
-          audioLen,
-          videoPtr,
-          videoLen,
-        );
-      if (audioBuffered != null) {
-        return withFloat64Array(audioBuffered, (audioPtr, audioLen) => {
-          if (videoBuffered != null) {
-            return withFloat64Array(videoBuffered, (videoPtr, videoLen) =>
-              invoke(audioPtr, audioLen, videoPtr, videoLen),
-            );
-          }
-          return invoke(audioPtr, audioLen, 0, 0xffffffff);
-        });
-      }
-      if (videoBuffered != null) {
-        return withFloat64Array(videoBuffered, (videoPtr, videoLen) =>
-          invoke(0, 0xffffffff, videoPtr, videoLen),
-        );
-      }
-      return invoke(0, 0xffffffff, 0, 0xffffffff);
-    });
+    withFloat64Array(
+      observation.buffered.buffered,
+      (bufferedPtr, bufferedLen) => {
+        const audioBuffered = observation.audio_buffered?.buffered;
+        const videoBuffered = observation.video_buffered?.buffered;
+        const invoke = (
+          audioPtr: number,
+          audioLen: number,
+          videoPtr: number,
+          videoLen: number,
+        ) =>
+          getWasmExports().__web_event__playback_tick(
+            this.__ptr,
+            observation.reason,
+            observation.current_time,
+            observation.ready_state,
+            bufferedPtr,
+            bufferedLen,
+            observation.paused ? 1 : 0,
+            observation.seeking ? 1 : 0,
+            observation.ended ? 1 : 0,
+            observation.duration,
+            audioPtr,
+            audioLen,
+            videoPtr,
+            videoLen,
+          );
+        if (audioBuffered != null) {
+          return withFloat64Array(audioBuffered, (audioPtr, audioLen) => {
+            if (videoBuffered != null) {
+              return withFloat64Array(videoBuffered, (videoPtr, videoLen) =>
+                invoke(audioPtr, audioLen, videoPtr, videoLen),
+              );
+            }
+            return invoke(audioPtr, audioLen, 0, 0xffffffff);
+          });
+        }
+        if (videoBuffered != null) {
+          return withFloat64Array(videoBuffered, (videoPtr, videoLen) =>
+            invoke(0, 0xffffffff, videoPtr, videoLen),
+          );
+        }
+        return invoke(0, 0xffffffff, 0, 0xffffffff);
+      },
+    );
   }
 
   public on_timer_ended(id: number, reason: TimerReason): void {

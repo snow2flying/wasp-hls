@@ -74,9 +74,7 @@
         },
         "UnknownError": {
           "value": 1,
-          "doc": [
-            "An unknown error arised"
-          ]
+          "doc": ["An unknown error arised"]
         }
       }
     },
@@ -117,9 +115,7 @@
         },
         "UnknownError": {
           "value": 1,
-          "doc": [
-            "The operation failed because of an unknown error."
-          ]
+          "doc": ["The operation failed because of an unknown error."]
         }
       }
     },
@@ -138,17 +134,13 @@
         },
         "UnknownError": {
           "value": 1,
-          "doc": [
-            "The operation failed because of an unknown error."
-          ]
+          "doc": ["The operation failed because of an unknown error."]
         }
       }
     },
     "MultivariantPlaylistParsingErrorCode": {
       "default": "Unknown",
-      "doc": [
-        "Error that might arise when parsing the Multivariant Playlist."
-      ],
+      "doc": ["Error that might arise when parsing the Multivariant Playlist."],
       "members": {
         "MissingExtM3uHeader": {
           "value": 0,
@@ -221,23 +213,17 @@
         },
         "UnableToReadLine": {
           "value": 9,
-          "doc": [
-            "A line could not be read."
-          ]
+          "doc": ["A line could not be read."]
         },
         "Unknown": {
           "value": 10,
-          "doc": [
-            "Another, uncategorized, error arised."
-          ]
+          "doc": ["Another, uncategorized, error arised."]
         }
       }
     },
     "MediaPlaylistParsingErrorCode": {
       "default": "Unknown",
-      "doc": [
-        "Error that might arise when parsing the Media Playlist."
-      ],
+      "doc": ["Error that might arise when parsing the Media Playlist."],
       "members": {
         "UnparsableExtInf": {
           "value": 0,
@@ -275,9 +261,7 @@
         },
         "Unknown": {
           "value": 5,
-          "doc": [
-            "Another, uncategorized, error arised."
-          ]
+          "doc": ["Another, uncategorized, error arised."]
         }
       }
     },
@@ -311,21 +295,15 @@
         },
         "TypeNotSupportedError": {
           "value": 3,
-          "doc": [
-            "The given mime-type and codec combination is not supported"
-          ]
+          "doc": ["The given mime-type and codec combination is not supported"]
         },
         "EmptyMimeType": {
           "value": 4,
-          "doc": [
-            "The given mime-type and codec combination is empty"
-          ]
+          "doc": ["The given mime-type and codec combination is empty"]
         },
         "UnknownError": {
           "value": 5,
-          "doc": [
-            "An unknown error happened."
-          ]
+          "doc": ["An unknown error happened."]
         }
       }
     },
@@ -353,15 +331,11 @@
         },
         "TransmuxerError": {
           "value": 2,
-          "doc": [
-            "The operation failed at the transmuxing stage."
-          ]
+          "doc": ["The operation failed at the transmuxing stage."]
         },
         "UnknownError": {
           "value": 3,
-          "doc": [
-            "The operation failed because of an unknown error."
-          ]
+          "doc": ["The operation failed because of an unknown error."]
         }
       }
     },
@@ -387,9 +361,7 @@
     },
     "PlaybackObservationReason": {
       "default": "Error",
-      "doc": [
-        "Reason that triggered a `PlaybackObservation`"
-      ],
+      "doc": ["Reason that triggered a `PlaybackObservation`"],
       "members": {
         "Init": {
           "value": 0,
@@ -464,9 +436,7 @@
     },
     "LogLevel": {
       "default": "Error",
-      "doc": [
-        "Levels with which a log can be emitted."
-      ],
+      "doc": ["Levels with which a log can be emitted."],
       "members": {
         "Error": {
           "value": 0,
@@ -482,9 +452,7 @@
         },
         "Info": {
           "value": 2,
-          "doc": [
-            "Log level reserved for important events"
-          ]
+          "doc": ["Log level reserved for important events"]
         },
         "Debug": {
           "value": 3,

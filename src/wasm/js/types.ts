@@ -147,11 +147,7 @@ export interface HostBindings {
     mediaType: MediaType,
     message: string,
   ): void;
-  sendOtherError(
-    fatal: boolean,
-    code: OtherErrorCode,
-    message: string,
-  ): void;
+  sendOtherError(fatal: boolean, code: OtherErrorCode, message: string): void;
 }
 
 export interface WaspWasmExports {
@@ -176,8 +172,14 @@ export interface WaspWasmExports {
   wasp_dispatcher_lock_variant(ptr: number, variantId: number): void;
   wasp_dispatcher_unlock_variant(ptr: number): void;
   wasp_dispatcher_set_audio_track(ptr: number, trackId: number): void;
-  wasp_dispatcher_set_segment_request_max_retry(ptr: number, maxRetry: number): void;
-  wasp_dispatcher_set_segment_request_timeout(ptr: number, timeout: number): void;
+  wasp_dispatcher_set_segment_request_max_retry(
+    ptr: number,
+    maxRetry: number,
+  ): void;
+  wasp_dispatcher_set_segment_request_timeout(
+    ptr: number,
+    timeout: number,
+  ): void;
   wasp_dispatcher_set_segment_backoff_base(ptr: number, base: number): void;
   wasp_dispatcher_set_segment_backoff_max(ptr: number, max: number): void;
   wasp_dispatcher_set_multi_variant_playlist_request_max_retry(
@@ -204,8 +206,14 @@ export interface WaspWasmExports {
     ptr: number,
     timeout: number,
   ): void;
-  wasp_dispatcher_set_media_playlist_backoff_base(ptr: number, base: number): void;
-  wasp_dispatcher_set_media_playlist_backoff_max(ptr: number, max: number): void;
+  wasp_dispatcher_set_media_playlist_backoff_base(
+    ptr: number,
+    base: number,
+  ): void;
+  wasp_dispatcher_set_media_playlist_backoff_max(
+    ptr: number,
+    max: number,
+  ): void;
   __web_event__request_finished(
     ptr: number,
     requestId: number,

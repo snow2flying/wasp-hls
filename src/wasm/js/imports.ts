@@ -19,7 +19,11 @@ import {
   readString,
   writeOptionalString,
 } from "./memory.js";
-import { rawOptionalId, unwrapResult, writeAppendBufferResult } from "./helpers.js";
+import {
+  rawOptionalId,
+  unwrapResult,
+  writeAppendBufferResult,
+} from "./helpers.js";
 import type { HostBindings } from "./types.js";
 
 export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
