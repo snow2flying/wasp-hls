@@ -400,7 +400,9 @@ most of them are not needed for playback):
       advantages I did not see.
 - [ ] EXT-X-DISCONTINUITY-SEQUENCE: See `EXT-X-DISCONTINUITY` handling.
 
-## Setup
+## Contributing
+
+### Setup
 
 If you want to contribute or build the Wasp-hls locally, you will need to have
 [nodejs](https://nodejs.org/) and [rust](https://www.rust-lang.org/tools/install)
@@ -423,14 +425,16 @@ rustup target add wasm32-unknown-unknown
 rustup component add clippy
 ```
 
-## Build
+### The source code
 
-The build commands are intentionally split between a small set of common
-workflows and an advanced task runner for targeted rebuilds.
+You're welcome to read the code which should be hopefully documented enough and
+readable enough to dive into. The source code of the player is in the `src`
+directory, if you would prefer to work on the demo, it's in the `demo`
+directory, as for the documentation, it's in the `doc` directory.
 
-### Common workflows
+### Common scripts
 
-For day-to-day development, these are the main commands to remember:
+For day-to-day development, these are the main scripts to remember:
 
 ```sh
 # Build the player alongside its demo in watch mode and serve it on localhost:8000
@@ -473,19 +477,12 @@ npm run serve
 
 And by opening the `/doc` path.
 
-## Update the code
+### Checking the code
 
-You're welcome to read the code which should be hopefully documented enough and
-readable enough to dive into. The source code of the player is in the `src`
-directory, if you would prefer to work on the demo, it's in the `demo`
-directory, as for the documentation, it's in the `doc` directory.
-
-## Check the code
-
-To typecheck and lint the TypeScript codebase, you can run:
+To typecheck and lint the codebase, you can run:
 
 ```sh
-# Check the whole project
+# Typecheck and lint the whole project
 npm run check
 
 # Check only the Rust code (through clippy)
