@@ -28,6 +28,7 @@ import {
 } from "./check.mjs";
 import { exec } from "../utils/exec.mjs";
 import { cleanBuildDirectory } from "../utils/fs.mjs";
+import launchStaticServer from "../launch_static_server.mjs";
 import { watchDemo } from "./watch.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -121,7 +122,18 @@ async function run() {
       return;
     case "serve":
       ensureNoArgs(rest);
-      await exec("http-server", ["./build"], { cwd: ROOT });
+      await startStaticBuildServer();
+      return;
+    case "start":
+      ensureNoArgs(rest);
+      {
+        const server = await startStaticBuildServer();
+        try {
+          await watchDemo(ROOT, { release: false });
+        } finally {
+          server.close();
+        }
+      }
       return;
     case "help":
       ensureNoArgs(rest);
@@ -138,6 +150,23 @@ async function buildDemoFull(root, { release }) {
   await buildWasm(root, { release, skipGenerate: true });
   await buildWorker(root, { release });
   await buildDemoBundle(root, { release });
+}
+
+async function startStaticBuildServer() {
+  const server = launchStaticServer(join(ROOT, "build"), {
+    verbose: true,
+    httpPort: 8000,
+    httpsPort: 8443,
+  });
+
+  try {
+    await server.listeningPromise;
+  } catch (error) {
+    server.close();
+    throw error;
+  }
+
+  return server;
 }
 
 function parseArgs(args, allowedFlags) {
@@ -199,6 +228,7 @@ Commands
   fmt [--check]   Format Rust and JS/TS/Markdown
   generate        Regenerate wasm ABI enums
   clean           Remove build artifacts
-  serve           Serve the build directory
+  serve           Serve the existing build directory
+  start           Serve build/ and watch-rebuild the demo
   help            Print this message`;
 }

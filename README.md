@@ -437,7 +437,7 @@ For day-to-day development, these are the main commands to remember:
 # the wasm binary, the worker bundle, and the demo bundle itself
 npm run demo
 
-# Same as above, then watch demo, worker, and wasm-related sources
+# Also build the demo but in watch mode, and serve it on localhost:8000
 npm run start
 
 # Build the demo in release mode

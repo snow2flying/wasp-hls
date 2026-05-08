@@ -44,8 +44,8 @@
     "list": "node scripts/list-npm-scripts.mjs",
     "package": "node scripts/tasks/index.mjs build package",
     "scripts": "node scripts/list-npm-scripts.mjs",
-    "serve": "http-server ./build",
-    "start": "node scripts/tasks/index.mjs build demo --watch"
+    "serve": "node scripts/tasks/index.mjs serve",
+    "start": "node scripts/tasks/index.mjs start"
   },
   "scripts-list": {
     "Build": {
@@ -64,8 +64,8 @@
       "check:rust": "Run clippy on the Rust code."
     },
     "Development": {
-      "start": "Watch and rebuild the demo during development.",
-      "serve": "Serve the build directory over HTTP.",
+      "start": "Serve build/ and watch-rebuild the demo during development.",
+      "serve": "Serve the existing build directory over HTTP.",
       "scripts": "Open the interactive npm script picker."
     },
     "Maintenance": {
@@ -88,7 +88,6 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-jsdoc": "^62.9.0",
-    "http-server": "^14.1.1",
     "prettier": "^3.8.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
