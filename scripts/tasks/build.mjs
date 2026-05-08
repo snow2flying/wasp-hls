@@ -2,6 +2,7 @@ import { copyFileSync, mkdirSync, rmSync } from "fs";
 import { dirname, join } from "path";
 import { exec } from "../utils/exec.mjs";
 import { cleanBuildDirectory, copyRecursive } from "../utils/fs.mjs";
+import { checkPackageExports } from "./check-package-exports.mjs";
 import { reportStep } from "./report.mjs";
 
 /**
@@ -151,7 +152,7 @@ export async function buildPackageArtifacts(root, { release }) {
   reportStep("BUILD", "generating Embedded Worker JS file...");
   await exec("node", ["./scripts/generate_embedded_worker.js"], { cwd: root });
   reportStep("BUILD", "checking all exports...");
-  await exec("node", ["./scripts/check_package_exports.mjs"], { cwd: root });
+  await checkPackageExports(root);
 }
 
 /**

@@ -1,18 +1,3 @@
-#!/usr/bin/env node
-/**
- * # check_package_exports.mjs
- *
- * This file allows to validate the consumer-facing npm package shape exposed by
- * this repository.
- *
- * You can either run it directly as a script (run
- * `node check_package_exports.mjs -h` to see the different options) or by
- * requiring/importing it as a node module.
- * If doing the latter you will obtain a function returning a Promise resolving
- * once the package shape has been validated, and rejecting with an Error
- * otherwise.
- */
-
 import {
   copyFileSync,
   mkdirSync,
@@ -23,20 +8,17 @@ import {
 } from "fs";
 import { execFileSync } from "child_process";
 import { build as esbuild } from "esbuild";
-import { join, resolve } from "path";
+import { join } from "path";
 import { tmpdir } from "os";
-import { fileURLToPath, pathToFileURL } from "url";
-
-const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
 /**
- * Validate the npm package exports and embedded entrypoints from a packed
- * tarball, as a consumer would see them.
+ * Validate the packed npm package from a consumer point of view.
+ * @param {string} root
  * @returns {Promise<void>}
  */
-export default async function checkPackageExports() {
+export async function checkPackageExports(root) {
   const rootPackageJson = JSON.parse(
-    readFileSync(join(repoRoot, "package.json"), "utf8"),
+    readFileSync(join(root, "package.json"), "utf8"),
   );
   const expectedTarballName = `${rootPackageJson.name
     .replace(/^@/, "")
@@ -46,7 +28,7 @@ export default async function checkPackageExports() {
   const packDir = join(tempDir, "pack");
   const unpackDir = join(tempDir, "unpacked");
   const consumerDir = join(tempDir, "consumer");
-  let repoTarballPath = null;
+  const repoTarballPath = join(root, expectedTarballName);
 
   try {
     mkdirSync(npmCacheDir, { recursive: true });
@@ -54,20 +36,19 @@ export default async function checkPackageExports() {
     mkdirSync(unpackDir, { recursive: true });
     mkdirSync(consumerDir, { recursive: true });
 
-    repoTarballPath = join(repoRoot, expectedTarballName);
     rmSync(repoTarballPath, { force: true });
 
     const npmPackOutput = execOutsideRepo(
       "npm",
       ["pack", "--silent"],
-      repoRoot,
+      root,
       npmCacheDir,
     ).trim();
     const filename = getPackedFilename(expectedTarballName, npmPackOutput);
 
     copyFileSync(repoTarballPath, join(packDir, filename));
     const packagedFiles = new Set(
-      execOutsideRepo("tar", ["-tzf", repoTarballPath], repoRoot, npmCacheDir)
+      execOutsideRepo("tar", ["-tzf", repoTarballPath], root, npmCacheDir)
         .split("\n")
         .filter((entry) => entry.startsWith("package/"))
         .map((entry) => entry.slice("package/".length))
@@ -92,7 +73,7 @@ export default async function checkPackageExports() {
     execOutsideRepo(
       "tar",
       ["-xzf", repoTarballPath, "-C", unpackDir],
-      repoRoot,
+      root,
       npmCacheDir,
     );
     const unpackedPackageDir = join(unpackDir, "package");
@@ -140,45 +121,8 @@ void [WaspHlsPlayer, EmbeddedWasm, EmbeddedWorker];
       logLevel: "silent",
     });
   } finally {
-    if (repoTarballPath !== null) {
-      rmSync(repoTarballPath, { force: true });
-    }
+    rmSync(repoTarballPath, { force: true });
     rmSync(tempDir, { recursive: true, force: true });
-  }
-}
-
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  runFromCli(process.argv.slice(2));
-}
-
-/**
- * Run the script from the command line.
- * @param {string[]} args
- * @returns {Promise<void>}
- */
-async function runFromCli(args) {
-  if (args[0] === "-h" || args[0] === "--help") {
-    displayHelp();
-    process.exit(0);
-  }
-
-  if (args.length > 0) {
-    console.error(`ERROR: unknown option: "${args[0]}"\n`);
-    displayHelp();
-    process.exit(1);
-  }
-
-  try {
-    await checkPackageExports();
-    console.log("Package exports validated from the packed tarball.");
-  } catch (error) {
-    console.error("Package export validation failed.");
-    if (error instanceof Error) {
-      console.error(error.message);
-    } else {
-      console.error(error);
-    }
-    process.exit(1);
   }
 }
 
@@ -257,25 +201,4 @@ function assertExports(packageJson) {
         `Received: ${JSON.stringify(packageJson.exports)}`,
     );
   }
-}
-
-/**
- * Display the CLI help.
- */
-function displayHelp() {
-  console.log(`Check the consumer-facing npm package exports.
-
-Usage:
-  node ./scripts/check_package_exports.mjs
-
-What it does:
-  1. Packs the current repository with npm.
-  2. Verifies the tarball contains the expected public artifacts.
-  3. Checks package.json exports for ".", "./wasm" and "./worker".
-  4. Installs that tarball into a temporary consumer project.
-  5. Bundles imports of "wasp-hls", "wasp-hls/wasm" and "wasp-hls/worker".
-
-Options:
-  -h, --help   Show this help message.
-`);
 }
