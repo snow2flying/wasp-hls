@@ -1,91 +1,30 @@
-// XXX TODO: Document script like others
+/**
+ * ============= check_wasm_abi =============
+ *
+ * Validates that the built wasm module exports the ABI symbols expected by the
+ * JavaScript bindings and imports the ABI symbols expected from the JS host.
+ *
+ * The expected symbol inventory is defined in `src/wasm/abi/wasm-functions.json`.
+ */
+
 import { readFile } from "node:fs/promises";
 
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(`Usage: node ./scripts/check_wasm_abi.mjs
+
+Checks that build/wasp_hls_bg.wasm matches the expected import/export ABI
+defined in src/wasm/abi/wasm-functions.json.`);
+  process.exit(0);
+}
+
 const wasmPath = new URL("../build/wasp_hls_bg.wasm", import.meta.url);
-
-// XXX TODO: Source of truth closer to bindings in `src/wasm/js`
-
-const expectedImports = [
-  "__js_func__abort_request",
-  "__js_func__add_source_buffer",
-  "__js_func__announce_fetched_content",
-  "__js_func__announce_track_update",
-  "__js_func__announce_variant_lock_status_change",
-  "__js_func__announce_variant_update",
-  "__js_func__append_buffer",
-  "__js_func__attach_media_source",
-  "__js_func__clear_timer",
-  "__js_func__copy_resource_data",
-  "__js_func__end_of_stream",
-  "__js_func__fetch",
-  "__js_func__flush",
-  "__js_func__free_resource",
-  "__js_func__get_random",
-  "__js_func__get_resource_len",
-  "__js_func__is_type_supported",
-  "__js_func__log",
-  "__js_func__remove_buffer",
-  "__js_func__remove_media_source",
-  "__js_func__seek",
-  "__js_func__send_media_playlist_parsing_error",
-  "__js_func__send_media_playlist_request_error",
-  "__js_func__send_multivariant_playlist_parsing_error",
-  "__js_func__send_multivariant_playlist_request_error",
-  "__js_func__send_other_error",
-  "__js_func__send_pushed_segment_error",
-  "__js_func__send_remove_buffer_error",
-  "__js_func__send_segment_parsing_error",
-  "__js_func__send_segment_request_error",
-  "__js_func__send_source_buffer_creation_error",
-  "__js_func__set_media_offset",
-  "__js_func__set_media_source_duration",
-  "__js_func__set_playback_rate",
-  "__js_func__start_observing_playback",
-  "__js_func__start_rebuffering",
-  "__js_func__stop_observing_playback",
-  "__js_func__stop_rebuffering",
-  "__js_func__timer",
-  "__js_func__update_content_info",
-];
-
-const expectedExports = [
-  "memory",
-  "wasp_malloc",
-  "wasp_free",
-  "wasp_dispatcher_new",
-  "wasp_dispatcher_free",
-  "wasp_dispatcher_load_content",
-  "wasp_dispatcher_minimum_position",
-  "wasp_dispatcher_maximum_position",
-  "wasp_dispatcher_set_wanted_speed",
-  "wasp_dispatcher_set_buffer_goal",
-  "wasp_dispatcher_stop",
-  "wasp_dispatcher_lock_variant",
-  "wasp_dispatcher_unlock_variant",
-  "wasp_dispatcher_set_audio_track",
-  "wasp_dispatcher_set_segment_request_max_retry",
-  "wasp_dispatcher_set_segment_request_timeout",
-  "wasp_dispatcher_set_segment_backoff_base",
-  "wasp_dispatcher_set_segment_backoff_max",
-  "wasp_dispatcher_set_multi_variant_playlist_request_max_retry",
-  "wasp_dispatcher_set_multi_variant_playlist_request_timeout",
-  "wasp_dispatcher_set_multi_variant_playlist_backoff_base",
-  "wasp_dispatcher_set_multi_variant_playlist_backoff_max",
-  "wasp_dispatcher_set_media_playlist_request_max_retry",
-  "wasp_dispatcher_set_media_playlist_request_timeout",
-  "wasp_dispatcher_set_media_playlist_backoff_base",
-  "wasp_dispatcher_set_media_playlist_backoff_max",
-  "__web_event__request_finished",
-  "__web_event__request_failed",
-  "__web_event__media_source_state_change",
-  "__web_event__source_buffer_update",
-  "__web_event__source_buffer_creation_error",
-  "__web_event__append_buffer_error",
-  "__web_event__remove_buffer_error",
-  "__web_event__playback_tick",
-  "__web_event__timer_ended",
-  "__web_event__codecs_support_update",
-];
+const functionsManifestPath = new URL(
+  "../src/wasm/abi/wasm-functions.json",
+  import.meta.url,
+);
+const { imports: expectedImports, exports: expectedExports } = JSON.parse(
+  await readFile(functionsManifestPath, "utf8"),
+);
 
 const bytes = await readFile(wasmPath);
 const module = await WebAssembly.compile(bytes);
