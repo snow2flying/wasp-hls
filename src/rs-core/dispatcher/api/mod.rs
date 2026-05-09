@@ -1,6 +1,7 @@
 use crate::{
     adaptive::AdaptiveQualitySelector,
     bindings::{jsSendOtherError, OtherErrorCode},
+    dispatcher::segment_action_tracker::SegmentActionTracker,
     media_element::MediaElementReference,
     requester::{PlaylistFileType, Requester},
     segment_selector::NextSegmentSelectors,
@@ -29,8 +30,9 @@ impl Dispatcher {
             last_position: 0.,
             buffer_goal: 30.,
             segment_selectors: NextSegmentSelectors::new(0., 30.),
+            segment_action_tracker: SegmentActionTracker::new(),
             playlist_refresh_timers: vec![],
-            direct_media_probe: None,
+            ready_probe_segment: None,
         }
     }
 

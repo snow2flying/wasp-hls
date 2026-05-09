@@ -736,7 +736,7 @@ pub fn jsSendSegmentRequestError(
     url: &str,
     is_init: bool,
     time_info: Option<(f64, f64)>,
-    media_type: MediaType,
+    media_type: Option<MediaType>,
     reason: RequestErrorReason,
     status: Option<u32>,
 ) {
@@ -748,7 +748,7 @@ pub fn jsSendSegmentRequestError(
             url.as_ptr(),
             url.len() as u32,
             bool_to_raw(is_init),
-            media_type as u32,
+            opt_u32_to_raw(media_type.map(|m| m as u32)),
             opt_f64_to_raw_ptr(start),
             opt_f64_to_raw_ptr(duration),
             reason as u32,
@@ -851,14 +851,14 @@ pub fn jsSendMediaPlaylistParsingError(
 pub fn jsSendSegmentParsingError(
     fatal: bool,
     code: SegmentParsingErrorCode,
-    media_type: MediaType,
+    media_type: Option<MediaType>,
     message: &str,
 ) {
     unsafe {
         __js_func__send_segment_parsing_error(
             bool_to_raw(fatal),
             code as u32,
-            media_type as u32,
+            opt_u32_to_raw(media_type.map(|m| m as u32)),
             message.as_ptr(),
             message.len() as u32,
         )

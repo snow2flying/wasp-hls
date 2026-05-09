@@ -3,7 +3,6 @@ use crate::{
         formatters::format_range_for_js, jsAbortRequest, jsFetch, jsGetRandom, jsTimer, MediaType,
         RequestErrorReason, RequestId, TimerId, TimerReason,
     },
-    media_element::SegmentQualityContext,
     parser::{ByteRange, MediaSegmentInfo, SegmentTimeInfo},
     playlist_store::MediaPlaylistPermanentId,
     utils::url::Url,
@@ -15,6 +14,38 @@ mod configuration;
 pub(crate) use configuration::RequesterConfiguration;
 
 const PRIORITY_STEPS: [f64; 6] = [2., 4., 8., 12., 18., 25.];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RequestLaneTag {
+    Audio,
+    Video,
+    Probe,
+}
+
+impl RequestLaneTag {
+    fn from_media_type(media_type: MediaType) -> Self {
+        match media_type {
+            MediaType::Audio => Self::Audio,
+            MediaType::Video => Self::Video,
+        }
+    }
+
+    fn media_type(self) -> Option<MediaType> {
+        match self {
+            Self::Audio => Some(MediaType::Audio),
+            Self::Video => Some(MediaType::Video),
+            Self::Probe => None,
+        }
+    }
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Audio => "audio",
+            Self::Video => "video",
+            Self::Probe => "probe",
+        }
+    }
+}
 
 /// The `Requester` is the module performing HTTP(s) requests.
 ///
@@ -116,8 +147,8 @@ pub(crate) struct PlaylistRequestInfo {
 
 /// Metadata associated with a pending media segment request.
 pub(crate) struct WaitingSegmentInfo {
-    /// type of media of the segment requested
-    media_type: MediaType,
+    /// Requester-side lane in which that request is scheduled.
+    lane_tag: RequestLaneTag,
 
     /// Url on which the request is done
     url: Url,
@@ -126,22 +157,19 @@ pub(crate) struct WaitingSegmentInfo {
 
     /// Start and end of the requested segment.
     /// `None` if the segment contains no media data, such as initialization segments
+    ///
+    /// TODO: This is only used for priorization and logging here it seems, maybe a more
+    /// explicit priority-oriented value would be better?
     time_info: Option<SegmentTimeInfo>,
 
-    /// Information about the quality linked to that segment
-    context: SegmentQualityContext,
-}
-
-#[derive(Clone)]
-pub(crate) enum SegmentRequestContext {
-    Playback(SegmentQualityContext),
-    Probe,
+    /// Opaque identifier allowing the dispatcher layer to recover what should happen when the
+    /// request completes.
+    action_id: u32,
 }
 
 impl WaitingSegmentInfo {
-    /// Returns the type of media of the awaiting segment.
-    pub(crate) fn media_type(&self) -> MediaType {
-        self.media_type
+    pub(crate) fn lane_tag(&self) -> RequestLaneTag {
+        self.lane_tag
     }
 
     /// Returns a reference to the URL leading to this awaiting segment.
@@ -165,17 +193,16 @@ impl WaitingSegmentInfo {
         self.time_info.as_ref()
     }
 
-    /// "Context" allowing to detect and compare the quality of this segment with others.
-    pub(crate) fn context(&self) -> &SegmentQualityContext {
-        &self.context
+    pub(crate) fn action_id(&self) -> u32 {
+        self.action_id
     }
 }
 
 /// Trait unifying the Requester's segment which are either in a pending request or which are
 /// awaiting one.
 pub(crate) trait RequesterSegmentInfo {
-    /// Returns the type of media of the corresponding segment.
-    fn media_type(&self) -> MediaType;
+    /// Returns the requester-side lane to which the corresponding request belongs.
+    fn lane_tag(&self) -> RequestLaneTag;
     /// Returns the start time, in playlist time in seconds, at which the segment starts at.
     ///
     /// Should be `None` only for initialization segment.
@@ -193,8 +220,8 @@ pub(crate) trait RequesterSegmentInfo {
 }
 
 impl RequesterSegmentInfo for SegmentRequestInfo {
-    fn media_type(&self) -> MediaType {
-        self.media_type
+    fn lane_tag(&self) -> RequestLaneTag {
+        self.lane_tag
     }
 
     fn start_time(&self) -> Option<f64> {
@@ -211,8 +238,8 @@ impl RequesterSegmentInfo for SegmentRequestInfo {
 }
 
 impl RequesterSegmentInfo for WaitingSegmentInfo {
-    fn media_type(&self) -> MediaType {
-        self.media_type
+    fn lane_tag(&self) -> RequestLaneTag {
+        self.lane_tag
     }
 
     fn start_time(&self) -> Option<f64> {
@@ -233,10 +260,8 @@ pub(crate) struct SegmentRequestInfo {
     /// ID identifying the request on the JavaScript-side.
     request_id: RequestId,
 
-    context: SegmentRequestContext,
-
-    /// type of media of the segment requested
-    media_type: MediaType,
+    /// Requester-side lane in which that request is scheduled.
+    lane_tag: RequestLaneTag,
 
     /// Url on which the request is done
     url: Url,
@@ -246,6 +271,10 @@ pub(crate) struct SegmentRequestInfo {
     /// Start and end of the requested segment.
     /// `None` if the segment contains no media data, such as initialization segments
     time_info: Option<SegmentTimeInfo>,
+
+    /// Opaque identifier allowing the dispatcher layer to recover what should happen when the
+    /// request completes.
+    action_id: u32,
 
     /// Number of time the request has already been attempted.
     attempts_failed: u32,
@@ -259,8 +288,12 @@ pub(crate) struct SegmentRequestInfo {
 }
 
 impl SegmentRequestInfo {
-    pub(crate) fn media_type(&self) -> MediaType {
-        self.media_type
+    pub(crate) fn lane_tag(&self) -> RequestLaneTag {
+        self.lane_tag
+    }
+
+    pub(crate) fn media_type(&self) -> Option<MediaType> {
+        self.lane_tag.media_type()
     }
 
     pub(crate) fn url(&self) -> &Url {
@@ -275,27 +308,16 @@ impl SegmentRequestInfo {
         self.time_info.as_ref()
     }
 
+    pub(crate) fn action_id(&self) -> u32 {
+        self.action_id
+    }
+
     pub(crate) fn attempts_failed(&self) -> u32 {
         self.attempts_failed
     }
 
     pub(crate) fn is_waiting_for_retry(&self) -> bool {
         self.is_waiting_for_retry
-    }
-
-    pub(crate) fn context(&self) -> &SegmentRequestContext {
-        &self.context
-    }
-
-    pub(crate) fn deconstruct(
-        self,
-    ) -> (
-        Url,
-        Option<ByteRange>,
-        Option<SegmentTimeInfo>,
-        SegmentRequestContext,
-    ) {
-        (self.url, self.byte_range, self.time_info, self.context)
     }
 }
 
@@ -401,14 +423,14 @@ impl Requester {
         media_type: MediaType,
         url: Url,
         byte_range: Option<&ByteRange>,
-        context: SegmentQualityContext,
+        action_id: u32,
     ) {
         self.request_segment_now(
             &url,
             byte_range,
-            media_type,
+            RequestLaneTag::from_media_type(media_type),
             None,
-            SegmentRequestContext::Playback(context),
+            action_id,
         );
     }
 
@@ -423,11 +445,13 @@ impl Requester {
         url: &Url,
         byte_range: Option<&ByteRange>,
     ) -> bool {
-        self.pending_segment_requests.iter().any(|s| {
-            s.media_type == media_type && &s.url == url && s.byte_range.as_ref() == byte_range
-        }) || self.segment_waiting_queue.iter().any(|s| {
-            s.media_type == media_type && &s.url == url && s.byte_range.as_ref() == byte_range
-        })
+        let lane_tag = RequestLaneTag::from_media_type(media_type);
+        self.pending_segment_requests
+            .iter()
+            .any(|s| s.lane_tag == lane_tag && &s.url == url && s.byte_range.as_ref() == byte_range)
+            || self.segment_waiting_queue.iter().any(|s| {
+                s.lane_tag == lane_tag && &s.url == url && s.byte_range.as_ref() == byte_range
+            })
     }
 
     /// Fetch a segment in the right format through the given `url`.
@@ -444,7 +468,7 @@ impl Requester {
         &mut self,
         media_type: MediaType,
         seg: &MediaSegmentInfo,
-        context: SegmentQualityContext,
+        action_id: u32,
     ) {
         Logger::info(&format!(
             "Req: Asking to request {} segment: t: {}, d: {}",
@@ -452,23 +476,18 @@ impl Requester {
             seg.start(),
             seg.duration()
         ));
+        let lane_tag = RequestLaneTag::from_media_type(media_type);
         let time_info = Some(seg.time_info().clone());
         if self.can_start_request(seg.start()) {
-            self.request_segment_now(
-                seg.url(),
-                seg.byte_range(),
-                media_type,
-                time_info,
-                SegmentRequestContext::Playback(context),
-            )
+            self.request_segment_now(seg.url(), seg.byte_range(), lane_tag, time_info, action_id)
         } else {
             Logger::debug("Req: pushing segment request to queue");
             self.segment_waiting_queue.push(WaitingSegmentInfo {
-                media_type,
+                lane_tag,
                 url: seg.url().clone(),
                 byte_range: seg.byte_range().cloned(),
                 time_info,
-                context,
+                action_id,
             });
         }
     }
@@ -476,13 +495,13 @@ impl Requester {
     // TODO: Merge it with the others?
     pub(crate) fn request_segment_unlocked(
         &mut self,
-        media_type: MediaType,
+        lane_tag: RequestLaneTag,
         url: Url,
         byte_range: Option<&ByteRange>,
         time_info: Option<SegmentTimeInfo>,
-        context: SegmentRequestContext,
+        action_id: u32,
     ) {
-        self.request_segment_now(&url, byte_range, media_type, time_info, context);
+        self.request_segment_now(&url, byte_range, lane_tag, time_info, action_id);
     }
 
     pub(crate) fn lock_segment_requests(&mut self) -> bool {
@@ -497,13 +516,14 @@ impl Requester {
     }
 
     pub(crate) fn has_segment_request_pending(&self, media_type: MediaType) -> bool {
+        let lane_tag = RequestLaneTag::from_media_type(media_type);
         self.pending_segment_requests
             .iter()
-            .any(|r| r.media_type == media_type)
+            .any(|r| r.lane_tag == lane_tag)
             || self
                 .segment_waiting_queue
                 .iter()
-                .any(|r| r.media_type == media_type)
+                .any(|r| r.lane_tag == lane_tag)
     }
 
     pub(crate) fn on_pending_request_success(
@@ -643,25 +663,29 @@ impl Requester {
         }
     }
 
-    pub(crate) fn abort_segments_with_type(&mut self, media_type: MediaType) {
+    pub(crate) fn abort_segments_with_type(&mut self, media_type: MediaType) -> Vec<u32> {
+        let lane_tag = RequestLaneTag::from_media_type(media_type);
         let mut i = 0;
         let mut aborted_pending = false;
+        let mut aborted_actions = vec![];
         while i < self.pending_segment_requests.len() {
             let next_req = &self.pending_segment_requests[i];
-            if next_req.media_type() == media_type {
+            if next_req.lane_tag() == lane_tag {
                 log_segment_abort(next_req);
                 aborted_pending = true;
                 jsAbortRequest(next_req.request_id);
-                self.pending_segment_requests.remove(i);
+                let removed = self.pending_segment_requests.remove(i);
+                aborted_actions.push(removed.action_id);
             } else {
                 i += 1;
             }
         }
         while i < self.segment_waiting_queue.len() {
             let next_req = &self.segment_waiting_queue[i];
-            if next_req.media_type() == media_type {
+            if next_req.lane_tag() == lane_tag {
                 log_segment_abort(next_req);
-                self.segment_waiting_queue.remove(i);
+                let removed = self.segment_waiting_queue.remove(i);
+                aborted_actions.push(removed.action_id);
             } else {
                 i += 1;
             }
@@ -669,6 +693,7 @@ impl Requester {
         if aborted_pending {
             self.check_segment_queue();
         }
+        aborted_actions
     }
 
     fn end_pending_request(&mut self, request_id: RequestId) -> Option<FinishedRequestType> {
@@ -861,9 +886,9 @@ impl Requester {
                         self.request_segment_now(
                             &seg.url,
                             seg.byte_range.as_ref(),
-                            seg.media_type,
+                            seg.lane_tag,
                             seg.time_info,
-                            SegmentRequestContext::Playback(seg.context),
+                            seg.action_id,
                         );
                     },
                 );
@@ -873,9 +898,9 @@ impl Requester {
                 self.request_segment_now(
                     &seg.url,
                     seg.byte_range.as_ref(),
-                    seg.media_type,
+                    seg.lane_tag,
                     seg.time_info,
-                    SegmentRequestContext::Playback(seg.context),
+                    seg.action_id,
                 );
             }
         }
@@ -923,9 +948,9 @@ impl Requester {
         &mut self,
         url: &Url,
         byte_range: Option<&ByteRange>,
-        media_type: MediaType,
+        lane_tag: RequestLaneTag,
         time_info: Option<SegmentTimeInfo>,
-        context: SegmentRequestContext,
+        action_id: u32,
     ) {
         let (range_start, range_end) = format_range_for_js(byte_range);
         let url_ref = url.get_ref();
@@ -940,13 +965,13 @@ impl Requester {
         ));
         self.pending_segment_requests.push(SegmentRequestInfo {
             request_id,
-            media_type,
+            lane_tag,
             url: url.clone(),
             byte_range: byte_range.cloned(),
             time_info,
+            action_id,
             attempts_failed: 0,
             is_waiting_for_retry: false,
-            context,
         });
     }
 
@@ -967,11 +992,11 @@ impl Requester {
 
 fn log_segment_abort(seg: &impl RequesterSegmentInfo) {
     Logger::lazy_info(&|| {
-        let media_type = seg.media_type();
+        let lane_label = seg.lane_tag().label();
         if let (Some(start), Some(duration)) = (seg.start_time(), seg.duration()) {
-            format!("Req: Aborting {media_type} segment: t: {start}, d: {duration}")
+            format!("Req: Aborting {lane_label} segment: t: {start}, d: {duration}")
         } else {
-            format!("Req: Aborting {media_type} init segment")
+            format!("Req: Aborting {lane_label} init segment")
         }
     });
 }

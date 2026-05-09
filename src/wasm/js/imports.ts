@@ -408,7 +408,7 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         bindings.sendSegmentParsingError(
           fatal !== 0,
           code as SegmentParsingErrorCode,
-          mediaType as MediaType,
+          rawOptionalId(mediaType) as MediaType | undefined,
           readString(messagePtr, messageLen),
         );
       },

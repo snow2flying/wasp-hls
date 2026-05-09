@@ -144,7 +144,7 @@ export interface HostBindings {
   sendSegmentParsingError(
     fatal: boolean,
     code: SegmentParsingErrorCode,
-    mediaType: MediaType,
+    mediaType: MediaType | undefined,
     message: string,
   ): void;
   sendPushedSegmentError(

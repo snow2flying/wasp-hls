@@ -211,14 +211,18 @@ impl NextSegmentSelector {
         self.skipped_segments.clear();
     }
 
-    /// Calling this method allows to indicate that the initialization segment was requested and as
-    /// such, don't need to be returned anymore by this `NextSegmentSelector`.
-    pub(crate) fn validate_init(&mut self) {
-        if let InitializationSegmentSelectorStatus::Unvalidated(start) = self.init_status {
-            self.init_status = InitializationSegmentSelectorStatus::Validated(start);
-        } else {
-            Logger::warn("Validation of an initialization segment, but none were returned.");
+    /// Calling this method allows to indicate that the initialization segment identified by `id`
+    /// was requested and as such, doesn't need to be returned anymore by this
+    /// `NextSegmentSelector`.
+    pub(crate) fn validate_init(&mut self, id: f64) {
+        if let InitializationSegmentSelectorStatus::Unvalidated(expected_id) = self.init_status {
+            if expected_id != id {
+                Logger::warn(&format!(
+                    "Validation of an initialization segment with unexpected id. Expected {expected_id}, got {id}."
+                ));
+            }
         }
+        self.init_status = InitializationSegmentSelectorStatus::Validated(id);
     }
 
     /// Calling this method allows to indicate that the media segment ending at `pos` was requested
@@ -242,12 +246,19 @@ impl NextSegmentSelector {
         inventory: &[BufferedChunk],
     ) -> NeededSegmentInfo<'a> {
         let new_media_id = context.media_id();
-        let has_quality_changed = Some(new_media_id) != self.last_media_id;
+        let previous_media_id = self.last_media_id;
+        let has_quality_changed =
+            previous_media_id.is_some() && previous_media_id != Some(new_media_id);
+        let should_recompute_starting_position = previous_media_id != Some(new_media_id);
         self.last_media_id = Some(new_media_id);
 
-        if has_quality_changed {
-            Logger::debug("Selector: Quality changed, recomputing starting position");
-            self.init_status = InitializationSegmentSelectorStatus::Unchecked;
+        if should_recompute_starting_position {
+            if has_quality_changed {
+                Logger::debug("Selector: Quality changed, recomputing starting position");
+                self.init_status = InitializationSegmentSelectorStatus::Unchecked;
+            } else {
+                Logger::debug("Selector: Initial media selection, computing starting position");
+            }
             self.segment_cursor.move_cursor(self.base_pos);
             self.skipped_segments.clear();
             let start_pos = self.recompute_starting_position(context, inventory);

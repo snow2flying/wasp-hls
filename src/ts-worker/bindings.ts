@@ -81,7 +81,7 @@ export function sendSegmentRequestError(
   url: string,
   isInit: boolean,
   timeInfo: [number, number] | undefined,
-  mediaType: MediaType,
+  mediaType: MediaType | undefined,
   reason: RequestErrorReason,
   status: number | undefined,
 ): void {
@@ -343,7 +343,7 @@ export function sendSourceBufferCreationError(
 export function sendSegmentParsingError(
   fatal: boolean,
   code: SegmentParsingErrorCode,
-  mediaType: MediaType,
+  mediaType: MediaType | undefined,
   message: string,
 ): void {
   const contentId = playerInstance.getContentInfo()?.contentId;

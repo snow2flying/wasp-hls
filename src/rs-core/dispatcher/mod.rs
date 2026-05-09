@@ -10,6 +10,9 @@ use crate::{
 mod api;
 mod core;
 mod event_listeners;
+mod segment_action_tracker;
+
+use segment_action_tracker::SegmentActionTracker;
 
 pub(crate) use crate::bindings::{MediaSourceReadyState, PlaybackTickReason, StartingPositionType};
 pub(crate) use event_listeners::{JsMemoryBlob, JsTimeRanges, MediaObservation};
@@ -50,19 +53,20 @@ pub struct Dispatcher {
     /// etc.)
     last_position: f64,
 
+    /// Abstraction allowing to know which is the next segment to request.
     segment_selectors: NextSegmentSelectors,
 
+    /// Current set-up timers to notify about a needed playlist refresh, associated to the playlist
+    /// that needs to be refreshed.
     playlist_refresh_timers: Vec<(TimerId, PlaylistFileType)>,
 
-    /// When/if loading a MediaPlaylist directly (instead of going through a multivariant
-    /// playlist), we might not have enough information in the playlist itself to start
-    /// setting up buffers and starting the regular playback loop.
-    ///
-    /// Instead, we have to first load a wanted segment, to be able to read that needed
-    /// information from its container first.
-    ///
-    /// This property stores which state of this "probe" process we are in now.
-    direct_media_probe: Option<DirectMediaProbeState>,
+    /// Stores data on pending operations linked to init or media segments.
+    /// Allowing to retreive them once finished.
+    segment_action_tracker: SegmentActionTracker,
+
+    /// A startup probe segment that has already been fetched and inspected and now only waits for
+    /// the regular buffering pipeline to be ready before being pushed.
+    ready_probe_segment: Option<ReadyProbeSegment>,
 }
 
 /// Identify the playback-related state the `Dispatcher` is in.
@@ -107,20 +111,8 @@ impl StartingPosition {
     }
 }
 
-/// When/if loading a MediaPlaylist directly (instead of going through a multivariant
-/// playlist), we might not have enough information in the playlist itself on a media's
-/// associated codecs and other similar important properties.
-///
-/// In that case, we have to fetch that data from a segment instead.
-///
-/// `DirectMediaProbeState` stores the state of this process
 #[derive(Debug)]
-enum DirectMediaProbeState {
-    /// We're in the process of loading that segment
-    Pending(ProbeSegmentMetadata),
-    /// That initial segment has been fetched
-    Ready {
-        request: ProbeSegmentMetadata,
-        data: event_listeners::JsMemoryBlob,
-    },
+struct ReadyProbeSegment {
+    request: ProbeSegmentMetadata,
+    data: event_listeners::JsMemoryBlob,
 }

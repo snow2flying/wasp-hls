@@ -27,7 +27,7 @@ pub(crate) struct ProbeSegmentMetadata {
 #[derive(Clone, Debug)]
 pub(crate) enum ProbeSegmentContext {
     /// This probe segment is a full valid initialization segment
-    Init,
+    Init { id: f64 },
     /// This probe segment is a full valid Media segment
     Media {
         /// Timing information linked to that media segment
@@ -397,7 +397,9 @@ impl PlaylistStore {
             Some(ProbeSegmentMetadata {
                 url: init_segment.url().clone(),
                 byte_range: init_segment.byte_range().cloned(),
-                context: ProbeSegmentContext::Init,
+                context: ProbeSegmentContext::Init {
+                    id: init_segment.id(),
+                },
             })
         } else {
             Some(ProbeSegmentMetadata {

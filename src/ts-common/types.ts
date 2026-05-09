@@ -314,7 +314,7 @@ export interface SegmentRequestErrorWorkerInfo {
     isInit: boolean;
     start?: number | undefined;
     duration?: number | undefined;
-    mediaType: MediaType;
+    mediaType: MediaType | undefined;
     byteRange?: [number, number] | undefined;
     reason: RequestErrorReason;
     status?: number | undefined;

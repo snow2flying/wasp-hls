@@ -109,13 +109,16 @@ export interface WaspSegmentRequestErrorArgument {
   isInit: boolean;
   start?: number | undefined;
   duration?: number | undefined;
-  mediaType: MediaType;
+  mediaType: MediaType | undefined;
   byteRange?: [number, number] | undefined;
   reason: RequestErrorReason;
   status?: number | undefined;
 }
 
-function mediaTypeAsArticle(mediaType: MediaType): string {
+function mediaTypeAsArticle(mediaType: MediaType | undefined): string {
+  if (mediaType === undefined) {
+    return "A probe";
+  }
   switch (mediaType) {
     case MediaType.Audio:
       return "An audio";
