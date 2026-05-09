@@ -2,8 +2,15 @@
 
 ## Unreleased
 
+### Changes
+
+- The too specific `MultivariantPlaylistMediaTagMissingType`, `MultivariantPlaylistMediaTagMissingName` and `MultivariantPlaylistMediaTagMissingGroupId` error codes have been collapsed into a new `MultivariantPlaylistMissingRequiredAttribute` error code
+
 ### Features
 
+- Add parsing of `#EXT-X-DEFINE` tags
+- Add `MultivariantPlaylistVariableDefinitionError` and `MediaPlaylistVariableDefinitionError` error codes for when an `#EXT-X-DEFINE` tag or usage is not compliant to the HLS specification respectively on the MultiVariant Playlist or the Media Playlist.
+- Add `SourceBufferEmptyMimeType`, `SourceBufferMediaSourceIsClosed`, `SourceBufferNoMediaSourceAttached` and `SourceBufferQuotaExceededError` error codes on a `WaspSourceBufferCreationError` error type.
 - Add optional `bitDepth` and `sampleRate` properties to `getAudioTrackList`, `getCurrentAudioTrack`methods plus `audioTrackUpdate` and `audioTrackListUpdate` events reflecting respectively the bit depth of audio samples and the audio audio sample rate for the corresponding audio tracks if they're invariant for all renditions of that track.
 - Add optional `bitDephs` and `sampleRates` array properties to `getAudioTrackList`, `getCurrentAudioTrack`methods plus `audioTrackUpdate` and `audioTrackListUpdate` events listing respectively the known various bit depts and rates of audio samples in all renditions of that track.
 - Add `characteristics` property to `getAudioTrackList`, `getCurrentAudioTrack`methods plus `audioTrackUpdate` and `audioTrackListUpdate` events reflecting the `CHARACTERISTICS` of the original playlist, e.g. for audio-description audio tracks.
@@ -12,6 +19,7 @@
 
 ### Bug fixes
 
+- `SourceBufferAlreadyCreatedWithSameType` mistakenly also regrouped other kinds of SourceBuffer-related bug than what's documented. This is now fixed.
 - Better handle edge speed settings: negative speeds, non-finite speeds, `NaN` speed
 
 ### Other

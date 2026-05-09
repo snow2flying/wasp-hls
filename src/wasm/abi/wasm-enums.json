@@ -187,36 +187,25 @@
             "A value in the Multivariant Playlist was in an invalid format."
           ]
         },
-        "MediaTagMissingType": {
+        "MissingRequiredAttribute": {
           "value": 6,
           "doc": [
-            "An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing",
-            "an HLS variant, had no `TYPE` attribute associated to it. It should be",
-            "mandatory."
+            "A mandatory attribute was missing from a tag in the Multivariant Playlist."
           ]
         },
-        "MediaTagMissingName": {
+        "VariableDefinitionError": {
           "value": 7,
           "doc": [
-            "An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing",
-            "an HLS variant, had no `NAME` attribute associated to it. It should be",
-            "mandatory."
-          ]
-        },
-        "MediaTagMissingGroupId": {
-          "value": 8,
-          "doc": [
-            "An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing",
-            "an HLS variant, had no `GROUP-ID` attribute associated to it. It should be",
-            "mandatory."
+            "An `EXT-X-DEFINE` variable definition or substitution was invalid in the",
+            "Multivariant Playlist."
           ]
         },
         "UnableToReadLine": {
-          "value": 9,
+          "value": 8,
           "doc": ["A line could not be read."]
         },
         "Unknown": {
-          "value": 10,
+          "value": 9,
           "doc": ["Another, uncategorized, error arised."]
         }
       }
@@ -259,8 +248,15 @@
             "was not in the right format."
           ]
         },
-        "Unknown": {
+        "VariableDefinitionError": {
           "value": 5,
+          "doc": [
+            "An `EXT-X-DEFINE` variable definition or substitution was invalid in the",
+            "Media Playlist."
+          ]
+        },
+        "Unknown": {
+          "value": 6,
           "doc": ["Another, uncategorized, error arised."]
         }
       }

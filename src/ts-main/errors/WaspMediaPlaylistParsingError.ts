@@ -20,6 +20,7 @@ export default class WaspMediaPlaylistParsingError extends Error {
     | "MediaPlaylistMissingTargetDuration"
     | "MediaPlaylistUriWithoutExtInf"
     | "MediaPlaylistUnparsableByteRange"
+    | "MediaPlaylistVariableDefinitionError"
     | "MediaPlaylistOtherParsingError";
 
   /**
@@ -69,6 +70,9 @@ export default class WaspMediaPlaylistParsingError extends Error {
         break;
       case MediaPlaylistParsingErrorCode.UriWithoutExtInf:
         this.code = "MediaPlaylistUriWithoutExtInf";
+        break;
+      case MediaPlaylistParsingErrorCode.VariableDefinitionError:
+        this.code = "MediaPlaylistVariableDefinitionError";
         break;
       case MediaPlaylistParsingErrorCode.Unknown:
         this.code = "MediaPlaylistOtherParsingError";

@@ -1,20 +1,25 @@
+use super::{
+    multi_variant_playlist::MediaPlaylistContext,
+    value_parsers::{
+        parse_byte_range, parse_decimal_floating_point, parse_decimal_integer,
+        parse_start_attribute, ByteRange,
+    },
+    variable_substitution::VariableDefinition,
+};
 use crate::{
     bindings::{MediaType, PlaylistNature},
+    parser::{
+        attribute_list::{parse_enumerated_string, AttributeListIter},
+        value_parsers::{parse_iso_8601_date, StartAttribute},
+        variable_substitution::{
+            parse_define_tag, parse_substituted_quoted_string, VariableDefinitionError,
+            VariableStore,
+        },
+    },
     utils::url::Url,
     Logger,
 };
 use std::{error, fmt, io::BufRead};
-
-use super::{
-    multi_variant_playlist::MediaPlaylistContext,
-    utils::{
-        parse_byte_range, parse_decimal_floating_point, parse_decimal_integer,
-        parse_enumerated_string, parse_iso_8601_date, parse_quoted_string, parse_start_attribute,
-        StartAttribute,
-    },
-};
-
-pub use super::utils::ByteRange;
 
 /// Object storing the time information on a single media segment.
 #[derive(Clone, Debug)]
@@ -170,12 +175,13 @@ impl MediaSegmentInfo {
 ///
 /// See display implementation for more information on its variants.
 #[derive(Debug)]
-pub enum MediaPlaylistParsingError {
+pub(crate) enum MediaPlaylistParsingError {
     UnparsableExtInf,
     UnparsableByteRange,
     UriMissingInMap,
     MissingTargetDuration,
     UriWithoutExtInf,
+    VariableDefinition(VariableDefinitionError),
 }
 
 impl fmt::Display for MediaPlaylistParsingError {
@@ -196,11 +202,24 @@ impl fmt::Display for MediaPlaylistParsingError {
             MediaPlaylistParsingError::UnparsableByteRange => {
                 write!(f, "One of the uri had an Unparsable BYTERANGE")
             }
+            MediaPlaylistParsingError::VariableDefinition(err) => {
+                write!(
+                    f,
+                    "Invalid EXT-X-DEFINE usage in the Media Playlist: {:?}",
+                    err
+                )
+            }
         }
     }
 }
 
 impl error::Error for MediaPlaylistParsingError {}
+
+impl From<VariableDefinitionError> for MediaPlaylistParsingError {
+    fn from(err: VariableDefinitionError) -> MediaPlaylistParsingError {
+        MediaPlaylistParsingError::VariableDefinition(err)
+    }
+}
 
 /// Structure representing the concept of the `Media Playlist` in HLS.
 ///
@@ -270,6 +289,7 @@ impl MediaPlaylist {
         let mut next_segment_duration: Option<f64> = None;
         let mut current_byte: Option<usize> = None;
         let mut next_segment_byte_range: Option<ByteRange> = None;
+        let mut variable_store = VariableStore::from_url(&url);
 
         let lines = playlist.lines();
         for line in lines {
@@ -283,6 +303,18 @@ impl MediaPlaylist {
                 };
 
                 match &str_line[4..colon_idx] {
+                    "-X-DEFINE" => match parse_define_tag(&str_line) {
+                        Ok(VariableDefinition::Name { name, value }) => {
+                            variable_store.define(name, value)?
+                        }
+                        Ok(VariableDefinition::Import { name }) => {
+                            variable_store.import(&name, context.multivariant_variables())?
+                        }
+                        Ok(VariableDefinition::QueryParam { name }) => {
+                            variable_store.define_query_param(&name)?
+                        }
+                        Err(err) => return Err(err.into()),
+                    },
                     "-X-VERSION" => match parse_decimal_integer(&str_line, colon_idx + 1).0 {
                         Ok(v) if v <= (u32::MAX as u64) => version = Some(v as u32),
                         _ => Logger::warn("Unparsable VERSION value"),
@@ -344,50 +376,41 @@ impl MediaPlaylist {
                     "-X-MAP" => {
                         let mut map_info_url: Option<Url> = None;
                         let mut map_info_byte_range: Option<ByteRange> = None;
-                        let mut base_offset = colon_idx + 1;
-                        loop {
-                            if base_offset >= str_line.len() {
-                                break;
-                            }
-                            match str_line[base_offset..].find('=') {
-                                None => {
-                                    Logger::warn("Attribute Name not followed by equal sign");
-                                    break;
+                        for item in AttributeListIter::new(&str_line, colon_idx + 1) {
+                            match item.name {
+                                "URI" => {
+                                    let val = parse_substituted_quoted_string(
+                                        &str_line,
+                                        item.value_start_offset,
+                                        &variable_store,
+                                    )?;
+                                    let init_url = Url::new(val.into_owned());
+                                    let init_url = if init_url.is_absolute() {
+                                        init_url
+                                    } else {
+                                        Url::from_relative(playlist_base_url, init_url)
+                                    };
+                                    map_info_url = Some(init_url);
                                 }
-                                Some(idx) => match &str_line[base_offset..base_offset + idx] {
-                                    "URI" => {
-                                        let (parsed, end_offset) =
-                                            parse_quoted_string(&str_line, base_offset + idx + 1);
-                                        base_offset = end_offset + 1;
-                                        if let Ok(val) = parsed {
-                                            let init_url = Url::new(val.to_owned());
-                                            let init_url = if init_url.is_absolute() {
-                                                init_url
-                                            } else {
-                                                Url::from_relative(playlist_base_url, init_url)
-                                            };
-                                            map_info_url = Some(init_url);
+                                "BYTERANGE" => {
+                                    let val = parse_substituted_quoted_string(
+                                        &str_line,
+                                        item.value_start_offset,
+                                        &variable_store,
+                                    )?;
+                                    match parse_byte_range(&val, 0, None) {
+                                        Some(br) => {
+                                            current_byte = Some(br.last_byte + 1);
+                                            map_info_byte_range = Some(br);
                                         }
-                                    }
-
-                                    "BYTERANGE" => {
-                                        let (parsed, end_offset) =
-                                            parse_quoted_string(&str_line, base_offset + idx + 1);
-                                        base_offset = end_offset + 1;
-                                        if let Ok(val) = parsed {
-                                            match parse_byte_range(val, 0, None) {
-                                                Some(br) => {
-                                                    current_byte = Some(br.last_byte + 1);
-                                                    map_info_byte_range = Some(br);
-                                                }
-                                                _ => return Err(
-                                                    MediaPlaylistParsingError::UnparsableByteRange,
-                                                ),
-                                            };
+                                        _ => {
+                                            return Err(
+                                                MediaPlaylistParsingError::UnparsableByteRange,
+                                            );
                                         }
-                                    }
-                                    _ => {}
-                                },
+                                    };
+                                }
+                                _ => {}
                             }
                         }
                         if let Some(url) = map_info_url {
@@ -412,7 +435,8 @@ impl MediaPlaylist {
                 }
             } else {
                 // URI
-                let seg_url = Url::new(str_line);
+                let seg_line = variable_store.substitute(&str_line)?;
+                let seg_url = Url::new(seg_line.into_owned());
                 let seg_url = if seg_url.is_absolute() {
                     seg_url
                 } else {

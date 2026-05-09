@@ -852,14 +852,10 @@ impl From<MultivariantPlaylistParsingError> for MultivariantPlaylistParsingError
             MultivariantPlaylistParsingError::InvalidDecimalInteger => {
                 MultivariantPlaylistParsingErrorCode::InvalidValue
             }
-            MultivariantPlaylistParsingError::MediaTagMissingType => {
-                MultivariantPlaylistParsingErrorCode::MediaTagMissingType
-            }
-            MultivariantPlaylistParsingError::MediaTagMissingName => {
-                MultivariantPlaylistParsingErrorCode::MediaTagMissingName
-            }
-            MultivariantPlaylistParsingError::MediaTagMissingGroupId => {
-                MultivariantPlaylistParsingErrorCode::MediaTagMissingGroupId
+            MultivariantPlaylistParsingError::MediaTagMissingType
+            | MultivariantPlaylistParsingError::MediaTagMissingName
+            | MultivariantPlaylistParsingError::MediaTagMissingGroupId => {
+                MultivariantPlaylistParsingErrorCode::MissingRequiredAttribute
             }
             MultivariantPlaylistParsingError::VariantMissingBandwidth => {
                 MultivariantPlaylistParsingErrorCode::VariantMissingBandwidth
@@ -871,6 +867,9 @@ impl From<MultivariantPlaylistParsingError> for MultivariantPlaylistParsingError
             | MultivariantPlaylistParsingError::UnableToReadLine
             | MultivariantPlaylistParsingError::Unknown => {
                 MultivariantPlaylistParsingErrorCode::Unknown
+            }
+            MultivariantPlaylistParsingError::VariableDefinition(_) => {
+                MultivariantPlaylistParsingErrorCode::VariableDefinitionError
             }
         }
     }
@@ -894,6 +893,9 @@ impl From<MediaPlaylistUpdateError> for MediaPlaylistParsingErrorCode {
             MediaPlaylistUpdateError::ParsingError(MediaPlaylistParsingError::UriWithoutExtInf) => {
                 MediaPlaylistParsingErrorCode::UriWithoutExtInf
             }
+            MediaPlaylistUpdateError::ParsingError(
+                MediaPlaylistParsingError::VariableDefinition(_),
+            ) => MediaPlaylistParsingErrorCode::VariableDefinitionError,
             MediaPlaylistUpdateError::NotFound => MediaPlaylistParsingErrorCode::Unknown,
         }
     }

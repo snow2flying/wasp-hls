@@ -1,6 +1,8 @@
-use std::num::{ParseFloatError, ParseIntError};
-
+use super::attribute_list::{
+    find_attribute_end, parse_enumerated_string, skip_attribute_list_value,
+};
 use crate::Logger;
+use std::num::{ParseFloatError, ParseIntError};
 
 /// Parse decimal integer value as defined by the HLS specification:
 /// From the `value_start_offset` (which is the byte offset in `line` at which
@@ -14,89 +16,6 @@ pub(super) fn parse_decimal_integer(
     match line[value_start_offset..end].parse::<u64>() {
         Ok(val) => (Ok(val), end),
         Err(x) => (Err(x), end),
-    }
-}
-
-/// Parse enumerated string value as defined by the HLS specification:
-/// From the `value_start_offset` (which is the byte offset in `line` at which
-/// the value starts), to either the next encountered comma, or the end of `line`,
-/// whichever comes sooner.
-///
-/// More than parsing enumerated string values, this function actually just parse
-/// a string without quotes. As such it can be used for any value respecting that
-/// criteria.
-pub(super) fn parse_enumerated_string(line: &str, value_start_offset: usize) -> (&str, usize) {
-    let end = find_attribute_end(line, value_start_offset);
-    (line[value_start_offset..end].as_ref(), end)
-}
-
-pub(super) enum QuotedStringParsingError {
-    NoStartingQuote,
-    NoEndingQuote,
-}
-
-#[inline]
-pub(super) fn find_attribute_end(line: &str, offset: usize) -> usize {
-    line[offset..].find(',').map_or(line.len(), |x| x + offset)
-}
-
-pub(super) fn parse_quoted_string(
-    line: &str,
-    value_start_offset: usize,
-) -> (Result<&str, QuotedStringParsingError>, usize) {
-    if &line[value_start_offset..value_start_offset + 1] != "\"" {
-        let end = find_attribute_end(line, value_start_offset);
-        (Err(QuotedStringParsingError::NoStartingQuote), end)
-    } else {
-        match line[value_start_offset + 1..].find('"') {
-            Some(relative_end_quote_idx) => {
-                let end_quote_idx = value_start_offset + 1 + relative_end_quote_idx;
-                let end = find_attribute_end(line, end_quote_idx + 1);
-                (Ok(&line[value_start_offset + 1..end_quote_idx]), end)
-            }
-            None => {
-                let end = find_attribute_end(line, value_start_offset + 1);
-                (Err(QuotedStringParsingError::NoEndingQuote), end)
-            }
-        }
-    }
-}
-
-pub(super) fn parse_comma_separated_list(
-    line: &str,
-    value_start_offset: usize,
-) -> (Result<Vec<&str>, QuotedStringParsingError>, usize) {
-    let parsed = parse_quoted_string(line, value_start_offset);
-    let splitted = parsed.0.map(|s| s.split(',').collect());
-    (splitted, parsed.1)
-}
-
-pub(super) fn skip_attribute_list_value(line: &str, value_start_offset: usize) -> usize {
-    if line.len() <= value_start_offset {
-        return value_start_offset;
-    }
-
-    // Check if the attribute list value is a quoted one
-    if &line[value_start_offset..value_start_offset + 1] == "\"" {
-        match line[value_start_offset + 1..].find('\"') {
-            Some(relative_end_quote_idx) => {
-                let end_quote_idx = value_start_offset + relative_end_quote_idx;
-
-                // Technically, a comma (',') character should always be found
-                // here if we're not at the end of the attribute list.
-                // Still, check where it is for resilience
-                match line[end_quote_idx + 1..].find(',') {
-                    Some(idx) => end_quote_idx + idx + 1,
-                    None => line.len(),
-                }
-            }
-            None => line.len(),
-        }
-    } else {
-        match line[value_start_offset..].find(',') {
-            Some(idx) => value_start_offset + idx,
-            None => line.len(),
-        }
     }
 }
 
@@ -341,6 +260,82 @@ pub fn parse_byte_range(
         first_byte: range_base,
         last_byte: range_base + range_size - 1,
     })
+}
+
+/// Value of the "EXT-X-START" tag as specified by the HLS specification.
+///
+/// Indicates at which position a player should start this Media Playlist
+#[derive(Clone, Debug)]
+pub(crate) struct StartAttribute {
+    /// A positive number indicates a time offset in seconds from the beginning of the Playlist.
+    /// A negative number indicates a negative time offset in seconds from the end of the last
+    /// media segment in the Playlist.
+    pub(super) time_offset: f64,
+    /// If `true`, we should start playing at exactly the calculated time offset.
+    ///
+    /// If `false`, we should start playing at the beginning of the segment which includes the
+    /// calculated time offset.
+    pub(super) precise: bool,
+}
+
+pub(super) enum StartAttributeParsingError {
+    NoTimeOffset,
+    TimeOffsetParsingError(ParseFloatError),
+    InvalidPreciseValue,
+}
+
+pub(super) fn parse_start_attribute(
+    start_line: &str,
+) -> Result<StartAttribute, StartAttributeParsingError> {
+    let mut time_offset: Option<f64> = None;
+    let mut precise = false;
+
+    let mut offset = "#EXT-X-START:".len();
+    loop {
+        if offset >= start_line.len() {
+            break;
+        }
+        match start_line[offset..].find('=') {
+            None => {
+                Logger::warn("Attribute Name not followed by equal sign");
+                break;
+            }
+            Some(idx) => match &start_line[offset..offset + idx] {
+                "PRECISE" => {
+                    let (parsed, end_offset) =
+                        parse_enumerated_string(start_line, offset + idx + 1);
+                    offset = end_offset + 1;
+                    match parsed {
+                        "YES" => precise = true,
+                        "NO" => precise = false,
+                        _ => {
+                            return Err(StartAttributeParsingError::InvalidPreciseValue);
+                        }
+                    };
+                }
+                "TIME-OFFSET" => {
+                    let (parsed, end_offset) =
+                        parse_decimal_floating_point(start_line, offset + idx + 1);
+                    offset = end_offset + 1;
+                    match parsed {
+                        Err(x) => {
+                            return Err(StartAttributeParsingError::TimeOffsetParsingError(x));
+                        }
+                        Ok(x) => time_offset = Some(x),
+                    }
+                }
+                _ => offset = skip_attribute_list_value(start_line, offset + idx + 1) + 1,
+            },
+        }
+    }
+    if let Some(time_offset) = time_offset {
+        Ok(StartAttribute {
+            time_offset,
+            precise,
+        })
+    } else {
+        Err(StartAttributeParsingError::NoTimeOffset)
+    }
 }
 
 fn read_integer_until(value: &[u8], base_offset: usize, ending_char: u8) -> (Option<u64>, usize) {
@@ -633,81 +628,5 @@ mod tests {
         assert_eq!(parse_iso_8601_date("1968-03-2916:01:21.050Z", 0), None);
         assert_eq!(parse_iso_8601_date("1968-02-29R20:54:56.810Z", 0), None);
         assert_eq!(parse_iso_8601_date("1968-0229T16:01:21.050Z", 0), None);
-    }
-}
-
-/// Value of the "EXT-X-START" tag as specified by the HLS specification.
-///
-/// Indicates at which position a player should start this Media Playlist
-#[derive(Clone, Debug)]
-pub(crate) struct StartAttribute {
-    /// A positive number indicates a time offset in seconds from the beginning of the Playlist.
-    /// A negative number indicates a negative time offset in seconds from the end of the last
-    /// media segment in the Playlist.
-    pub(super) time_offset: f64,
-    /// If `true`, we should start playing at exactly the calculated time offset.
-    ///
-    /// If `false`, we should start playing at the beginning of the segment which includes the
-    /// calculated time offset.
-    pub(super) precise: bool,
-}
-
-pub(super) enum StartAttributeParsingError {
-    NoTimeOffset,
-    TimeOffsetParsingError(ParseFloatError),
-    InvalidPreciseValue,
-}
-
-pub(super) fn parse_start_attribute(
-    start_line: &str,
-) -> Result<StartAttribute, StartAttributeParsingError> {
-    let mut time_offset: Option<f64> = None;
-    let mut precise = false;
-
-    let mut offset = "#EXT-X-START:".len();
-    loop {
-        if offset >= start_line.len() {
-            break;
-        }
-        match start_line[offset..].find('=') {
-            None => {
-                Logger::warn("Attribute Name not followed by equal sign");
-                break;
-            }
-            Some(idx) => match &start_line[offset..offset + idx] {
-                "PRECISE" => {
-                    let (parsed, end_offset) =
-                        parse_enumerated_string(start_line, offset + idx + 1);
-                    offset = end_offset + 1;
-                    match parsed {
-                        "YES" => precise = true,
-                        "NO" => precise = false,
-                        _ => {
-                            return Err(StartAttributeParsingError::InvalidPreciseValue);
-                        }
-                    };
-                }
-                "TIME-OFFSET" => {
-                    let (parsed, end_offset) =
-                        parse_decimal_floating_point(start_line, offset + idx + 1);
-                    offset = end_offset + 1;
-                    match parsed {
-                        Err(x) => {
-                            return Err(StartAttributeParsingError::TimeOffsetParsingError(x));
-                        }
-                        Ok(x) => time_offset = Some(x),
-                    }
-                }
-                _ => offset = skip_attribute_list_value(start_line, offset + idx + 1) + 1,
-            },
-        }
-    }
-    if let Some(time_offset) = time_offset {
-        Ok(StartAttribute {
-            time_offset,
-            precise,
-        })
-    } else {
-        Err(StartAttributeParsingError::NoTimeOffset)
     }
 }

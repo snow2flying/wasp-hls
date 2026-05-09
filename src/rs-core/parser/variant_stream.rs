@@ -1,14 +1,22 @@
-use std::io::BufRead;
-
 use super::{
+    attribute_list::AttributeListIter,
     media_playlist::{MediaPlaylist, MediaPlaylistParsingError},
     multi_variant_playlist::MediaPlaylistContext,
-    utils::{
-        parse_comma_separated_list, parse_decimal_floating_point, parse_decimal_integer,
-        parse_enumerated_string, parse_quoted_string, parse_resolution, skip_attribute_list_value,
-    },
+    variable_substitution::VariableStore,
 };
-use crate::{bindings::MediaType, utils::url::Url, Logger};
+use crate::{
+    bindings::MediaType,
+    parser::{
+        attribute_list::parse_enumerated_string,
+        value_parsers::{parse_decimal_floating_point, parse_decimal_integer, parse_resolution},
+        variable_substitution::{
+            parse_substituted_comma_separated_list, parse_substituted_quoted_string,
+        },
+    },
+    utils::url::Url,
+    Logger,
+};
+use std::io::BufRead;
 
 /// Stucture representing the HLS concept of a "variant stream".
 #[derive(Debug)]
@@ -315,6 +323,7 @@ impl VariantStream {
         url: Url,
         base_uri: &str,
         id: u32,
+        variable_store: &VariableStore,
     ) -> Result<Self, VariantParsingError> {
         let mut bandwidth: Option<u64> = None;
         let mut resolution: Option<VideoResolution> = None;
@@ -332,178 +341,163 @@ impl VariantStream {
         let mut closed_captions: Option<String> = None;
         let mut pathway_id: Option<String> = None;
 
-        let mut offset = "#EXT-X-STREAM-INF:".len();
-        loop {
-            if offset >= variant_line.len() {
-                break;
-            }
+        for item in AttributeListIter::new(variant_line, "#EXT-X-STREAM-INF:".len()) {
             // #EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=746000,BANDWIDTH=886211,RESOLUTION=512x288,FRAME-RATE=25.000,CODECS="avc1.4D4015,mp4a.40.2",CLOSED-CAPTIONS=NONE,AUDIO="AUDIO_96000"
-            match variant_line[offset..].find('=') {
-                None => {
-                    Logger::warn("Attribute Name not followed by equal sign");
-                    break;
+            match item.name {
+                "AVERAGE-BANDWIDTH" => {
+                    if let (Ok(val), _) =
+                        parse_decimal_integer(variant_line, item.value_start_offset)
+                    {
+                        average_bandwitdh = Some(val);
+                    } else {
+                        Logger::warn("Unparsable AVERAGE-BANDWIDTH value");
+                    }
                 }
-                Some(idx) => match &variant_line[offset..offset + idx] {
-                    "AVERAGE-BANDWIDTH" => {
-                        let (parsed, end_offset) =
-                            parse_decimal_integer(variant_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            average_bandwitdh = Some(val);
-                        } else {
-                            Logger::warn("Unparsable AVERAGE-BANDWIDTH value");
-                        }
+                "BANDWIDTH" => {
+                    if let (Ok(val), _) =
+                        parse_decimal_integer(variant_line, item.value_start_offset)
+                    {
+                        bandwidth = Some(val);
+                    } else {
+                        Logger::warn("Unparsable BANDWIDTH value");
                     }
-                    "BANDWIDTH" => {
-                        let (parsed, end_offset) =
-                            parse_decimal_integer(variant_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            bandwidth = Some(val);
-                        } else {
-                            Logger::warn("Unparsable BANDWIDTH value");
-                        }
+                }
+
+                "CODECS" => {
+                    let parsed_codecs = parse_substituted_comma_separated_list(
+                        variant_line,
+                        item.value_start_offset,
+                        variable_store,
+                    )
+                    .map_err(|_| VariantParsingError::InvalidDecimalInteger)?;
+                    codecs = parsed_codecs
+                        .into_iter()
+                        .map(|c| (guess_media_type_from_codec(&c), c.into_owned()))
+                        .collect();
+                }
+                "FRAME-RATE" => {
+                    if let (Ok(val), _) =
+                        parse_decimal_floating_point(variant_line, item.value_start_offset)
+                    {
+                        frame_rate = Some(val);
+                    } else {
+                        Logger::warn("Unparsable FRAME-RATE value");
                     }
-                    "CODECS" => {
-                        let (parsed, end_offset) =
-                            parse_comma_separated_list(variant_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            codecs = val
-                                .iter()
-                                .map(|c| (guess_media_type_from_codec(c), (*c).to_owned()))
-                                .collect();
-                        } else {
-                            Logger::warn("Unparsable CODECS value");
-                        }
+                }
+
+                "HDCP-LEVEL" => {
+                    let (parsed, _) =
+                        parse_enumerated_string(variant_line, item.value_start_offset);
+                    hdcp_level = match parsed {
+                        "TYPE-0" => HdcpLevel::Type0,
+                        "TYPE-1" => HdcpLevel::Type1,
+                        "NONE" => HdcpLevel::None,
+                        _ => HdcpLevel::Unknown,
+                    };
+                }
+                "PROGRAM-ID" => {
+                    if let (Ok(val), _) =
+                        parse_decimal_integer(variant_line, item.value_start_offset)
+                    {
+                        program_id = Some(val);
+                    } else {
+                        Logger::warn("Unparsable PROGRAM-ID value");
                     }
-                    "FRAME-RATE" => {
-                        let (parsed, end_offset) =
-                            parse_decimal_floating_point(variant_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            frame_rate = Some(val);
-                        } else {
-                            Logger::warn("Unparsable FRAME-RATE value");
-                        }
+                }
+                "RESOLUTION" => {
+                    if let (Ok(res), _) = parse_resolution(variant_line, item.value_start_offset) {
+                        resolution = Some(VideoResolution {
+                            height: res.height,
+                            width: res.width,
+                        });
+                    } else {
+                        Logger::warn("Unparsable RESOLUTION value");
                     }
-                    "HDCP-LEVEL" => {
-                        let (parsed, end_offset) =
-                            parse_enumerated_string(variant_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        hdcp_level = match parsed {
-                            "TYPE-0" => HdcpLevel::Type0,
-                            "TYPE-1" => HdcpLevel::Type1,
-                            "NONE" => HdcpLevel::None,
-                            _ => HdcpLevel::Unknown,
-                        };
+                }
+                "SCORE" => {
+                    if let (Ok(val), _) =
+                        parse_decimal_floating_point(variant_line, item.value_start_offset)
+                    {
+                        score = Some(val);
+                    } else {
+                        Logger::warn("Unparsable SCORE value");
                     }
-                    "PROGRAM-ID" => {
-                        let (parsed, end_offset) =
-                            parse_decimal_integer(variant_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            program_id = Some(val);
-                        } else {
-                            Logger::warn("Unparsable PROGRAM-ID value");
-                        }
+                }
+                "STABLE-VARIANT-ID" => {
+                    stable_variant_id = Some(
+                        parse_substituted_quoted_string(
+                            variant_line,
+                            item.value_start_offset,
+                            variable_store,
+                        )
+                        .map_err(|_| VariantParsingError::InvalidDecimalInteger)?
+                        .into_owned(),
+                    );
+                }
+                "AUDIO" => {
+                    audio = Some(
+                        parse_substituted_quoted_string(
+                            variant_line,
+                            item.value_start_offset,
+                            variable_store,
+                        )
+                        .map_err(|_| VariantParsingError::InvalidDecimalInteger)?
+                        .into_owned(),
+                    );
+                }
+                "VIDEO" => {
+                    video = Some(
+                        parse_substituted_quoted_string(
+                            variant_line,
+                            item.value_start_offset,
+                            variable_store,
+                        )
+                        .map_err(|_| VariantParsingError::InvalidDecimalInteger)?
+                        .into_owned(),
+                    );
+                }
+                "SUBTITLES" => {
+                    subtitles = Some(
+                        parse_substituted_quoted_string(
+                            variant_line,
+                            item.value_start_offset,
+                            variable_store,
+                        )
+                        .map_err(|_| VariantParsingError::InvalidDecimalInteger)?
+                        .into_owned(),
+                    );
+                }
+                "CLOSED-CAPTIONS" => {
+                    if variant_line[item.value_start_offset..].starts_with("NONE") {
+                    } else {
+                        closed_captions = Some(
+                            parse_substituted_quoted_string(
+                                variant_line,
+                                item.value_start_offset,
+                                variable_store,
+                            )
+                            .map_err(|_| VariantParsingError::InvalidDecimalInteger)?
+                            .into_owned(),
+                        );
                     }
-                    "RESOLUTION" => {
-                        let (parsed, end_offset) = parse_resolution(variant_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(res) = parsed {
-                            resolution = Some(VideoResolution {
-                                height: res.height,
-                                width: res.width,
-                            });
-                        } else {
-                            Logger::warn("Unparsable RESOLUTION value");
-                        }
-                    }
-                    "SCORE" => {
-                        let (parsed, end_offset) =
-                            parse_decimal_floating_point(variant_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            score = Some(val);
-                        } else {
-                            Logger::warn("Unparsable SCORE value");
-                        }
-                    }
-                    "STABLE-VARIANT-ID" => {
-                        let (parsed, end_offset) =
-                            parse_quoted_string(variant_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            stable_variant_id = Some(val.to_owned());
-                        } else {
-                            Logger::warn("Unparsable STABLE-VARIANT-ID value");
-                        }
-                    }
-                    "AUDIO" => {
-                        let (parsed, end_offset) =
-                            parse_quoted_string(variant_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            audio = Some(val.to_owned());
-                        } else {
-                            Logger::warn("Unparsable AUDIO value");
-                        }
-                    }
-                    "VIDEO" => {
-                        let (parsed, end_offset) =
-                            parse_quoted_string(variant_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            video = Some(val.to_owned());
-                        } else {
-                            Logger::warn("Unparsable VIDEO value");
-                        }
-                    }
-                    "SUBTITLES" => {
-                        let (parsed, end_offset) =
-                            parse_quoted_string(variant_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            subtitles = Some(val.to_owned());
-                        } else {
-                            Logger::warn("Unparsable SUBTITLES value");
-                        }
-                    }
-                    "CLOSED-CAPTIONS" => {
-                        if variant_line[offset + idx + 1..].starts_with("NONE") {
-                            offset = skip_attribute_list_value(variant_line, offset + idx + 1);
-                        } else {
-                            let (parsed, end_offset) =
-                                parse_quoted_string(variant_line, offset + idx + 1);
-                            offset = end_offset + 1;
-                            if let Ok(val) = parsed {
-                                closed_captions = Some(val.to_owned());
-                            } else {
-                                Logger::warn("Unparsable CLOSED-CAPTIONS value");
-                            }
-                        }
-                    }
-                    "VIDEO-RANGE" => {
-                        let (parsed, end_offset) =
-                            parse_enumerated_string(variant_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        video_range = Some(parsed.to_owned());
-                    }
-                    "PATHWAY-ID" => {
-                        let (parsed, end_offset) =
-                            parse_quoted_string(variant_line, offset + idx + 1);
-                        offset = end_offset + 1;
-                        if let Ok(val) = parsed {
-                            pathway_id = Some(val.to_owned());
-                        } else {
-                            Logger::warn("Unparsable PATHWAY-ID value");
-                        }
-                    }
-                    _ => {
-                        offset = skip_attribute_list_value(variant_line, offset + idx + 1) + 1;
-                    }
-                },
+                }
+                "VIDEO-RANGE" => {
+                    let (parsed, _) =
+                        parse_enumerated_string(variant_line, item.value_start_offset);
+                    video_range = Some(parsed.to_owned());
+                }
+                "PATHWAY-ID" => {
+                    pathway_id = Some(
+                        parse_substituted_quoted_string(
+                            variant_line,
+                            item.value_start_offset,
+                            variable_store,
+                        )
+                        .map_err(|_| VariantParsingError::InvalidDecimalInteger)?
+                        .into_owned(),
+                    );
+                }
+                _ => {}
             }
         }
 

@@ -158,26 +158,18 @@ of the following values:
   describing an HLS variant, had no `BANDWIDTH` attribute associated to it.
   It should be mandatory.
 
-- `"MultivariantPlaylistMediaTagMissingType"`:
-  An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing
-  an HLS variant, had no `TYPE` attribute associated to it. It should be
-  mandatory.
-
-- `"MultivariantPlaylistMediaTagMissingName"`:
-  An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing
-  an HLS variant, had no `NAME` attribute associated to it. It should be
-  mandatory.
-
-- `"MultivariantPlaylistMediaTagMissingGroupId"`:
-  An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing
-  an HLS variant, had no `GROUP-ID` attribute associated to it. It should be
-  mandatory.
+- `"MultivariantPlaylistMissingRequiredAttribute"`:
+  A mandatory attribute was missing from a tag in the Multivariant Playlist.
 
 - `"MultivariantPlaylistOtherParsingError"`:
   An uncategorized error arised while parsing the Multivariant Playlist.
 
 - `"MultivariantPlaylistInvalidValue"`:
   A value in the Multivariant Playlist was in an invalid format.
+
+- `"MultivariantPlaylistVariableDefinitionError"`:
+  An `EXT-X-DEFINE` variable definition or substitution was invalid in the
+  Multivariant Playlist.
 
 ## Error type: `WaspMediaPlaylistRequestError`
 
@@ -280,6 +272,10 @@ of the following values:
 - `"MediaPlaylistUnparsableByteRange"`:
   A `#EXT-X-BYTERANGE` tag or a `BYTERANGE` attribute in the Media Playlist
   was not in the right format.
+
+- `"MediaPlaylistVariableDefinitionError"`:
+  An `EXT-X-DEFINE` variable definition or substitution was invalid in the
+  Media Playlist.
 
 - `"MediaPlaylistOtherParsingError"`:
   Another uncategorized error happened while parsing the Media Playlist.
@@ -397,13 +393,30 @@ player.addEventlistener("error", (error) => {
 
 ### Error codes
 
-A `WaspSegmentParsingError`'s `code` property can be set to any
+A `WaspSourceBufferCreationError`'s `code` property can be set to any
 of the following values:
+
+- `"SourceBufferAlreadyCreatedWithSameType"`:
+  A `SourceBuffer` for that media type had already been created.
 
 - `"SourceBufferCantPlayType"`:
   The mime type communicated during SourceBuffer creation was not supported.
 
-- `"SourceBufferCreationOtherError":
+- `"SourceBufferEmptyMimeType"`:
+  The mime type communicated during SourceBuffer creation was empty.
+
+- `"SourceBufferMediaSourceIsClosed"`:
+  The current `MediaSource` was already closed when trying to create the
+  `SourceBuffer`.
+
+- `"SourceBufferNoMediaSourceAttached"`:
+  No `MediaSource` was attached when trying to create the `SourceBuffer`.
+
+- `"SourceBufferQuotaExceededError"`:
+  The browser reported a `QuotaExceededError` while creating the
+  `SourceBuffer`.
+
+- `"SourceBufferCreationOtherError"`:
   An uncategorized error arised while creating a SourceBuffer.
 
 ## Error type: `WaspSourceBufferError`

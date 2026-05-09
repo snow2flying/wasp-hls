@@ -94,8 +94,21 @@ export const WaspErrorCode = {
   /** An unknown error arised. */
   Unknown: "Unknown",
 
+  /**
+   * A SourceBuffer for that media type had already been created.
+   */
+  SourceBufferAlreadyCreatedWithSameType:
+    "SourceBufferAlreadyCreatedWithSameType",
   /** The mime type communicated during SourceBuffer creation was not supported. */
   SourceBufferCantPlayType: "SourceBufferCantPlayType",
+  /** The mime type communicated during SourceBuffer creation was empty. */
+  SourceBufferEmptyMimeType: "SourceBufferEmptyMimeType",
+  /** The MediaSource was closed before the SourceBuffer could be created. */
+  SourceBufferMediaSourceIsClosed: "SourceBufferMediaSourceIsClosed",
+  /** No MediaSource was attached when trying to create the SourceBuffer. */
+  SourceBufferNoMediaSourceAttached: "SourceBufferNoMediaSourceAttached",
+  /** The browser reported a QuotaExceededError while creating the SourceBuffer. */
+  SourceBufferQuotaExceededError: "SourceBufferQuotaExceededError",
   /** An uncategorized error arised while creating a SourceBuffer. */
   SourceBufferCreationOtherError: "SourceBufferCreationOtherError",
 
@@ -129,26 +142,16 @@ export const WaspErrorCode = {
   /** A value in the Multivariant Playlist was in an invalid format. */
   MultivariantPlaylistInvalidValue: "MultivariantPlaylistInvalidValue",
   /**
-   * An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing
-   * an HLS variant, had no `TYPE` attribute associated to it. It should be
-   * mandatory.
+   * A mandatory attribute was missing from a tag in the Multivariant Playlist.
    */
-  MultivariantPlaylistMediaTagMissingType:
-    "MultivariantPlaylistMediaTagMissingType",
+  MultivariantPlaylistMissingRequiredAttribute:
+    "MultivariantPlaylistMissingRequiredAttribute",
   /**
-   * An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing
-   * an HLS variant, had no `NAME` attribute associated to it. It should be
-   * mandatory.
+   * An `EXT-X-DEFINE` variable definition or substitution was invalid in the
+   * Multivariant Playlist.
    */
-  MultivariantPlaylistMediaTagMissingName:
-    "MultivariantPlaylistMediaTagMissingName",
-  /**
-   * An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing
-   * an HLS variant, had no `GROUP-ID` attribute associated to it. It should be
-   * mandatory.
-   */
-  MultivariantPlaylistMediaTagMissingGroupId:
-    "MultivariantPlaylistMediaTagMissingGroupId",
+  MultivariantPlaylistVariableDefinitionError:
+    "MultivariantPlaylistVariableDefinitionError",
   /**
    * An uncategorized error arised while parsing the Multivariant Playlist.
    */
@@ -179,6 +182,11 @@ export const WaspErrorCode = {
    * was not in the right format.
    */
   MediaPlaylistUnparsableByteRange: "MediaPlaylistUnparsableByteRange",
+  /**
+   * An `EXT-X-DEFINE` variable definition or substitution was invalid in the
+   * Media Playlist.
+   */
+  MediaPlaylistVariableDefinitionError: "MediaPlaylistVariableDefinitionError",
   /** Another uncategorized error happened while parsing the Media Playlist. */
   MediaPlaylistOtherParsingError: "MediaPlaylistOtherParsingError",
 
