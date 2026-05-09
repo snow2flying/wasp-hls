@@ -2,15 +2,59 @@ use crate::{
     bindings::{jsIsTypeSupported, MediaType, PlaylistNature},
     media_element::SegmentQualityContext,
     parser::{
-        AudioTrack, DirectMediaPlaylist, MediaPlaylist, MediaPlaylistUpdateError, SegmentList,
-        TopLevelPlaylist, VariantStream,
+        AudioTrack, DirectMediaInfo, MediaPlaylist, MediaPlaylistUpdateError, SegmentList,
+        SegmentTimeInfo, TopLevelPlaylist, VariantStream,
     },
     utils::url::Url,
     Logger,
 };
 use std::{cmp::Ordering, io::BufRead};
 
+use crate::parser::ByteRange;
 pub(crate) use crate::parser::MediaPlaylistPermanentId;
+
+#[derive(Clone, Debug)]
+pub(crate) struct ProbeSegmentMetadata {
+    /// The URL to that segment.
+    pub(crate) url: Url,
+    /// The optional byte-range to that segment.
+    pub(crate) byte_range: Option<ByteRange>,
+    // Supplementary context information about that probe segment
+    pub(crate) context: ProbeSegmentContext,
+}
+
+// Supplementary context information about a segment used for "probing"
+#[derive(Clone, Debug)]
+pub(crate) enum ProbeSegmentContext {
+    /// This probe segment is a full valid initialization segment
+    Init,
+    /// This probe segment is a full valid Media segment
+    Media {
+        /// Timing information linked to that media segment
+        time_info: SegmentTimeInfo,
+    },
+}
+
+/// State associated with the initial setup of the top-level playlist (either the
+/// Multivariant playlist or a direct media playlist).
+///
+/// That setup is complexified by the need to know which and if media announced in those
+/// playlists are supported, which can necessitate a segment request and other async API
+/// calls.
+pub(crate) enum StartupStatus {
+    /// A "probe segment" must be loaded and inspected for supplementary
+    /// playlist information before playback can start.
+    ///
+    /// Once the supplementary information is extracted, is should be communicated to the
+    /// `PlaylistStore` (e.g. through `set_direct_media_info`).
+    NeedsProbe(ProbeSegmentMetadata),
+    /// Codecs are currently in their way to be checked by the platform.
+    ///
+    /// Once known, it should be communicated back to the `PlaylistStore`.
+    AwaitingSupportCheck,
+    /// The top level playlist can now be fully exploited for playback.
+    Ready,
+}
 
 /// Stores information about the current loaded Multivariant Playlist and its sub-playlists:
 ///   - Information on the Multivariant Playlist itself.
@@ -50,12 +94,12 @@ pub(crate) struct PlaylistStore {
     /// Store the last communicated bandwidth
     last_bandwidth: f64,
 
-    /// Before actually playing a content, supported codecs need to be checked
-    /// to avoid mistakenly choosing an unsupported codec.
+    /// Before actually playing a multivariant content, supported codecs need to be checked
+    /// to avoid mistakenly choosing an unsupported variant.
     ///
-    /// This bool is set to `true` only once ALL codecs in the
-    /// `MultivariantPlaylist` have been properly checked.
-    codecs_checked: bool,
+    /// This bool is set to `true` only once ALL variants in the
+    /// `MultivariantPlaylist` have had their support resolved.
+    multivariant_support_resolved: bool,
 }
 
 impl PlaylistStore {
@@ -90,13 +134,7 @@ impl PlaylistStore {
                     playlist.video_media_playlist_id_for(initial_variant),
                 )
             }
-            TopLevelPlaylist::DirectMedia(playlist) => {
-                let (audio_id, video_id) = match playlist.media_type() {
-                    MediaType::Audio => (Some(playlist.id().clone()), None),
-                    MediaType::Video => (None, Some(playlist.id().clone())),
-                };
-                (None, audio_id, video_id)
-            }
+            TopLevelPlaylist::DirectMedia(_) => (None, None, None),
         };
 
         Ok(Self {
@@ -107,7 +145,7 @@ impl PlaylistStore {
             curr_audio_track: None,
             is_variant_locked: false,
             last_bandwidth: 0.,
-            codecs_checked: false,
+            multivariant_support_resolved: false,
         })
     }
 
@@ -128,45 +166,30 @@ impl PlaylistStore {
         }
     }
 
-    /// Check which codecs present in the `MultivariantPlaylist` are supported.
+    /// Resolve which variants in the `MultivariantPlaylist` are supported.
     ///
-    /// This allows the playlist store to know which variant can actually be relied on.
-    /// As such you should be extra careful when using the `PlaylistStore` before that check has
-    /// been completely done.
+    /// This allows the playlist store to know which variant can actually be relied on before
+    /// playback starts.
     ///
-    /// Returns `true` if all codecs in the `MultivariantPlaylist` could have been checked or
-    /// `false` if it still await a response from JavaScript. As that response can be asynchronous
-    /// it is given back to the corresponding Dispatcher's event listener function.
+    /// Returns `true` if support for every relevant variant could be resolved or `false` if it is
+    /// still awaiting a response from JavaScript. As that response can be asynchronous it is given
+    /// back to the corresponding Dispatcher's event listener function.
     ///
-    /// Once that even listener has been called, `check_codecs` can be called again, until it
-    /// returns `true`.
-    pub(crate) fn check_codecs(&mut self) -> Result<bool, PlaylistStoreError> {
-        if self.codecs_checked {
+    /// Once that event listener has been called, `resolve_multivariant_support` can be called
+    /// again, until it returns `true`.
+    fn resolve_multivariant_support(&mut self) -> Result<bool, PlaylistStoreError> {
+        if self.multivariant_support_resolved {
             return Ok(true);
         }
 
         let playlist = match &mut self.playlist {
             TopLevelPlaylist::Multivariant(playlist) => playlist,
-            TopLevelPlaylist::DirectMedia(playlist) => {
-                let media_type = playlist.media_type();
-                let mime_type = playlist.playlist().mime_type(media_type).unwrap_or("");
-                if mime_type.is_empty() {
-                    self.codecs_checked = true;
-                    return Ok(true);
-                }
-                match jsIsTypeSupported(media_type, mime_type) {
-                    Some(_) => {
-                        self.codecs_checked = true;
-                        return Ok(true);
-                    }
-                    None => {
-                        return Ok(false);
-                    }
-                }
+            TopLevelPlaylist::DirectMedia(_) => {
+                return Ok(true);
             }
         };
 
-        let mut are_all_codecs_checked = true;
+        let mut is_multivariant_support_resolved = true;
         playlist.variants_mut().iter_mut().for_each(|v| {
             if v.supported().is_some() {
                 return;
@@ -178,15 +201,15 @@ impl PlaylistStore {
                         if let Some(is_supported) = jsIsTypeSupported(mt, &codec) {
                             v.update_support(is_supported);
                         } else {
-                            are_all_codecs_checked = false;
+                            is_multivariant_support_resolved = false;
                         }
                     }
                 });
         });
-        self.codecs_checked = are_all_codecs_checked;
+        self.multivariant_support_resolved = is_multivariant_support_resolved;
 
-        if are_all_codecs_checked {
-            Logger::info("PS: All codecs have been checked");
+        if is_multivariant_support_resolved {
+            Logger::info("PS: Support has been resolved for all multivariant variants");
             let curr_variant_id = self.curr_variant_id.unwrap();
             let curr_variant_still_here = playlist
                 .supported_variants()
@@ -203,9 +226,9 @@ impl PlaylistStore {
                 }
             }
         } else {
-            Logger::info("PS: Some Playlist codecs need to be asynchronously checked");
+            Logger::info("PS: Some multivariant variants still need asynchronous support checks");
         }
-        Ok(are_all_codecs_checked)
+        Ok(is_multivariant_support_resolved)
     }
 
     /// Returns the list of tuples listing loaded media playlists.
@@ -274,34 +297,116 @@ impl PlaylistStore {
     pub(crate) fn current_codec(&self, media_type: MediaType) -> Option<String> {
         match &self.playlist {
             TopLevelPlaylist::Multivariant(_) => self.curr_variant()?.codecs(media_type),
+            TopLevelPlaylist::DirectMedia(playlist) => playlist
+                .media_info()
+                .filter(|info| info.media_type == media_type)
+                .map(|info| info.codec.clone()),
+        }
+    }
+
+    pub(crate) fn current_mime_type(&self, media_type: MediaType) -> Option<String> {
+        match &self.playlist {
+            TopLevelPlaylist::Multivariant(_) => self
+                .curr_media_playlist(media_type)
+                .map(|playlist| playlist.mime_type(media_type).unwrap_or("").to_string()),
+            TopLevelPlaylist::DirectMedia(playlist) => playlist
+                .media_info()
+                .filter(|info| info.media_type == media_type)
+                .map(|info| info.mime_type.clone()),
+        }
+    }
+
+    /// Returns the next startup action required before playback can begin.
+    ///
+    /// This first ensures that enough stream metadata is known for the currently selected startup
+    /// path. Once that metadata is complete, it resolves whether the selected startup streams are
+    /// actually supported by the current environment.
+    pub(crate) fn startup_status(
+        &mut self,
+        wanted_position: f64,
+    ) -> Result<StartupStatus, PlaylistStoreError> {
+        match &self.playlist {
             TopLevelPlaylist::DirectMedia(playlist) => {
-                if playlist.media_type() == media_type {
-                    playlist.codec().map(ToString::to_string)
-                } else {
-                    None
+                if playlist.media_info().is_none() {
+                    return self
+                        .next_direct_media_probe(wanted_position)
+                        .map(StartupStatus::NeedsProbe)
+                        .ok_or(PlaylistStoreError::NoProbeSegment);
+                }
+            }
+            TopLevelPlaylist::Multivariant(_) => {
+                if [MediaType::Audio, MediaType::Video]
+                    .into_iter()
+                    .any(|media_type| {
+                        self.has_media_type(media_type) && self.current_codec(media_type).is_none()
+                    })
+                {
+                    return Err(PlaylistStoreError::MissingSelectedStreamMetadata);
                 }
             }
         }
-    }
 
-    /// XXX TODO: Sad that we need to leak that abstraction
-    pub(crate) fn direct_media(&self) -> Option<&DirectMediaPlaylist> {
         match &self.playlist {
-            TopLevelPlaylist::DirectMedia(playlist) => Some(playlist),
-            TopLevelPlaylist::Multivariant(_) => None,
+            TopLevelPlaylist::DirectMedia(playlist) => {
+                let media_info = playlist.media_info().unwrap();
+                match jsIsTypeSupported(media_info.media_type, &media_info.codec) {
+                    Some(true) => Ok(StartupStatus::Ready),
+                    Some(false) => Err(PlaylistStoreError::UnsupportedStartupStream),
+                    None => Ok(StartupStatus::AwaitingSupportCheck),
+                }
+            }
+            TopLevelPlaylist::Multivariant(_) => match self.resolve_multivariant_support()? {
+                true => Ok(StartupStatus::Ready),
+                false => Ok(StartupStatus::AwaitingSupportCheck),
+            },
         }
     }
 
-    /// Only if the current `TopLevelPlaylist` is ~DirectMedia`` (going through a media
-    /// playlist directly instead of a multivariant playlist), associate the given codec
-    /// to it.
-    /// XXX TODO: Is this the role of this abstraction to do that weird branching?
-    pub(crate) fn set_direct_media_codec(&mut self, codec: String) {
+    pub(crate) fn set_direct_media_info(&mut self, media_info: DirectMediaInfo) {
         match &mut self.playlist {
             TopLevelPlaylist::DirectMedia(playlist) => {
-                playlist.set_codec(codec);
+                let direct_media_id = playlist.id().clone();
+                match media_info.media_type {
+                    MediaType::Audio => {
+                        self.curr_audio_id = Some(direct_media_id);
+                        self.curr_video_id = None;
+                    }
+                    MediaType::Video => {
+                        self.curr_audio_id = None;
+                        self.curr_video_id = Some(direct_media_id);
+                    }
+                }
+                playlist.set_media_info(media_info);
             }
             TopLevelPlaylist::Multivariant(_) => {}
+        }
+    }
+
+    /// Returns probe segment metadata associated to the `wanted_position` if it exists.
+    fn next_direct_media_probe(&self, wanted_position: f64) -> Option<ProbeSegmentMetadata> {
+        let playlist = match &self.playlist {
+            TopLevelPlaylist::DirectMedia(playlist) => playlist,
+            TopLevelPlaylist::Multivariant(_) => return None,
+        };
+        let media_segment = playlist
+            .playlist()
+            .segment_list()
+            .segment_from_pos(wanted_position)
+            .or_else(|| playlist.playlist().segment_list().media().first())?;
+        if let Some(init_segment) = playlist.playlist().segment_list().init_for(media_segment) {
+            Some(ProbeSegmentMetadata {
+                url: init_segment.url().clone(),
+                byte_range: init_segment.byte_range().cloned(),
+                context: ProbeSegmentContext::Init,
+            })
+        } else {
+            Some(ProbeSegmentMetadata {
+                url: media_segment.url().clone(),
+                byte_range: media_segment.byte_range().cloned(),
+                context: ProbeSegmentContext::Media {
+                    time_info: media_segment.time_info().clone(),
+                },
+            })
         }
     }
 
@@ -854,4 +959,10 @@ pub(crate) enum PlaylistStoreError {
     NoSupportedVariant,
     #[error("No variant was found in the MultivariantPlaylist. Are you sure that this isn't a Media Playlist?")]
     NoInitialVariant,
+    #[error("No probe segment was available to determine startup metadata")]
+    NoProbeSegment,
+    #[error("The selected startup streams lack enough metadata to resolve support")]
+    MissingSelectedStreamMetadata,
+    #[error("The selected startup streams are not supported in the current environment")]
+    UnsupportedStartupStream,
 }

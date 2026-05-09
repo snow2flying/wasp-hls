@@ -148,19 +148,23 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
       },
       __js_func__inspect_segment(
         resourceId: number,
-        mimeTypePtr: number,
-        mimeTypeLen: number,
+        mediaTypeOut: number,
+        parsedMimeTypePtrOut: number,
+        parsedMimeTypeLenOut: number,
         codecPtrOut: number,
         codecLenOut: number,
         errCodeOut: number,
         errDescPtrOut: number,
         errDescLenOut: number,
       ): number {
-        const result = bindings.inspectSegment(
-          resourceId,
-          readString(mimeTypePtr, mimeTypeLen),
-        );
+        const result = bindings.inspectSegment(resourceId);
         if (result.errorCode === undefined && result.value !== undefined) {
+          getUint32Memory()[mediaTypeOut >>> 2] = result.value.mediaType;
+          writeOptionalString(
+            result.value.mimeType,
+            parsedMimeTypePtrOut,
+            parsedMimeTypeLenOut,
+          );
           writeOptionalString(result.value.codec, codecPtrOut, codecLenOut);
           return 1;
         }

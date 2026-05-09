@@ -1028,17 +1028,13 @@ export function appendBuffer(
 /**
  * Recuperate more information on a segment, identified by its `ResourceId`.
  *
- * This can generally be relied on to e.g. obtain the `codec` directly from
- * segment metadata.
+ * This can generally be relied on to e.g. obtain the `codec` and mime-type
+ * directly from segment metadata.
  *
  * @param resourceId - `ResourceId` of the segment you want more metadata from
- * @param mimeType - The identified `mime-type` of this segment.
  * @returns - Object describing the result of the operation.
  */
-export function inspectSegment(
-  resourceId: ResourceId,
-  mimeType: string,
-): {
+export function inspectSegment(resourceId: ResourceId): {
   value: InspectSegmentValue | undefined;
   errorCode: SegmentParsingErrorCode | undefined;
   description: string | undefined;
@@ -1053,34 +1049,8 @@ export function inspectSegment(
     };
   }
 
-  let inspectedSegment = segment;
-  if (shouldTransmux(mimeType)) {
-    try {
-      const transmuxedData = createTransmuxer().transmuxSegment(segment);
-      if (transmuxedData === null) {
-        return {
-          value: undefined,
-          errorCode: SegmentParsingErrorCode.TransmuxerError,
-          description:
-            "Segment inspection error: the transmuxer couldn't process the segment",
-        };
-      }
-      inspectedSegment = transmuxedData;
-    } catch (err) {
-      const msg = formatErrMessage(
-        err,
-        "Unknown error while transmuxing segment for inspection",
-      );
-      return {
-        value: undefined,
-        errorCode: SegmentParsingErrorCode.TransmuxerError,
-        description: msg,
-      };
-    }
-  }
-
-  // XXX TODO: what if the segment is still AAC / mpeg-ts here?
-  const codecs = getIsoBmffCodecs(inspectedSegment);
+  // XXX TODO: what if the segment is AAC / mpeg-ts here?
+  const codecs = getIsoBmffCodecs(segment);
   if (codecs.length === 0) {
     return {
       value: undefined,
@@ -1089,13 +1059,26 @@ export function inspectSegment(
         "Segment inspection error: no codec metadata was found in the probe segment",
     };
   }
+  const mediaType = inferMediaTypeFromCodecs(codecs);
   return {
     value: {
+      mediaType,
+      mimeType: mediaType === MediaType.Audio ? "audio/mp4" : "video/mp4",
       codec: codecs.join(","),
     },
     errorCode: undefined,
     description: undefined,
   };
+}
+
+function inferMediaTypeFromCodecs(codecs: string[]): MediaType {
+  return codecs.some((codec) => !isAudioCodec(codec))
+    ? MediaType.Video
+    : MediaType.Audio;
+}
+
+function isAudioCodec(codec: string): boolean {
+  return /^(mp4a|ac-3|ec-3|opus|flac|alac)\b/i.test(codec);
 }
 
 /**

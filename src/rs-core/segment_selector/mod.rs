@@ -217,7 +217,7 @@ impl NextSegmentSelector {
         if let InitializationSegmentSelectorStatus::Unvalidated(start) = self.init_status {
             self.init_status = InitializationSegmentSelectorStatus::Validated(start);
         } else {
-            Logger::warn("Validation an initialization segment, but none were returned.");
+            Logger::warn("Validation of an initialization segment, but none were returned.");
         }
     }
 

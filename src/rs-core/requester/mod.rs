@@ -132,6 +132,12 @@ pub(crate) struct WaitingSegmentInfo {
     context: SegmentQualityContext,
 }
 
+#[derive(Clone)]
+pub(crate) enum SegmentRequestContext {
+    Playback(SegmentQualityContext),
+    Probe,
+}
+
 impl WaitingSegmentInfo {
     /// Returns the type of media of the awaiting segment.
     pub(crate) fn media_type(&self) -> MediaType {
@@ -227,7 +233,7 @@ pub(crate) struct SegmentRequestInfo {
     /// ID identifying the request on the JavaScript-side.
     request_id: RequestId,
 
-    context: SegmentQualityContext,
+    context: SegmentRequestContext,
 
     /// type of media of the segment requested
     media_type: MediaType,
@@ -277,7 +283,7 @@ impl SegmentRequestInfo {
         self.is_waiting_for_retry
     }
 
-    pub(crate) fn context(&self) -> &SegmentQualityContext {
+    pub(crate) fn context(&self) -> &SegmentRequestContext {
         &self.context
     }
 
@@ -287,7 +293,7 @@ impl SegmentRequestInfo {
         Url,
         Option<ByteRange>,
         Option<SegmentTimeInfo>,
-        SegmentQualityContext,
+        SegmentRequestContext,
     ) {
         (self.url, self.byte_range, self.time_info, self.context)
     }
@@ -397,7 +403,13 @@ impl Requester {
         byte_range: Option<&ByteRange>,
         context: SegmentQualityContext,
     ) {
-        self.request_segment_now(&url, byte_range, media_type, None, context);
+        self.request_segment_now(
+            &url,
+            byte_range,
+            media_type,
+            None,
+            SegmentRequestContext::Playback(context),
+        );
     }
 
     /// Returns `true` if a segment with the given identifying characteristics is currently either
@@ -442,7 +454,13 @@ impl Requester {
         ));
         let time_info = Some(seg.time_info().clone());
         if self.can_start_request(seg.start()) {
-            self.request_segment_now(seg.url(), seg.byte_range(), media_type, time_info, context)
+            self.request_segment_now(
+                seg.url(),
+                seg.byte_range(),
+                media_type,
+                time_info,
+                SegmentRequestContext::Playback(context),
+            )
         } else {
             Logger::debug("Req: pushing segment request to queue");
             self.segment_waiting_queue.push(WaitingSegmentInfo {
@@ -455,16 +473,16 @@ impl Requester {
         }
     }
 
-    /// XXX TODO: Try merging with `request_media_segment`?
-    pub(crate) fn request_probe_media_segment(
+    // TODO: Merge it with the others?
+    pub(crate) fn request_segment_unlocked(
         &mut self,
         media_type: MediaType,
         url: Url,
         byte_range: Option<&ByteRange>,
-        time_info: SegmentTimeInfo,
-        context: SegmentQualityContext,
+        time_info: Option<SegmentTimeInfo>,
+        context: SegmentRequestContext,
     ) {
-        self.request_segment_now(&url, byte_range, media_type, Some(time_info), context);
+        self.request_segment_now(&url, byte_range, media_type, time_info, context);
     }
 
     pub(crate) fn lock_segment_requests(&mut self) -> bool {
@@ -845,7 +863,7 @@ impl Requester {
                             seg.byte_range.as_ref(),
                             seg.media_type,
                             seg.time_info,
-                            seg.context,
+                            SegmentRequestContext::Playback(seg.context),
                         );
                     },
                 );
@@ -857,7 +875,7 @@ impl Requester {
                     seg.byte_range.as_ref(),
                     seg.media_type,
                     seg.time_info,
-                    seg.context,
+                    SegmentRequestContext::Playback(seg.context),
                 );
             }
         }
@@ -907,7 +925,7 @@ impl Requester {
         byte_range: Option<&ByteRange>,
         media_type: MediaType,
         time_info: Option<SegmentTimeInfo>,
-        context: SegmentQualityContext,
+        context: SegmentRequestContext,
     ) {
         let (range_start, range_end) = format_range_for_js(byte_range);
         let url_ref = url.get_ref();

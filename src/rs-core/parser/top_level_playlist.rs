@@ -5,11 +5,7 @@ use super::{
         MediaPlaylistUrlLocation, MultivariantPlaylist, MultivariantPlaylistParsingError,
     },
 };
-use crate::{
-    bindings::MediaType,
-    parser::{ByteRange, SegmentTimeInfo},
-    utils::url::Url,
-};
+use crate::utils::url::Url;
 use std::{fmt, io};
 
 pub(crate) enum TopLevelPlaylist {
@@ -24,27 +20,20 @@ pub(crate) struct DirectMediaPlaylist {
     id: MediaPlaylistPermanentId,
     /// Url to that media playlist
     url: Url,
-    /// Inferred media type for the segments contained in that media playlist
-    /// XXX TODO: Option?
-    media_type: MediaType,
     /// The `MediaPlaylist` itself
     playlist: MediaPlaylist,
-    /// Known codec string for the segments of that media playlist.
+    /// Known metadata for the segments of that media playlist.
     ///
     /// Can rely on the loading of a "probe segment" in which case it is first set to
     /// `None` and only set to an actual value when known.
-    codec: Option<String>,
+    media_info: Option<DirectMediaInfo>,
 }
 
-pub(crate) struct ProbeSegment {
-    pub(crate) url: Url,
-    pub(crate) byte_range: Option<ByteRange>,
-    pub(crate) payload: ProbeSegmentPayload,
-}
-
-pub(crate) enum ProbeSegmentPayload {
-    Init,
-    Media { time_info: SegmentTimeInfo },
+#[derive(Clone)]
+pub(crate) struct DirectMediaInfo {
+    pub(crate) mime_type: String,
+    pub(crate) media_type: crate::bindings::MediaType,
+    pub(crate) codec: String,
 }
 
 impl TopLevelPlaylist {
@@ -76,13 +65,11 @@ impl DirectMediaPlaylist {
             None,
             &MediaPlaylistContext::default(),
         )?;
-        let media_type = infer_direct_media_type(&playlist);
         Ok(Self {
             id: MediaPlaylistPermanentId::new(MediaPlaylistUrlLocation::Direct, 0),
             url,
-            media_type,
             playlist,
-            codec: None,
+            media_info: None,
         })
     }
 
@@ -94,43 +81,16 @@ impl DirectMediaPlaylist {
         &self.url
     }
 
-    pub(crate) fn media_type(&self) -> MediaType {
-        self.media_type
-    }
-
     pub(crate) fn playlist(&self) -> &MediaPlaylist {
         &self.playlist
     }
 
-    pub(crate) fn codec(&self) -> Option<&str> {
-        self.codec.as_deref()
+    pub(crate) fn media_info(&self) -> Option<&DirectMediaInfo> {
+        self.media_info.as_ref()
     }
 
-    pub(crate) fn set_codec(&mut self, codec: String) {
-        self.codec = Some(codec);
-    }
-
-    // XXX TODO: Unsure if this is the responsibility of top_level_playlist
-    pub(crate) fn probe_segment_for(&self, wanted_position: f64) -> Option<ProbeSegment> {
-        let media_segment = self
-            .playlist
-            .segment_from_pos(wanted_position)
-            .or_else(|| self.playlist.segment_list().media().first())?;
-        if let Some(init_segment) = self.playlist.segment_list().init_for(media_segment) {
-            Some(ProbeSegment {
-                url: init_segment.url().clone(),
-                byte_range: init_segment.byte_range().cloned(),
-                payload: ProbeSegmentPayload::Init,
-            })
-        } else {
-            Some(ProbeSegment {
-                url: media_segment.url().clone(),
-                byte_range: media_segment.byte_range().cloned(),
-                payload: ProbeSegmentPayload::Media {
-                    time_info: media_segment.time_info().clone(),
-                },
-            })
-        }
+    pub(crate) fn set_media_info(&mut self, media_info: DirectMediaInfo) {
+        self.media_info = Some(media_info);
     }
 
     pub(crate) fn media_playlist_url(&self, wanted_id: &MediaPlaylistPermanentId) -> Option<&Url> {
@@ -167,7 +127,6 @@ impl DirectMediaPlaylist {
             Some(&self.playlist),
             &MediaPlaylistContext::default(),
         )?;
-        self.media_type = infer_direct_media_type(&updated);
         self.url = url;
         self.playlist = updated;
         Ok(&self.playlist)
@@ -200,14 +159,4 @@ fn is_multivariant_playlist(data: &[u8]) -> bool {
         }
     }
     false
-}
-
-// XXX TODO: Some checking to do here
-fn infer_direct_media_type(playlist: &MediaPlaylist) -> MediaType {
-    let has_audio_mime = playlist.mime_type(MediaType::Audio).is_some();
-    let has_video_mime = playlist.mime_type(MediaType::Video).is_some();
-    match (has_audio_mime, has_video_mime) {
-        (true, false) => MediaType::Audio,
-        _ => MediaType::Video,
-    }
 }

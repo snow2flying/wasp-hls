@@ -29,6 +29,8 @@ export interface AppendBufferValue {
 
 export interface InspectSegmentValue {
   codec: string;
+  mimeType: string;
+  mediaType: MediaType;
 }
 
 export interface HostResult<Value, ErrorCode extends number> {
@@ -61,7 +63,6 @@ export interface HostBindings {
   isTypeSupported(mediaType: MediaType, typ: string): boolean | undefined;
   inspectSegment(
     resourceId: number,
-    mimeType: string,
   ): HostResult<InspectSegmentValue, SegmentParsingErrorCode>;
   appendBuffer(
     sourceBufferId: number,

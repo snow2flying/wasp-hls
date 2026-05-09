@@ -2,9 +2,7 @@ use crate::{
     adaptive::AdaptiveQualitySelector,
     bindings::TimerId,
     media_element::MediaElementReference,
-    media_element::SegmentQualityContext,
-    parser::{ByteRange, SegmentTimeInfo},
-    playlist_store::PlaylistStore,
+    playlist_store::{PlaylistStore, ProbeSegmentMetadata},
     requester::{PlaylistFileType, Requester},
     segment_selector::NextSegmentSelectors,
 };
@@ -30,11 +28,11 @@ pub struct Dispatcher {
     /// mostly based on network metrics.
     adaptive_selector: AdaptiveQualitySelector,
 
-    /// Store the "Multivariant Playlist" (structure which describes the currently
+    /// Store the "Top level Playlist" (structure which describes the currently
     /// loaded content) alongside some state to keep track of the chosen... tracks.
     /// (More technically of variants and media streams).
     ///
-    /// `None` if no "Multivariant Playlist" has been loaded yet.
+    /// `None` if no "Top level Playlist" has been loaded yet.
     playlist_store: Option<PlaylistStore>,
 
     /// Abstraction allowing to perform playlist and segment requests, while
@@ -119,35 +117,10 @@ impl StartingPosition {
 #[derive(Debug)]
 enum DirectMediaProbeState {
     /// We're in the process of loading that segment
-    Pending(ProbeSegmentRequest),
+    Pending(ProbeSegmentMetadata),
     /// That initial segment has been fetched
     Ready {
-        request: ProbeSegmentRequest,
+        request: ProbeSegmentMetadata,
         data: event_listeners::JsMemoryBlob,
-    },
-}
-
-/// See `DirectMediaProbeState`.
-#[derive(Clone, Debug)]
-struct ProbeSegmentRequest {
-    /// The inferred associated media type to the segment wanted
-    media_type: crate::bindings::MediaType,
-    /// The URL to that segment.
-    url: crate::utils::url::Url,
-    /// The optional byte-range to that segment.
-    byte_range: Option<ByteRange>,
-    context: ProbeSegmentContext,
-}
-
-#[derive(Clone, Debug)]
-enum ProbeSegmentContext {
-    /// This probe segment is a full valid initialization segment
-    InitSegment,
-    /// This probe segment is a full valid Media segment
-    MediaSegment {
-        /// Timing information linked to that media segment
-        time_info: SegmentTimeInfo,
-        /// Other information linked to that media segment
-        context: SegmentQualityContext,
     },
 }

@@ -65,8 +65,9 @@ unsafe extern "C" {
     fn __js_func__is_type_supported(media_type: u32, typ_ptr: *const u8, typ_len: u32) -> i32;
     fn __js_func__inspect_segment(
         segment_id: ResourceId,
-        mime_type_ptr: *const u8,
-        mime_type_len: u32,
+        media_type_out: *mut u32,
+        parsed_mime_type_ptr_out: *mut u32,
+        parsed_mime_type_len_out: *mut u32,
         codec_ptr_out: *mut u32,
         codec_len_out: *mut u32,
         err_code_out: *mut u32,
@@ -452,13 +453,12 @@ pub fn jsIsTypeSupported(media_type: MediaType, typ: &str) -> Option<bool> {
 
 /// Recuperate more information on a segment, identified by its `ResourceId`.
 ///
-/// This can generally be relied on to e.g. obtain the `codec` directly from
-/// segment metadata.
+/// This can generally be relied on to e.g. obtain the `codec` and mime-type
+/// directly from segment metadata.
 ///
 /// # Arguments
 ///
 /// * `segment_id` - `ResourceId` of the segment you want more metadata from
-/// * `mime_type` - The identified `mime-type` of this segment.
 ///
 /// # Returns
 ///
@@ -469,16 +469,19 @@ pub fn jsIsTypeSupported(media_type: MediaType, typ: &str) -> Option<bool> {
 ///   and an optional description as a `String`.
 pub fn jsInspectSegment(
     segment_id: ResourceId,
-    mime_type: &str,
 ) -> Result<InspectedSegmentMetadata, (SegmentParsingErrorCode, Option<String>)> {
+    let mut media_type = 0;
+    let mut parsed_mime_type_ptr = 0;
+    let mut parsed_mime_type_len = 0;
     let mut codec_ptr = 0;
     let mut codec_len = 0;
     let mut out = JsErrorOut::default();
     let success = unsafe {
         __js_func__inspect_segment(
             segment_id,
-            mime_type.as_ptr(),
-            mime_type.len() as u32,
+            &mut media_type,
+            &mut parsed_mime_type_ptr,
+            &mut parsed_mime_type_len,
             &mut codec_ptr,
             &mut codec_len,
             &mut out.code,
@@ -490,6 +493,8 @@ pub fn jsInspectSegment(
         return Err(take_js_error_out(out, SegmentParsingErrorCode::from_raw));
     }
     Ok(InspectedSegmentMetadata {
+        media_type: MediaType::from_raw(media_type),
+        mime_type: owned_string_from_abi(parsed_mime_type_ptr, parsed_mime_type_len),
         codec: owned_string_from_abi(codec_ptr, codec_len),
     })
 }
@@ -974,6 +979,10 @@ pub struct ParsedSegmentInfo {
 
 /// Result of a segment inspection (e.g. when calling `jsInspectSegment`)
 pub struct InspectedSegmentMetadata {
+    /// The container-level mime-type inferred from the segment's metadata itself.
+    pub mime_type: String,
+    /// The media type associated to the inspected segment.
+    pub media_type: MediaType,
     /// The identified codec string from the segment's metadata itself.
     /// e.g. `mp4a.40.2` or `avc1.4D401F` etc.
     pub codec: String,
