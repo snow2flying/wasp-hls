@@ -5,7 +5,11 @@ use super::{
         MediaPlaylistUrlLocation, MultivariantPlaylist, MultivariantPlaylistParsingError,
     },
 };
-use crate::{bindings::MediaType, utils::url::Url};
+use crate::{
+    bindings::MediaType,
+    parser::{ByteRange, SegmentTimeInfo},
+    utils::url::Url,
+};
 use std::{fmt, io};
 
 pub(crate) enum TopLevelPlaylist {
@@ -13,11 +17,34 @@ pub(crate) enum TopLevelPlaylist {
     DirectMedia(DirectMediaPlaylist),
 }
 
+/// Top-level Media playlist, i.e. there's no Multivariant playlist to rely on,
+/// only a media playlist.
 pub(crate) struct DirectMediaPlaylist {
+    /// Unique identifier for this Media playlist
     id: MediaPlaylistPermanentId,
+    /// Url to that media playlist
     url: Url,
+    /// Inferred media type for the segments contained in that media playlist
+    /// XXX TODO: Option?
     media_type: MediaType,
+    /// The `MediaPlaylist` itself
     playlist: MediaPlaylist,
+    /// Known codec string for the segments of that media playlist.
+    ///
+    /// Can rely on the loading of a "probe segment" in which case it is first set to
+    /// `None` and only set to an actual value when known.
+    codec: Option<String>,
+}
+
+pub(crate) struct ProbeSegment {
+    pub(crate) url: Url,
+    pub(crate) byte_range: Option<ByteRange>,
+    pub(crate) payload: ProbeSegmentPayload,
+}
+
+pub(crate) enum ProbeSegmentPayload {
+    Init,
+    Media { time_info: SegmentTimeInfo },
 }
 
 impl TopLevelPlaylist {
@@ -55,6 +82,7 @@ impl DirectMediaPlaylist {
             url,
             media_type,
             playlist,
+            codec: None,
         })
     }
 
@@ -72,6 +100,37 @@ impl DirectMediaPlaylist {
 
     pub(crate) fn playlist(&self) -> &MediaPlaylist {
         &self.playlist
+    }
+
+    pub(crate) fn codec(&self) -> Option<&str> {
+        self.codec.as_deref()
+    }
+
+    pub(crate) fn set_codec(&mut self, codec: String) {
+        self.codec = Some(codec);
+    }
+
+    // XXX TODO: Unsure if this is the responsibility of top_level_playlist
+    pub(crate) fn probe_segment_for(&self, wanted_position: f64) -> Option<ProbeSegment> {
+        let media_segment = self
+            .playlist
+            .segment_from_pos(wanted_position)
+            .or_else(|| self.playlist.segment_list().media().first())?;
+        if let Some(init_segment) = self.playlist.segment_list().init_for(media_segment) {
+            Some(ProbeSegment {
+                url: init_segment.url().clone(),
+                byte_range: init_segment.byte_range().cloned(),
+                payload: ProbeSegmentPayload::Init,
+            })
+        } else {
+            Some(ProbeSegment {
+                url: media_segment.url().clone(),
+                byte_range: media_segment.byte_range().cloned(),
+                payload: ProbeSegmentPayload::Media {
+                    time_info: media_segment.time_info().clone(),
+                },
+            })
+        }
     }
 
     pub(crate) fn media_playlist_url(&self, wanted_id: &MediaPlaylistPermanentId) -> Option<&Url> {

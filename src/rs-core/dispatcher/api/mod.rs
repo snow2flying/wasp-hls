@@ -30,6 +30,7 @@ impl Dispatcher {
             buffer_goal: 30.,
             segment_selectors: NextSegmentSelectors::new(0., 30.),
             playlist_refresh_timers: vec![],
+            direct_media_probe: None,
         }
     }
 

@@ -654,7 +654,9 @@ impl MediaPlaylist {
     /// Returns information on the segment including the position given, in seconds.
     ///
     /// Returns `None` if no such media segment is found.
-    fn segment_from_pos(&self, pos: f64) -> Option<&MediaSegmentInfo> {
+    /// XXX TODO: Why is this one now public? How was segment requesting done before? Shouldn't we
+    /// go through `SegmentList`?
+    pub(crate) fn segment_from_pos(&self, pos: f64) -> Option<&MediaSegmentInfo> {
         self.segment_list
             .media()
             .iter()

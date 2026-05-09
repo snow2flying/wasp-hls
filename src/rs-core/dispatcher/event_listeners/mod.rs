@@ -197,6 +197,7 @@ impl Dispatcher {
 ///
 /// The idea behind this struct is to prevent memory leaks by implementing the
 /// Drop trait on it, so the resource is freed when no ownership of it is left.
+#[derive(Debug)]
 pub struct JsMemoryBlob {
     /// Its unique identifier
     id: ResourceId,

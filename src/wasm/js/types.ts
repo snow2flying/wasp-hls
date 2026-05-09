@@ -27,6 +27,10 @@ export interface AppendBufferValue {
   duration: number | undefined;
 }
 
+export interface InspectSegmentValue {
+  codec: string;
+}
+
 export interface HostResult<Value, ErrorCode extends number> {
   value: Value | undefined;
   errorCode: ErrorCode | undefined;
@@ -55,6 +59,10 @@ export interface HostBindings {
     typ: string,
   ): HostResult<number, AddSourceBufferErrorCode>;
   isTypeSupported(mediaType: MediaType, typ: string): boolean | undefined;
+  inspectSegment(
+    resourceId: number,
+    mimeType: string,
+  ): HostResult<InspectSegmentValue, SegmentParsingErrorCode>;
   appendBuffer(
     sourceBufferId: number,
     resourceId: number,

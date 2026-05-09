@@ -8,10 +8,10 @@ import type {
   PlaylistType,
   PushedSegmentErrorCode,
   RequestErrorReason,
-  SegmentParsingErrorCode,
   SourceBufferCreationErrorCode,
   TimerReason,
 } from "./enums.js";
+import { SegmentParsingErrorCode } from "./enums.js";
 import {
   getWasmExports,
   getUint8Memory,
@@ -145,6 +145,29 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
           readString(typPtr, typLen),
         );
         return value === undefined ? -1 : value ? 1 : 0;
+      },
+      __js_func__inspect_segment(
+        resourceId: number,
+        mimeTypePtr: number,
+        mimeTypeLen: number,
+        codecPtrOut: number,
+        codecLenOut: number,
+        errCodeOut: number,
+        errDescPtrOut: number,
+        errDescLenOut: number,
+      ): number {
+        const result = bindings.inspectSegment(
+          resourceId,
+          readString(mimeTypePtr, mimeTypeLen),
+        );
+        if (result.errorCode === undefined && result.value !== undefined) {
+          writeOptionalString(result.value.codec, codecPtrOut, codecLenOut);
+          return 1;
+        }
+        getUint32Memory()[errCodeOut >>> 2] =
+          result.errorCode ?? SegmentParsingErrorCode.UnknownError;
+        writeOptionalString(result.description, errDescPtrOut, errDescLenOut);
+        return 0;
       },
       __js_func__append_buffer(
         sourceBufferId: number,

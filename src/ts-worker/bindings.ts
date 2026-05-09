@@ -33,6 +33,7 @@ import {
 } from "../wasm/index.js";
 import type {
   HostBindings,
+  InspectSegmentValue,
   MediaPlaylistParsingErrorCode,
   MultivariantPlaylistParsingErrorCode,
   OtherErrorCode,
@@ -52,6 +53,7 @@ import {
 import type { RequestId, ResourceId, TimerId } from "./globals.ts";
 import {
   getDurationFromTrun,
+  getIsoBmffCodecs,
   getMDHDTimescale,
   getTrackFragmentDecodeTime,
 } from "./isobmff-utils.js";
@@ -1024,6 +1026,79 @@ export function appendBuffer(
 }
 
 /**
+ * Recuperate more information on a segment, identified by its `ResourceId`.
+ *
+ * This can generally be relied on to e.g. obtain the `codec` directly from
+ * segment metadata.
+ *
+ * @param resourceId - `ResourceId` of the segment you want more metadata from
+ * @param mimeType - The identified `mime-type` of this segment.
+ * @returns - Object describing the result of the operation.
+ */
+export function inspectSegment(
+  resourceId: ResourceId,
+  mimeType: string,
+): {
+  value: InspectSegmentValue | undefined;
+  errorCode: SegmentParsingErrorCode | undefined;
+  description: string | undefined;
+} {
+  const segment = jsMemoryResources.get(resourceId);
+  if (segment === undefined) {
+    return {
+      value: undefined,
+      errorCode: SegmentParsingErrorCode.NoResource,
+      description:
+        "Segment inspection error: No resource with the given `resourceId`",
+    };
+  }
+
+  let inspectedSegment = segment;
+  if (shouldTransmux(mimeType)) {
+    try {
+      const transmuxedData = createTransmuxer().transmuxSegment(segment);
+      if (transmuxedData === null) {
+        return {
+          value: undefined,
+          errorCode: SegmentParsingErrorCode.TransmuxerError,
+          description:
+            "Segment inspection error: the transmuxer couldn't process the segment",
+        };
+      }
+      inspectedSegment = transmuxedData;
+    } catch (err) {
+      const msg = formatErrMessage(
+        err,
+        "Unknown error while transmuxing segment for inspection",
+      );
+      return {
+        value: undefined,
+        errorCode: SegmentParsingErrorCode.TransmuxerError,
+        description: msg,
+      };
+    }
+  }
+
+  // XXX TODO: what if the segment is still AAC / mpeg-ts here?
+  const codecs = getIsoBmffCodecs(inspectedSegment);
+  if (codecs.length === 0) {
+    return {
+      value: undefined,
+      errorCode: SegmentParsingErrorCode.UnknownError,
+      description:
+        "Segment inspection error: no codec metadata was found in the probe segment",
+    };
+  }
+  return {
+    value: {
+      codec: codecs.join(","),
+    },
+    errorCode: undefined,
+    description: undefined,
+  };
+}
+
+/**
  * @param {number} sourceBufferId
  * @param {number} start
  * @param {number} end
@@ -1562,6 +1637,7 @@ export function getWaspHostCapabilities(): HostBindings {
     setMediaSourceDuration,
     addSourceBuffer,
     isTypeSupported,
+    inspectSegment,
     appendBuffer,
     removeBuffer,
     endOfStream,

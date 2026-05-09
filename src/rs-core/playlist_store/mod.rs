@@ -2,8 +2,8 @@ use crate::{
     bindings::{jsIsTypeSupported, MediaType, PlaylistNature},
     media_element::SegmentQualityContext,
     parser::{
-        AudioTrack, MediaPlaylist, MediaPlaylistUpdateError, SegmentList, TopLevelPlaylist,
-        VariantStream,
+        AudioTrack, DirectMediaPlaylist, MediaPlaylist, MediaPlaylistUpdateError, SegmentList,
+        TopLevelPlaylist, VariantStream,
     },
     utils::url::Url,
     Logger,
@@ -268,6 +268,40 @@ impl PlaylistStore {
             TopLevelPlaylist::DirectMedia(playlist) => {
                 playlist.update_media_playlist(id, media_playlist_data, url)
             }
+        }
+    }
+
+    pub(crate) fn current_codec(&self, media_type: MediaType) -> Option<String> {
+        match &self.playlist {
+            TopLevelPlaylist::Multivariant(_) => self.curr_variant()?.codecs(media_type),
+            TopLevelPlaylist::DirectMedia(playlist) => {
+                if playlist.media_type() == media_type {
+                    playlist.codec().map(ToString::to_string)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    /// XXX TODO: Sad that we need to leak that abstraction
+    pub(crate) fn direct_media(&self) -> Option<&DirectMediaPlaylist> {
+        match &self.playlist {
+            TopLevelPlaylist::DirectMedia(playlist) => Some(playlist),
+            TopLevelPlaylist::Multivariant(_) => None,
+        }
+    }
+
+    /// Only if the current `TopLevelPlaylist` is ~DirectMedia`` (going through a media
+    /// playlist directly instead of a multivariant playlist), associate the given codec
+    /// to it.
+    /// XXX TODO: Is this the role of this abstraction to do that weird branching?
+    pub(crate) fn set_direct_media_codec(&mut self, codec: String) {
+        match &mut self.playlist {
+            TopLevelPlaylist::DirectMedia(playlist) => {
+                playlist.set_codec(codec);
+            }
+            TopLevelPlaylist::Multivariant(_) => {}
         }
     }
 

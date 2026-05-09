@@ -16,6 +16,7 @@
     "__js_func__free_resource",
     "__js_func__get_random",
     "__js_func__get_resource_len",
+    "__js_func__inspect_segment",
     "__js_func__is_type_supported",
     "__js_func__log",
     "__js_func__remove_buffer",

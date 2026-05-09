@@ -139,6 +139,233 @@ function getMDHDTimescale(buffer: Uint8Array): number | undefined {
 }
 
 /**
+ * Extract RFC 6381 codec strings from the initialization metadata contained in
+ * the given ISOBMFF data.
+ *
+ * Returns an empty array if no supported codec metadata could be parsed.
+ * @param {Uint8Array} buffer
+ * @returns {string[]}
+ */
+function getIsoBmffCodecs(buffer: Uint8Array): string[] {
+  const moov = getBoxContent(buffer, 0x6d6f6f76 /* moov */);
+  if (moov === null) {
+    return [];
+  }
+
+  const traks = getBoxesContent(moov, 0x7472616b /* trak */);
+  return traks.reduce((acc: string[], trak: Uint8Array) => {
+    const codec = getTrackCodec(trak);
+    if (codec !== undefined && !acc.includes(codec)) {
+      acc.push(codec);
+    }
+    return acc;
+  }, []);
+}
+
+function getTrackCodec(trak: Uint8Array): string | undefined {
+  const mdia = getBoxContent(trak, 0x6d646961 /* mdia */);
+  if (mdia === null) {
+    return undefined;
+  }
+
+  const hdlr = getBoxContent(mdia, 0x68646c72 /* hdlr */);
+  if (hdlr === null || hdlr.length < 12) {
+    return undefined;
+  }
+
+  const minf = getBoxContent(mdia, 0x6d696e66 /* minf */);
+  if (minf === null) {
+    return undefined;
+  }
+  const stbl = getBoxContent(minf, 0x7374626c /* stbl */);
+  if (stbl === null) {
+    return undefined;
+  }
+  const stsd = getBoxContent(stbl, 0x73747364 /* stsd */);
+  if (stsd === null) {
+    return undefined;
+  }
+
+  const handlerType = be4toi(hdlr, 8);
+  return getCodecFromStsd(stsd, handlerType);
+}
+
+function getCodecFromStsd(
+  stsd: Uint8Array,
+  _handlerType: number,
+): string | undefined {
+  if (stsd.length < 16) {
+    return undefined;
+  }
+
+  const entryCount = be4toi(stsd, 4);
+  let cursor = 8;
+  for (let i = 0; i < entryCount && cursor + 8 <= stsd.length; i++) {
+    const [boxStart, contentStart, boxEnd, boxName] = getNextBox(stsd, cursor);
+    if (
+      boxStart === undefined ||
+      contentStart === undefined ||
+      boxEnd === undefined ||
+      boxName === undefined
+    ) {
+      return undefined;
+    }
+    const sampleEntry = stsd.subarray(contentStart, boxEnd);
+    switch (boxName) {
+      case 0x61766331: /* avc1 */
+      case 0x61766333 /* avc3 */:
+        return getAvcCodec(sampleEntry, boxName);
+      case 0x6d703461 /* mp4a */:
+        return getMp4aCodec(sampleEntry);
+      default:
+        break;
+    }
+    cursor = boxEnd;
+  }
+  return undefined;
+}
+
+function getAvcCodec(
+  sampleEntry: Uint8Array,
+  boxName: number,
+): string | undefined {
+  if (sampleEntry.length < 78) {
+    return undefined;
+  }
+  const avcC = getBoxContent(sampleEntry.subarray(78), 0x61766343 /* avcC */);
+  if (avcC === null || avcC.length < 4) {
+    return undefined;
+  }
+  return `${fourCC(boxName)}.${toHex(avcC[1])}${toHex(avcC[2])}${toHex(avcC[3])}`;
+}
+
+function getMp4aCodec(sampleEntry: Uint8Array): string | undefined {
+  if (sampleEntry.length < 28) {
+    return undefined;
+  }
+  const esds = getBoxContent(sampleEntry.subarray(28), 0x65736473 /* esds */);
+  if (esds === null || esds.length < 2) {
+    return undefined;
+  }
+
+  let objectTypeIndication: number | undefined;
+  let cursor = 4; // version + flags
+  while (cursor + 2 <= esds.length) {
+    const tag = esds[cursor];
+    cursor += 1;
+    const parsedLength = readDescriptorLength(esds, cursor);
+    if (parsedLength === null) {
+      return undefined;
+    }
+    const [descriptorLength, descriptorHeaderLength] = parsedLength;
+    cursor += descriptorHeaderLength;
+    if (cursor + descriptorLength > esds.length) {
+      return undefined;
+    }
+
+    if (tag === 0x04 /* DecoderConfigDescriptor */) {
+      objectTypeIndication = esds[cursor];
+    } else if (tag === 0x05 /* DecoderSpecificInfo */) {
+      if (objectTypeIndication === undefined || descriptorLength === 0) {
+        return undefined;
+      }
+      const audioObjectType = getAudioObjectType(
+        esds.subarray(cursor, cursor + descriptorLength),
+      );
+      if (audioObjectType === undefined) {
+        return undefined;
+      }
+      return `mp4a.${objectTypeIndication.toString(16)}.${audioObjectType}`;
+    }
+    cursor += descriptorLength;
+  }
+  return undefined;
+}
+
+function getAudioObjectType(data: Uint8Array): number | undefined {
+  if (data.length === 0) {
+    return undefined;
+  }
+  let audioObjectType = data[0] >> 3;
+  if (audioObjectType === 31) {
+    if (data.length < 2) {
+      return undefined;
+    }
+    audioObjectType = 32 + ((data[0] & 0x07) << 3) + (data[1] >> 5);
+  }
+  return audioObjectType;
+}
+
+function readDescriptorLength(
+  data: Uint8Array,
+  offset: number,
+): [number, number] | null {
+  let length = 0;
+  let cursor = offset;
+  let bytesRead = 0;
+  while (cursor < data.length && bytesRead < 4) {
+    const value = data[cursor];
+    cursor += 1;
+    bytesRead += 1;
+    length = (length << 7) | (value & 0x7f);
+    if ((value & 0x80) === 0) {
+      return [length, bytesRead];
+    }
+  }
+  return null;
+}
+
+function getNextBox(
+  buf: Uint8Array,
+  offset: number,
+):
+  | [
+      number /* start byte */,
+      number /* content start */,
+      number /* end byte */,
+      number /* box name */,
+    ]
+  | [] {
+  if (offset + 8 > buf.length) {
+    return [];
+  }
+
+  let cursor = offset;
+  let boxSize = be4toi(buf, cursor);
+  cursor += 4;
+  const boxName = be4toi(buf, cursor);
+  cursor += 4;
+
+  if (boxSize === 0) {
+    boxSize = buf.length - offset;
+  } else if (boxSize === 1) {
+    if (cursor + 8 > buf.length) {
+      return [];
+    }
+    boxSize = be8toi(buf, cursor);
+    cursor += 8;
+  }
+
+  if (boxSize < 8 || offset + boxSize > buf.length) {
+    return [];
+  }
+  return [offset, cursor, offset + boxSize, boxName];
+}
+
+function toHex(value: number): string {
+  return value.toString(16).padStart(2, "0");
+}
+
+function fourCC(value: number): string {
+  return String.fromCharCode(
+    (value >>> 24) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 8) & 0xff,
+    value & 0xff,
+  );
+}
+
+/**
  * Returns the "default sample duration" which is the default value for duration
  * of samples found in a "traf" ISOBMFF box.
  *
@@ -389,4 +616,9 @@ function be8toi(bytes: Uint8Array, offset: number): number {
   );
 }
 
-export { getDurationFromTrun, getTrackFragmentDecodeTime, getMDHDTimescale };
+export {
+  getDurationFromTrun,
+  getTrackFragmentDecodeTime,
+  getMDHDTimescale,
+  getIsoBmffCodecs,
+};

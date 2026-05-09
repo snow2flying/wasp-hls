@@ -17,6 +17,8 @@ pub(crate) use media_tag::{MediaTag, MediaTagType};
 pub(crate) use multi_variant_playlist::{
     MediaPlaylistPermanentId, MediaPlaylistUpdateError, MultivariantPlaylistParsingError,
 };
-pub(crate) use top_level_playlist::{TopLevelPlaylist, TopLevelPlaylistParsingError};
+pub(crate) use top_level_playlist::{
+    DirectMediaPlaylist, ProbeSegmentPayload, TopLevelPlaylist, TopLevelPlaylistParsingError,
+};
 pub(crate) use value_parsers::ByteRange;
 pub(crate) use variant_stream::{VariantStream, VideoResolution};

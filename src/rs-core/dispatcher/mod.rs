@@ -2,6 +2,8 @@ use crate::{
     adaptive::AdaptiveQualitySelector,
     bindings::TimerId,
     media_element::MediaElementReference,
+    media_element::SegmentQualityContext,
+    parser::{ByteRange, SegmentTimeInfo},
     playlist_store::PlaylistStore,
     requester::{PlaylistFileType, Requester},
     segment_selector::NextSegmentSelectors,
@@ -53,6 +55,16 @@ pub struct Dispatcher {
     segment_selectors: NextSegmentSelectors,
 
     playlist_refresh_timers: Vec<(TimerId, PlaylistFileType)>,
+
+    /// When/if loading a MediaPlaylist directly (instead of going through a multivariant
+    /// playlist), we might not have enough information in the playlist itself to start
+    /// setting up buffers and starting the regular playback loop.
+    ///
+    /// Instead, we have to first load a wanted segment, to be able to read that needed
+    /// information from its container first.
+    ///
+    /// This property stores which state of this "probe" process we are in now.
+    direct_media_probe: Option<DirectMediaProbeState>,
 }
 
 /// Identify the playback-related state the `Dispatcher` is in.
@@ -95,4 +107,47 @@ impl StartingPosition {
             position,
         }
     }
+}
+
+/// When/if loading a MediaPlaylist directly (instead of going through a multivariant
+/// playlist), we might not have enough information in the playlist itself on a media's
+/// associated codecs and other similar important properties.
+///
+/// In that case, we have to fetch that data from a segment instead.
+///
+/// `DirectMediaProbeState` stores the state of this process
+#[derive(Debug)]
+enum DirectMediaProbeState {
+    /// We're in the process of loading that segment
+    Pending(ProbeSegmentRequest),
+    /// That initial segment has been fetched
+    Ready {
+        request: ProbeSegmentRequest,
+        data: event_listeners::JsMemoryBlob,
+    },
+}
+
+/// See `DirectMediaProbeState`.
+#[derive(Clone, Debug)]
+struct ProbeSegmentRequest {
+    /// The inferred associated media type to the segment wanted
+    media_type: crate::bindings::MediaType,
+    /// The URL to that segment.
+    url: crate::utils::url::Url,
+    /// The optional byte-range to that segment.
+    byte_range: Option<ByteRange>,
+    context: ProbeSegmentContext,
+}
+
+#[derive(Clone, Debug)]
+enum ProbeSegmentContext {
+    /// This probe segment is a full valid initialization segment
+    InitSegment,
+    /// This probe segment is a full valid Media segment
+    MediaSegment {
+        /// Timing information linked to that media segment
+        time_info: SegmentTimeInfo,
+        /// Other information linked to that media segment
+        context: SegmentQualityContext,
+    },
 }

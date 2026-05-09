@@ -455,6 +455,18 @@ impl Requester {
         }
     }
 
+    /// XXX TODO: Try merging with `request_media_segment`?
+    pub(crate) fn request_probe_media_segment(
+        &mut self,
+        media_type: MediaType,
+        url: Url,
+        byte_range: Option<&ByteRange>,
+        time_info: SegmentTimeInfo,
+        context: SegmentQualityContext,
+    ) {
+        self.request_segment_now(&url, byte_range, media_type, Some(time_info), context);
+    }
+
     pub(crate) fn lock_segment_requests(&mut self) -> bool {
         let was_locked = self.segment_request_locked;
         self.segment_request_locked = true;

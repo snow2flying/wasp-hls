@@ -63,6 +63,16 @@ unsafe extern "C" {
         err_desc_len_out: *mut u32,
     ) -> u32;
     fn __js_func__is_type_supported(media_type: u32, typ_ptr: *const u8, typ_len: u32) -> i32;
+    fn __js_func__inspect_segment(
+        segment_id: ResourceId,
+        mime_type_ptr: *const u8,
+        mime_type_len: u32,
+        codec_ptr_out: *mut u32,
+        codec_len_out: *mut u32,
+        err_code_out: *mut u32,
+        err_desc_ptr_out: *mut u32,
+        err_desc_len_out: *mut u32,
+    ) -> u32;
     fn __js_func__append_buffer(
         source_buffer_id: SourceBufferId,
         segment_id: ResourceId,
@@ -438,6 +448,50 @@ pub fn jsIsTypeSupported(media_type: MediaType, typ: &str) -> Option<bool> {
         0 => Some(false),
         _ => Some(true),
     }
+}
+
+/// Recuperate more information on a segment, identified by its `ResourceId`.
+///
+/// This can generally be relied on to e.g. obtain the `codec` directly from
+/// segment metadata.
+///
+/// # Arguments
+///
+/// * `segment_id` - `ResourceId` of the segment you want more metadata from
+/// * `mime_type` - The identified `mime-type` of this segment.
+///
+/// # Returns
+///
+/// A result:
+///
+/// - When `Ok`, transports the parsed metadata from the segment
+/// - When `Err`, transports both the error code that prevented the inspection,
+///   and an optional description as a `String`.
+pub fn jsInspectSegment(
+    segment_id: ResourceId,
+    mime_type: &str,
+) -> Result<InspectedSegmentMetadata, (SegmentParsingErrorCode, Option<String>)> {
+    let mut codec_ptr = 0;
+    let mut codec_len = 0;
+    let mut out = JsErrorOut::default();
+    let success = unsafe {
+        __js_func__inspect_segment(
+            segment_id,
+            mime_type.as_ptr(),
+            mime_type.len() as u32,
+            &mut codec_ptr,
+            &mut codec_len,
+            &mut out.code,
+            &mut out.desc_ptr,
+            &mut out.desc_len,
+        )
+    };
+    if success == 0 {
+        return Err(take_js_error_out(out, SegmentParsingErrorCode::from_raw));
+    }
+    Ok(InspectedSegmentMetadata {
+        codec: owned_string_from_abi(codec_ptr, codec_len),
+    })
 }
 
 /// Append media data to the given SourceBuffer.
@@ -916,6 +970,13 @@ impl From<MediaPlaylistParsingError> for MediaPlaylistParsingErrorCode {
 pub struct ParsedSegmentInfo {
     pub start: Option<f64>,
     pub duration: Option<f64>,
+}
+
+/// Result of a segment inspection (e.g. when calling `jsInspectSegment`)
+pub struct InspectedSegmentMetadata {
+    /// The identified codec string from the segment's metadata itself.
+    /// e.g. `mp4a.40.2` or `avc1.4D401F` etc.
+    pub codec: String,
 }
 
 impl From<PushSegmentError> for SegmentParsingErrorCode {

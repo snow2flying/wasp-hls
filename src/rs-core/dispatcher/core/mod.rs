@@ -1,6 +1,7 @@
 use super::{
-    event_listeners::JsTimeRanges, Dispatcher, JsMemoryBlob, MediaObservation,
-    MediaSourceReadyState, PlaybackTickReason, PlayerReadyState, StartingPositionType,
+    event_listeners::JsTimeRanges, DirectMediaProbeState, Dispatcher, JsMemoryBlob,
+    MediaObservation, MediaSourceReadyState, PlaybackTickReason, PlayerReadyState,
+    ProbeSegmentContext, ProbeSegmentRequest, StartingPositionType,
 };
 use crate::{
     bindings::{
@@ -9,7 +10,7 @@ use crate::{
             format_variants_info_for_js,
         },
         jsAnnounceFetchedContent, jsAnnounceTrackUpdate, jsAnnounceVariantLockStatusChange,
-        jsAnnounceVariantUpdate, jsClearTimer, jsSendMediaPlaylistParsingError,
+        jsAnnounceVariantUpdate, jsClearTimer, jsInspectSegment, jsSendMediaPlaylistParsingError,
         jsSendMediaPlaylistRequestError, jsSendMultivariantPlaylistParsingError,
         jsSendMultivariantPlaylistRequestError, jsSendOtherError, jsSendPushedSegmentError,
         jsSendRemoveBufferError, jsSendSegmentParsingError, jsSendSegmentRequestError,
@@ -19,7 +20,9 @@ use crate::{
         PushedSegmentErrorCode, RequestId, SourceBufferId, TimerId, TimerReason,
     },
     media_element::{SegmentQualityContext, SourceBufferCreationError},
-    parser::{SegmentTimeInfo, TopLevelPlaylist, TopLevelPlaylistParsingError},
+    parser::{
+        ProbeSegmentPayload, SegmentTimeInfo, TopLevelPlaylist, TopLevelPlaylistParsingError,
+    },
     playlist_store::{
         LockVariantResponse, MediaPlaylistPermanentId, PlaylistStore, PlaylistStoreError,
         SetAudioTrackResponse, VariantUpdateResult,
@@ -41,6 +44,7 @@ impl Dispatcher {
         self.media_element_ref.reset();
         self.segment_selectors.reset_selectors(0.);
         self.playlist_store = None;
+        self.direct_media_probe = None;
         self.last_position = 0.;
         self.clean_up_playlist_refresh_timers();
         self.ready_state = PlayerReadyState::Stopped;
@@ -194,6 +198,9 @@ impl Dispatcher {
                 reason,
                 status,
             } => {
+                if self.is_probe_segment_request(&s) {
+                    self.direct_media_probe = None;
+                }
                 let time_info = s.time_info();
                 jsSendSegmentRequestError(
                     true,
@@ -418,7 +425,7 @@ impl Dispatcher {
 
     /// Method to call when a new codec support report has been received.
     pub(super) fn on_codecs_support_update_core(&mut self) {
-        // XXX TODO: name bad
+        // XXX TODO: Might need to rename that one
         self.check_ready_after_top_level_playlist_loaded();
     }
 
@@ -438,6 +445,174 @@ impl Dispatcher {
             });
         if !was_already_locked {
             self.requester.unlock_segment_requests();
+        }
+    }
+
+    /// If not enough information is known about the playlist (this happens when a Media
+    /// playlist was given directly instead of a multivariant playlist), we might want to
+    /// perform an initial request to a "probe segment" first, just to extract such
+    /// metadata from its container.
+    ///
+    /// This method allows to try kickstarting that probe process.
+    ///
+    /// # Returns
+    ///
+    /// Returns `true` if the probe process has been started, or `false` if we
+    /// cannot do that.
+    fn try_probe_segment_request(&mut self) -> bool {
+        if self.direct_media_probe.is_some() {
+            return true; // probe already going on
+        }
+
+        let Some(playlist_store) = self.playlist_store.as_ref() else {
+            return false; // No playlist associated to the content
+        };
+        let wanted_position = self.media_element_ref.wanted_position();
+        let Some(direct_media_playlist) = playlist_store.direct_media() else {
+            return false; // This is not a direct media playlist. Here the probe segment would be
+                          // ambiguous
+        };
+        let Some(probe_segment) = direct_media_playlist.probe_segment_for(wanted_position) else {
+            return false; // No segment available
+        };
+        let media_type = match (
+            playlist_store.has_media_type(MediaType::Audio),
+            playlist_store.has_media_type(MediaType::Video),
+        ) {
+            (true, false) => MediaType::Audio,
+            _ => MediaType::Video,
+        };
+
+        // We're not relying on a Multivariant Playlist, so no point of getting
+        // Adaptive metadata setup, just create a default one.
+        // XXX TODO: optional?
+        let probe_segment_context = SegmentQualityContext::new(0., 0);
+        let context = match probe_segment.payload {
+            ProbeSegmentPayload::Init => ProbeSegmentContext::InitSegment,
+            ProbeSegmentPayload::Media { time_info } => {
+                let context = probe_segment_context.clone();
+                ProbeSegmentContext::MediaSegment { time_info, context }
+            }
+        };
+        let request = ProbeSegmentRequest {
+            media_type,
+            url: probe_segment.url,
+            byte_range: probe_segment.byte_range,
+            context,
+        };
+
+        match &request.context {
+            ProbeSegmentContext::InitSegment => self.requester.request_init_segment(
+                request.media_type,
+                request.url.clone(),
+                request.byte_range.as_ref(),
+                probe_segment_context,
+            ),
+            ProbeSegmentContext::MediaSegment { time_info, context } => {
+                self.requester.request_probe_media_segment(
+                    request.media_type,
+                    request.url.clone(),
+                    request.byte_range.as_ref(),
+                    time_info.clone(),
+                    context.clone(),
+                )
+            }
+        }
+        self.direct_media_probe = Some(DirectMediaProbeState::Pending(request));
+        true
+    }
+
+    // Returns `true` if all currently-chosen playlists have a known codec.
+    // If `false`, you may have to "probe" a segment first before knowing it.
+    fn are_codecs_known(&self) -> bool {
+        [MediaType::Audio, MediaType::Video]
+            .into_iter()
+            .all(|media_type| {
+                self.playlist_store
+                    .as_ref()
+                    .and_then(|playlist_store| playlist_store.current_codec(media_type))
+                    .is_some()
+            })
+    }
+
+    /// Returns `true` if the given segment request is the one associated to a current
+    /// "direct media boostrap" operation (the initial loading of a segment to gather more
+    /// metadata about the media).
+    fn is_probe_segment_request(&self, segment_req: &SegmentRequestInfo) -> bool {
+        matches!(
+            self.direct_media_probe.as_ref(),
+            Some(DirectMediaProbeState::Pending(request))
+                if request.media_type == segment_req.media_type()
+                    && request.url == *segment_req.url()
+                    && request.byte_range.as_ref() == segment_req.byte_range()
+        )
+    }
+
+    /// Once a "probe segment" has been loaded, it needs to be inspected so information
+    /// can be extracted from it and the state be updated accordingly.
+    ///
+    /// This is what this method does.
+    fn do_probe_segment_inspection(
+        &mut self,
+        segment_req: &SegmentRequestInfo,
+        data: JsMemoryBlob,
+    ) {
+        // XXX TODO: Shouldn't the mime-type also be just inferred from the segment?
+        // Do we even need the mime-type at all initially in a Direct media context?
+        let mime_type = self
+            .playlist_store
+            .as_ref()
+            .and_then(|playlist_store| {
+                playlist_store
+                    .curr_media_playlist(segment_req.media_type())
+                    .and_then(|playlist| playlist.mime_type(segment_req.media_type()))
+            })
+            .unwrap_or("");
+        let inspection = jsInspectSegment(data.id(), mime_type);
+
+        let codec = match inspection {
+            Ok(inspection) => inspection.codec,
+            Err((code, message)) => {
+                jsSendSegmentParsingError(
+                    true,
+                    code,
+                    segment_req.media_type(),
+                    message
+                        .as_deref()
+                        .unwrap_or("Unknown probe segment parsing error"),
+                );
+                self.stop_current_content();
+                return;
+            }
+        };
+
+        if let Some(playlist_store) = self.playlist_store.as_mut() {
+            playlist_store.set_direct_media_codec(codec.clone());
+        }
+        if let Some(DirectMediaProbeState::Pending(request)) = self.direct_media_probe.take() {
+            self.direct_media_probe = Some(DirectMediaProbeState::Ready { request, data });
+        }
+    }
+
+    /// In certain conditions, a "probe segment" may be fetched initially to gather more
+    /// metadata on the content to play.
+    ///
+    /// As it is usable data and should anyway correspond to the initial segment to load, this
+    /// method allows to both reset that state and to push it to the buffers.
+    fn consume_probe_segment(&mut self) {
+        let Some(DirectMediaProbeState::Ready { request, data, .. }) =
+            self.direct_media_probe.take()
+        else {
+            return;
+        };
+
+        match request.context {
+            ProbeSegmentContext::InitSegment => {
+                self.on_init_segment_loaded(data, request.media_type);
+            }
+            ProbeSegmentContext::MediaSegment { time_info, context } => {
+                self.on_media_segment_loaded(data, request.media_type, time_info, context);
+            }
         }
     }
 
@@ -500,6 +675,20 @@ impl Dispatcher {
                 Logger::warn("Core: Unknown content duration");
             }
 
+            if !self.are_codecs_known() {
+                if self.try_probe_segment_request() {
+                    return;
+                }
+                jsSendSegmentParsingError(
+                    true,
+                    crate::bindings::SegmentParsingErrorCode::UnknownError,
+                    MediaType::Video,
+                    "No probe segment was available to determine direct-media codec metadata",
+                );
+                self.stop_current_content();
+                return;
+            }
+
             if let Some(Err(e)) = self.init_source_buffer(MediaType::Audio) {
                 let (code, msg) = format_source_buffer_creation_err_for_js(e);
                 jsSendSourceBufferCreationError(true, code, MediaType::Audio, &msg);
@@ -513,6 +702,7 @@ impl Dispatcher {
                 return;
             }
             jsStartObservingPlayback();
+            self.consume_probe_segment();
         }
     }
 
@@ -685,6 +875,9 @@ impl Dispatcher {
         [MediaType::Video, MediaType::Audio]
             .into_iter()
             .for_each(|mt| {
+                if playlist_store.curr_media_playlist(mt).is_some() {
+                    return; // Already fetched
+                }
                 if let Some(id) = playlist_store.curr_media_playlist_id(mt) {
                     if let Some(url) = playlist_store.media_playlist_url(id) {
                         let id = id.clone();
@@ -738,13 +931,10 @@ impl Dispatcher {
         let content = self.playlist_store.as_mut()?;
         let media_playlist = content.curr_media_playlist(media_type)?;
         let mime_type = media_playlist.mime_type(media_type).unwrap_or("");
-        let codecs = content
-            .curr_variant()?
-            .codecs(media_type)
-            .unwrap_or_default();
+        let codec = content.current_codec(media_type)?;
         Some(
             self.media_element_ref
-                .create_source_buffer(media_type, mime_type, &codecs),
+                .create_source_buffer(media_type, mime_type, &codec),
         )
     }
 
@@ -994,6 +1184,12 @@ impl Dispatcher {
 
         self.adaptive_selector
             .add_metric(duration_ms, resource_size);
+
+        if self.is_probe_segment_request(&segment_req) {
+            self.do_probe_segment_inspection(&segment_req, result);
+            self.check_ready_to_load_segments();
+            return;
+        }
 
         let media_type = segment_req.media_type();
         let (_, _, time_info, context) = segment_req.deconstruct();
