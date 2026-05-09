@@ -18,9 +18,8 @@ export default class WaspMultivariantPlaylistParsingError extends Error {
     | "MultivariantPlaylistWithoutVariant"
     | "MultivariantPlaylistVariantMissingBandwidth"
     | "MultivariantPlaylistInvalidValue"
-    | "MultivariantPlaylistMediaTagMissingType"
-    | "MultivariantPlaylistMediaTagMissingName"
-    | "MultivariantPlaylistMediaTagMissingGroupId"
+    | "MultivariantPlaylistMissingRequiredAttribute"
+    | "MultivariantPlaylistVariableDefinitionError"
     | "MultivariantPlaylistMissingExtM3uHeader"
     | "MultivariantPlaylistOtherParsingError";
 
@@ -62,14 +61,11 @@ export default class WaspMultivariantPlaylistParsingError extends Error {
       case MultivariantPlaylistParsingErrorCode.InvalidValue:
         this.code = "MultivariantPlaylistInvalidValue";
         break;
-      case MultivariantPlaylistParsingErrorCode.MediaTagMissingType:
-        this.code = "MultivariantPlaylistMediaTagMissingType";
+      case MultivariantPlaylistParsingErrorCode.MissingRequiredAttribute:
+        this.code = "MultivariantPlaylistMissingRequiredAttribute";
         break;
-      case MultivariantPlaylistParsingErrorCode.MediaTagMissingName:
-        this.code = "MultivariantPlaylistMediaTagMissingName";
-        break;
-      case MultivariantPlaylistParsingErrorCode.MediaTagMissingGroupId:
-        this.code = "MultivariantPlaylistMediaTagMissingGroupId";
+      case MultivariantPlaylistParsingErrorCode.VariableDefinitionError:
+        this.code = "MultivariantPlaylistVariableDefinitionError";
         break;
       case MultivariantPlaylistParsingErrorCode.Unknown:
         this.code = "MultivariantPlaylistOtherParsingError";

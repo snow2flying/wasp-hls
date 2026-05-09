@@ -10,7 +10,12 @@ export default class WaspSourceBufferCreationError extends Error {
 
   /** Specifies the exact error encountered. */
   public readonly code:
+    | "SourceBufferAlreadyCreatedWithSameType"
     | "SourceBufferCantPlayType"
+    | "SourceBufferEmptyMimeType"
+    | "SourceBufferMediaSourceIsClosed"
+    | "SourceBufferNoMediaSourceAttached"
+    | "SourceBufferQuotaExceededError"
     | "SourceBufferCreationOtherError";
 
   /**
@@ -47,19 +52,28 @@ export default class WaspSourceBufferCreationError extends Error {
     this.name = "WaspSourceBufferCreationError";
     this.mediaType = mediaType;
     switch (code) {
+      case SourceBufferCreationErrorCode.AlreadyCreatedWithSameType:
+        this.code = "SourceBufferAlreadyCreatedWithSameType";
+        break;
       case SourceBufferCreationErrorCode.CantPlayType:
         this.code = "SourceBufferCantPlayType";
         break;
-      case SourceBufferCreationErrorCode.AlreadyCreatedWithSameType:
       case SourceBufferCreationErrorCode.EmptyMimeType:
+        this.code = "SourceBufferEmptyMimeType";
+        break;
       case SourceBufferCreationErrorCode.MediaSourceIsClosed:
+        this.code = "SourceBufferMediaSourceIsClosed";
+        break;
       case SourceBufferCreationErrorCode.NoMediaSourceAttached:
+        this.code = "SourceBufferNoMediaSourceAttached";
+        break;
       case SourceBufferCreationErrorCode.QuotaExceededError:
+        this.code = "SourceBufferQuotaExceededError";
+        break;
       case SourceBufferCreationErrorCode.Unknown:
-        this.code = "SourceBufferCantPlayType";
+        this.code = "SourceBufferCreationOtherError";
         break;
       default:
-        // WHY TYPESCRIPT? I've done all MFing cases on purpose
         this.code = "SourceBufferCreationOtherError";
     }
     this.globalCode = this.code;

@@ -19,7 +19,7 @@ pub(crate) enum VariableDefinitionError {
     /// The variable value contained an un-authorized character
     InvalidValue,
     /// The definition or usage of a variable was invalid.
-    /// XXX TODO: different errors?
+    /// TODO: different errors?
     InvalidDefinition,
 }
 

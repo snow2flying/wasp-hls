@@ -534,7 +534,7 @@ pub(crate) enum MultivariantPlaylistParsingError {
 
     UnableToReadLine,
 
-    // XXX TODO: Should we split those into each define error variants?
+    // TODO: Should we split those into each define error variants?
     // Or would that be too much different error codes?
     VariableDefinition(VariableDefinitionError),
 

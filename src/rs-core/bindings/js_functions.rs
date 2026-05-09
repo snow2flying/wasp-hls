@@ -852,14 +852,10 @@ impl From<MultivariantPlaylistParsingError> for MultivariantPlaylistParsingError
             MultivariantPlaylistParsingError::InvalidDecimalInteger => {
                 MultivariantPlaylistParsingErrorCode::InvalidValue
             }
-            MultivariantPlaylistParsingError::MediaTagMissingType => {
-                MultivariantPlaylistParsingErrorCode::MediaTagMissingType
-            }
-            MultivariantPlaylistParsingError::MediaTagMissingName => {
-                MultivariantPlaylistParsingErrorCode::MediaTagMissingName
-            }
-            MultivariantPlaylistParsingError::MediaTagMissingGroupId => {
-                MultivariantPlaylistParsingErrorCode::MediaTagMissingGroupId
+            MultivariantPlaylistParsingError::MediaTagMissingType
+            | MultivariantPlaylistParsingError::MediaTagMissingName
+            | MultivariantPlaylistParsingError::MediaTagMissingGroupId => {
+                MultivariantPlaylistParsingErrorCode::MissingRequiredAttribute
             }
             MultivariantPlaylistParsingError::VariantMissingBandwidth => {
                 MultivariantPlaylistParsingErrorCode::VariantMissingBandwidth
@@ -869,10 +865,11 @@ impl From<MultivariantPlaylistParsingError> for MultivariantPlaylistParsingError
             }
             MultivariantPlaylistParsingError::UnableToReadVariantUri
             | MultivariantPlaylistParsingError::UnableToReadLine
-                // XXX TODO: Add explicit `EXT-X-DEFINE`-related parse error codes to the wasm/TS API?
-            | MultivariantPlaylistParsingError::VariableDefinition(_)
             | MultivariantPlaylistParsingError::Unknown => {
                 MultivariantPlaylistParsingErrorCode::Unknown
+            }
+            MultivariantPlaylistParsingError::VariableDefinition(_) => {
+                MultivariantPlaylistParsingErrorCode::VariableDefinitionError
             }
         }
     }
@@ -897,9 +894,8 @@ impl From<MediaPlaylistUpdateError> for MediaPlaylistParsingErrorCode {
                 MediaPlaylistParsingErrorCode::UriWithoutExtInf
             }
             MediaPlaylistUpdateError::ParsingError(
-                // XXX TODO: Add explicit `EXT-X-DEFINE`-related parse error codes to the wasm/TS API?
                 MediaPlaylistParsingError::VariableDefinition(_),
-            ) => MediaPlaylistParsingErrorCode::Unknown,
+            ) => MediaPlaylistParsingErrorCode::VariableDefinitionError,
             MediaPlaylistUpdateError::NotFound => MediaPlaylistParsingErrorCode::Unknown,
         }
     }

@@ -219,22 +219,15 @@ pub enum MultivariantPlaylistParsingErrorCode {
     VariantMissingBandwidth = 4,
     /// A value in the Multivariant Playlist was in an invalid format.
     InvalidValue = 5,
-    /// An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing
-    /// an HLS variant, had no `TYPE` attribute associated to it. It should be
-    /// mandatory.
-    MediaTagMissingType = 6,
-    /// An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing
-    /// an HLS variant, had no `NAME` attribute associated to it. It should be
-    /// mandatory.
-    MediaTagMissingName = 7,
-    /// An `EXT-X-MEDIA` tag announced in the Multivariant Playlist, describing
-    /// an HLS variant, had no `GROUP-ID` attribute associated to it. It should be
-    /// mandatory.
-    MediaTagMissingGroupId = 8,
+    /// A mandatory attribute was missing from a tag in the Multivariant Playlist.
+    MissingRequiredAttribute = 6,
+    /// An `EXT-X-DEFINE` variable definition or substitution was invalid in the
+    /// Multivariant Playlist.
+    VariableDefinitionError = 7,
     /// A line could not be read.
-    UnableToReadLine = 9,
+    UnableToReadLine = 8,
     /// Another, uncategorized, error arised.
-    Unknown = 10,
+    Unknown = 9,
 }
 
 impl MultivariantPlaylistParsingErrorCode {
@@ -246,11 +239,10 @@ impl MultivariantPlaylistParsingErrorCode {
             3 => Self::UnableToReadVariantUri,
             4 => Self::VariantMissingBandwidth,
             5 => Self::InvalidValue,
-            6 => Self::MediaTagMissingType,
-            7 => Self::MediaTagMissingName,
-            8 => Self::MediaTagMissingGroupId,
-            9 => Self::UnableToReadLine,
-            10 => Self::Unknown,
+            6 => Self::MissingRequiredAttribute,
+            7 => Self::VariableDefinitionError,
+            8 => Self::UnableToReadLine,
+            9 => Self::Unknown,
             _ => Self::Unknown,
         }
     }
@@ -274,8 +266,11 @@ pub enum MediaPlaylistParsingErrorCode {
     /// A `#EXT-X-BYTERANGE` tag or a `BYTERANGE` attribute in the Media Playlist
     /// was not in the right format.
     UnparsableByteRange = 4,
+    /// An `EXT-X-DEFINE` variable definition or substitution was invalid in the
+    /// Media Playlist.
+    VariableDefinitionError = 5,
     /// Another, uncategorized, error arised.
-    Unknown = 5,
+    Unknown = 6,
 }
 
 impl MediaPlaylistParsingErrorCode {
@@ -286,7 +281,8 @@ impl MediaPlaylistParsingErrorCode {
             2 => Self::MissingTargetDuration,
             3 => Self::UriWithoutExtInf,
             4 => Self::UnparsableByteRange,
-            5 => Self::Unknown,
+            5 => Self::VariableDefinitionError,
+            6 => Self::Unknown,
             _ => Self::Unknown,
         }
     }
