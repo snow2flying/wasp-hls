@@ -724,17 +724,6 @@ impl Dispatcher {
             .set_timer(playlist_id.clone(), refresh_interval);
         if let Some(media_type) = playlist_store.curr_media_type_for(&playlist_id) {
             if let Some(playlist) = playlist_store.curr_media_playlist(media_type) {
-                if let Some(summary) = playlist.update_summary() {
-                    Logger::debug(&format!(
-                        "Core: Media playlist refresh seq {} -> {} (prev_count: {}, dropped: {}, retained: {}, appended: {})",
-                        summary.previous_first_sequence(),
-                        playlist.media_sequence(),
-                        summary.previous_segment_count(),
-                        summary.dropped_segments(),
-                        summary.retained_segments(),
-                        summary.appended_segments(),
-                    ));
-                }
                 let stale_request_ids = self.segment_request_contexts.ids_matching(|context| {
                     matches!(
                         context,
