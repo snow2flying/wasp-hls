@@ -8,7 +8,9 @@
 
 ### Features
 
+- It is now possible to play media playlists directly instead of always going through a multivariant playlist URL
 - Add parsing of `#EXT-X-DEFINE` tags
+- Add `NotAPlaylist` error code: a new `WaspOtherError` for when the given resource URL does not seem to be a valid HLS playlist URL
 - Add `MultivariantPlaylistVariableDefinitionError` and `MediaPlaylistVariableDefinitionError` error codes for when an `#EXT-X-DEFINE` tag or usage is not compliant to the HLS specification respectively on the MultiVariant Playlist or the Media Playlist.
 - Add `SourceBufferEmptyMimeType`, `SourceBufferMediaSourceIsClosed`, `SourceBufferNoMediaSourceAttached` and `SourceBufferQuotaExceededError` error codes on a `WaspSourceBufferCreationError` error type.
 - Add optional `bitDepth` and `sampleRate` properties to `getAudioTrackList`, `getCurrentAudioTrack`methods plus `audioTrackUpdate` and `audioTrackListUpdate` events reflecting respectively the bit depth of audio samples and the audio audio sample rate for the corresponding audio tracks if they're invariant for all renditions of that track.
