@@ -1,7 +1,12 @@
 use super::{segment_request_contexts::PendingSegmentRequest, StartingPosition};
 use crate::{
-    bindings::{MediaType, StartingPositionType},
-    playlist_store::{PlaylistStore, ProbeSegmentContext, ProbeSegmentMetadata},
+    bindings::{
+        jsSendMultivariantPlaylistParsingError, jsSendOtherError, jsSendSegmentParsingError,
+        MediaType, MultivariantPlaylistParsingErrorCode, OtherErrorCode, StartingPositionType,
+    },
+    playlist_store::{
+        PlaylistStore, PlaylistStoreError, ProbeSegmentContext, ProbeSegmentMetadata,
+    },
 };
 
 pub(super) fn was_last_segment(
@@ -83,5 +88,30 @@ pub(super) fn is_stale_segment_request_context(
             .and_then(|pl_store| pl_store.direct_media_playlist())
             .is_some_and(|(_, playlist)| !playlist.contains_sequence(*sequence)),
         _ => false,
+    }
+}
+
+pub(super) fn handle_playlist_store_error(err: PlaylistStoreError) {
+    match err {
+        PlaylistStoreError::NoSupportedVariant => {
+            jsSendOtherError(true, OtherErrorCode::NoSupportedVariant, &err.to_string())
+        }
+        PlaylistStoreError::NoInitialVariant => jsSendMultivariantPlaylistParsingError(
+            true,
+            MultivariantPlaylistParsingErrorCode::MultivariantPlaylistWithoutVariant,
+            &err.to_string(),
+        ),
+        PlaylistStoreError::NoProbeSegment => jsSendSegmentParsingError(
+            true,
+            crate::bindings::SegmentParsingErrorCode::UnknownError,
+            Some(MediaType::Video),
+            &err.to_string(),
+        ),
+        PlaylistStoreError::MissingSelectedStreamMetadata => {
+            jsSendOtherError(true, OtherErrorCode::Unknown, &err.to_string())
+        }
+        PlaylistStoreError::UnsupportedStartupStream => {
+            jsSendOtherError(true, OtherErrorCode::NoSupportedVariant, &err.to_string())
+        }
     }
 }
