@@ -215,13 +215,20 @@ impl Dispatcher {
 
                 if status.is_some_and(|s| s == 404 || s == 410)
                     && req_ctxt.as_ref().is_some_and(|ctxt| {
-                        is_stale_media_segment_context(self.playlist_store.as_ref(), ctxt)
+                        is_stale_segment_request_context(self.playlist_store.as_ref(), ctxt)
                     })
                 {
                     Logger::info(
                         "Core: Ignoring terminal 404/410 for segment no longer in the live window",
                     );
-                    self.check_segments_to_request();
+                    if req_ctxt
+                        .as_ref()
+                        .is_some_and(PendingSegmentRequest::is_probe)
+                    {
+                        self.recheck_player_state();
+                    } else {
+                        self.check_segments_to_request();
+                    }
                     return;
                 }
 
@@ -500,13 +507,15 @@ impl Dispatcher {
                 None,
                 req_id,
             ),
-            ProbeSegmentContext::Media { time_info } => self.requester.request_segment_unlocked(
-                RequestLaneTag::Probe,
-                &probe_segment.url,
-                probe_segment.byte_range.as_ref(),
-                Some(time_info.clone()),
-                req_id,
-            ),
+            ProbeSegmentContext::Media { time_info, .. } => {
+                self.requester.request_segment_unlocked(
+                    RequestLaneTag::Probe,
+                    &probe_segment.url,
+                    probe_segment.byte_range.as_ref(),
+                    Some(time_info.clone()),
+                    req_id,
+                )
+            }
         }
         true
     }
@@ -612,7 +621,7 @@ impl Dispatcher {
             ProbeSegmentContext::Init { id } => {
                 self.on_init_segment_loaded(data, media_type, id);
             }
-            ProbeSegmentContext::Media { time_info } => {
+            ProbeSegmentContext::Media { time_info, .. } => {
                 let Some((_, context)) = self
                     .playlist_store
                     .as_ref()
@@ -1401,21 +1410,30 @@ fn get_initial_position(
     }
 }
 
-fn is_stale_media_segment_context(
+fn is_stale_segment_request_context(
     playlist_store: Option<&PlaylistStore>,
     context: &PendingSegmentRequest,
 ) -> bool {
-    let PendingSegmentRequest::Media {
-        media_type,
-        sequence,
-        ..
-    } = context
-    else {
-        return false;
-    };
+    match context {
+        PendingSegmentRequest::Media {
+            media_type,
+            sequence,
+            ..
+        } => playlist_store
+            .as_ref()
+            .and_then(|pl_store| pl_store.curr_media_playlist(*media_type))
+            .is_some_and(|playlist| !playlist.contains_sequence(*sequence)),
 
-    playlist_store
-        .as_ref()
-        .and_then(|pl_store| pl_store.curr_media_playlist(*media_type))
-        .is_some_and(|playlist| !playlist.contains_sequence(*sequence))
+        PendingSegmentRequest::Probe {
+            probe_segment:
+                ProbeSegmentMetadata {
+                    context: ProbeSegmentContext::Media { sequence, .. },
+                    ..
+                },
+        } => playlist_store
+            .as_ref()
+            .and_then(|pl_store| pl_store.direct_media_playlist())
+            .is_some_and(|(_, playlist)| !playlist.contains_sequence(*sequence)),
+        _ => false,
+    }
 }
