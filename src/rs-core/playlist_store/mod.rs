@@ -988,6 +988,6 @@ pub(crate) enum PlaylistStoreError {
     NoProbeSegment,
     #[error("The selected startup streams lack enough metadata to resolve support")]
     MissingSelectedStreamMetadata,
-    #[error("The selected startup streams are not supported in the current environment")]
+    #[error("No supported startup stream was found for the current content")]
     UnsupportedStartupStream,
 }

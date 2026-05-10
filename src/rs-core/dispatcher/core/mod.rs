@@ -513,10 +513,11 @@ impl Dispatcher {
                 Some(MediaType::Video),
                 &err.to_string(),
             ),
-            PlaylistStoreError::MissingSelectedStreamMetadata
-            | PlaylistStoreError::UnsupportedStartupStream => {
-                // XXX TODO: Should Unsupported be `NoSupportedVariant`?
+            PlaylistStoreError::MissingSelectedStreamMetadata => {
                 jsSendOtherError(true, OtherErrorCode::Unknown, &err.to_string())
+            }
+            PlaylistStoreError::UnsupportedStartupStream => {
+                jsSendOtherError(true, OtherErrorCode::NoSupportedVariant, &err.to_string())
             }
         }
     }
