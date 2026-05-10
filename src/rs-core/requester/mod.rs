@@ -498,7 +498,7 @@ impl Requester {
     }
 
     // TODO: Merge it with the others?
-    pub(crate) fn request_segment_unlocked(
+    pub(crate) fn request_segment_immediately(
         &mut self,
         lane_tag: RequestLaneTag,
         url: &Url,

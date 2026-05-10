@@ -499,7 +499,7 @@ impl Dispatcher {
                 probe_segment: probe_segment.clone(),
             });
         match &probe_segment.context {
-            ProbeSegmentContext::Init { .. } => self.requester.request_segment_unlocked(
+            ProbeSegmentContext::Init { .. } => self.requester.request_segment_immediately(
                 RequestLaneTag::Probe,
                 &probe_segment.url,
                 probe_segment.byte_range.as_ref(),
@@ -507,7 +507,7 @@ impl Dispatcher {
                 req_id,
             ),
             ProbeSegmentContext::Media { time_info, .. } => {
-                self.requester.request_segment_unlocked(
+                self.requester.request_segment_immediately(
                     RequestLaneTag::Probe,
                     &probe_segment.url,
                     probe_segment.byte_range.as_ref(),
