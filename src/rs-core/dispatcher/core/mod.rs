@@ -205,13 +205,26 @@ impl Dispatcher {
                 reason,
                 status,
             } => {
-                if self
-                    .segment_request_contexts
-                    .take(s.id())
-                    .is_some_and(|ctxt| ctxt.is_probe())
+                let req_ctxt = self.segment_request_contexts.take(s.id());
+                if req_ctxt
+                    .as_ref()
+                    .is_some_and(PendingSegmentRequest::is_probe)
                 {
                     self.ready_probe_segment = None;
                 }
+
+                if status.is_some_and(|s| s == 404 || s == 410)
+                    && req_ctxt.as_ref().is_some_and(|ctxt| {
+                        is_stale_media_segment_context(self.playlist_store.as_ref(), ctxt)
+                    })
+                {
+                    Logger::info(
+                        "Core: Ignoring terminal 404/410 for segment no longer in the live window",
+                    );
+                    self.check_segments_to_request();
+                    return;
+                }
+
                 let time_info = s.time_info();
                 jsSendSegmentRequestError(
                     true,
@@ -719,7 +732,6 @@ impl Dispatcher {
     ) {
         self.playlist_refresh_timers
             .set_timer(playlist_id.clone(), refresh_interval);
-        self.check_stale_segment_requests(&playlist_id);
 
         let Some(playlist_store) = self.playlist_store.as_ref() else {
             return;
@@ -1160,40 +1172,6 @@ impl Dispatcher {
         }
     }
 
-    /// After a media playlist update, we may have requests pending for segment that do
-    /// not exist anymore. Abort them if that's the case.
-    ///
-    /// XXX TODO: Is that what we want to do? Maybe HLS put a delay in place before
-    /// segment eviction server-side? To check.
-    fn check_stale_segment_requests(&mut self, playlist_id: &MediaPlaylistPermanentId) {
-        let Some(playlist_store) = self.playlist_store.as_ref() else {
-            return; // no content loaded
-        };
-        let Some(media_type) = playlist_store.curr_media_type_for(playlist_id) else {
-            return; // No active media playlist found with that id
-        };
-        let Some(playlist) = playlist_store.curr_media_playlist(media_type) else {
-            return; // No active playlist for the given media type, should not happen
-        };
-
-        // Now select segment requests with stale ids
-        let stale_request_ids = self.segment_request_contexts.ids_matching(|context| {
-            matches!(
-                context,
-                PendingSegmentRequest::Media {
-                    media_type: req_media_type,
-                    sequence,
-                    ..
-                } if *req_media_type == media_type
-                    && !playlist.contains_sequence(*sequence)
-            )
-        });
-        self.requester.abort_segments(&stale_request_ids); // and abort them
-        for req_id in stale_request_ids {
-            self.segment_request_contexts.take(req_id);
-        }
-    }
-
     /// Try to progress `ready_state` when in the `AwaitingPlaylistInfo` state
     fn inner_advance_awaiting_playlist_info_state(&mut self) {
         let (starting_position, playlist_store) =
@@ -1421,4 +1399,23 @@ fn get_initial_position(
     } else {
         playlist_store.expected_start_time()
     }
+}
+
+fn is_stale_media_segment_context(
+    playlist_store: Option<&PlaylistStore>,
+    context: &PendingSegmentRequest,
+) -> bool {
+    let PendingSegmentRequest::Media {
+        media_type,
+        sequence,
+        ..
+    } = context
+    else {
+        return false;
+    };
+
+    playlist_store
+        .as_ref()
+        .and_then(|pl_store| pl_store.curr_media_playlist(*media_type))
+        .is_some_and(|playlist| !playlist.contains_sequence(*sequence))
 }
