@@ -195,8 +195,9 @@ It already has a lot of features but there's still some left work:
 
 Type of contents:
 
-- [x] Play HLS VoD contents
-- [x] Play HLS live contents
+- [x] Support MultiVariant playlists
+- [x] Support media playlist URL directly
+- [x] Play HLS VoD/Live/Event contents
 - [ ] Proper support of HLS low-latency contents.
       _Priority: average_
 
@@ -251,6 +252,7 @@ Media demuxing:
 - [x] Transmux MPEG-2 Transport Streams to fmp4 on platforms not supporting the
       former like mostChrome or Firefox (through JS for now, Rust implementation
       pending).
+- [x] Infer mime-type and codec from container if missing from playlist (only for direct media playlist for now - not when a multivariant playlist is present but has missing information).
 - [ ] WebAssembly-based mpeg2-ts transmuxer.
       _Priority: average_
 - [ ] Media Segment Format: Packed Audio MP3
