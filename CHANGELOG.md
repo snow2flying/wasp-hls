@@ -9,15 +9,16 @@
 ### Features
 
 - It is now possible to play media playlists directly instead of always going through a multivariant playlist URL
-- Add parsing of `#EXT-X-DEFINE` tags
-- Add `NotAPlaylist` error code: a new `WaspOtherError` for when the given resource URL does not seem to be a valid HLS playlist URL
-- Add `MultivariantPlaylistVariableDefinitionError` and `MediaPlaylistVariableDefinitionError` error codes for when an `#EXT-X-DEFINE` tag or usage is not compliant to the HLS specification respectively on the MultiVariant Playlist or the Media Playlist.
-- Add `SourceBufferEmptyMimeType`, `SourceBufferMediaSourceIsClosed`, `SourceBufferNoMediaSourceAttached` and `SourceBufferQuotaExceededError` error codes on a `WaspSourceBufferCreationError` error type.
 - Add optional `bitDepth` and `sampleRate` properties to `getAudioTrackList`, `getCurrentAudioTrack`methods plus `audioTrackUpdate` and `audioTrackListUpdate` events reflecting respectively the bit depth of audio samples and the audio audio sample rate for the corresponding audio tracks if they're invariant for all renditions of that track.
 - Add optional `bitDephs` and `sampleRates` array properties to `getAudioTrackList`, `getCurrentAudioTrack`methods plus `audioTrackUpdate` and `audioTrackListUpdate` events listing respectively the known various bit depts and rates of audio samples in all renditions of that track.
 - Add `characteristics` property to `getAudioTrackList`, `getCurrentAudioTrack`methods plus `audioTrackUpdate` and `audioTrackListUpdate` events reflecting the `CHARACTERISTICS` of the original playlist, e.g. for audio-description audio tracks.
 - Add optional `videoRange` property to `getVariantList`, `getLockedVariant`, `getCurrentVariant` as well as `variantUpdate`, `variantLockUpdate` and `variantListUpdate` events to reflect its video's dynamic range
+- Add `NotAPlaylist` error code: a new `WaspOtherError` for when the given resource URL does not seem to be a valid HLS playlist URL
+- Add `MultivariantPlaylistVariableDefinitionError` and `MediaPlaylistVariableDefinitionError` error codes for when an `#EXT-X-DEFINE` tag or usage is not compliant to the HLS specification respectively on the MultiVariant Playlist or the Media Playlist.
+- Add `SourceBufferEmptyMimeType`, `SourceBufferMediaSourceIsClosed`, `SourceBufferNoMediaSourceAttached` and `SourceBufferQuotaExceededError` error codes on a `WaspSourceBufferCreationError` error type.
 - Light handling of QuotaExceededError by removing data from buffers if/when it happens. More advanced handling would be to reduce buffer goal adaptively (not done yet)
+- Add parsing of `#EXT-X-DEFINE` tags
+- Handle `#EXT-X-MEDIA-SEQUENCE` tags and use it for segment staleness detection
 
 ### Bug fixes
 

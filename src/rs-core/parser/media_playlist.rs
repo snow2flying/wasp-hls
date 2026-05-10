@@ -129,6 +129,8 @@ impl InitSegmentInfo {
 /// Information linked to a single media segment.
 #[derive(Clone, Debug)]
 pub(crate) struct MediaSegmentInfo {
+    /// Media sequence number identifying this segment within the current playlist lineage.
+    sequence: u32,
     /// Information on the time boundaries of that segment.
     ///
     /// It should be exclusive to the time boundaries of all other segments in this Media Playlist.
@@ -140,6 +142,11 @@ pub(crate) struct MediaSegmentInfo {
 }
 
 impl MediaSegmentInfo {
+    /// Media sequence number identifying this segment within the current playlist lineage.
+    pub(crate) fn sequence(&self) -> u32 {
+        self.sequence
+    }
+
     /// First presentation time the segment contains media data for, in seconds.
     pub(crate) fn start(&self) -> f64 {
         self.time_info.start()
@@ -453,6 +460,7 @@ impl MediaPlaylist {
                 };
                 if let Some(duration) = next_segment_duration {
                     let seg = MediaSegmentInfo {
+                        sequence: 0,
                         time_info: SegmentTimeInfo::new(curr_start_time, duration),
                         byte_range: next_segment_byte_range,
                         url: seg_url,
@@ -474,7 +482,10 @@ impl MediaPlaylist {
                             byte_range,
                         });
                     }
-                    media_segments.push(seg);
+                    media_segments.push(MediaSegmentInfo {
+                        sequence: media_sequence + media_segments.len() as u32,
+                        ..seg
+                    });
                     curr_start_time += duration;
                     next_segment_duration = None;
                     next_segment_byte_range = None;
@@ -579,6 +590,10 @@ impl MediaPlaylist {
         self.target_duration as f64
     }
 
+    pub(crate) fn media_sequence(&self) -> u32 {
+        self.media_sequence
+    }
+
     /// Returns the start time of the first media segment referenced in that `MediaPlaylist`, in
     /// seconds.
     pub(crate) fn beginning(&self) -> Option<f64> {
@@ -611,6 +626,21 @@ impl MediaPlaylist {
     /// the last chronological one.
     pub(crate) fn is_ended(&self) -> bool {
         self.end_list
+    }
+
+    pub(crate) fn first_sequence(&self) -> Option<u32> {
+        self.segment_list.media().first().map(|s| s.sequence())
+    }
+
+    pub(crate) fn last_sequence(&self) -> Option<u32> {
+        self.segment_list.media().last().map(|s| s.sequence())
+    }
+
+    pub(crate) fn contains_sequence(&self, sequence: u32) -> bool {
+        match (self.first_sequence(), self.last_sequence()) {
+            (Some(first), Some(last)) => first <= sequence && sequence <= last,
+            _ => false,
+        }
     }
 
     /// Return Mime-type associated to this MediaPlaylist.

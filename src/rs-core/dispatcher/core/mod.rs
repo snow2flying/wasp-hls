@@ -1,7 +1,6 @@
 use super::{
-    event_listeners::JsTimeRanges, Dispatcher, JsMemoryBlob, MediaObservation,
+    event_listeners::JsTimeRanges, utils, Dispatcher, JsMemoryBlob, MediaObservation,
     MediaSourceReadyState, PlaybackTickReason, PlayerReadyState, ReadyProbeSegment,
-    StartingPositionType,
 };
 use crate::{
     bindings::{
@@ -20,7 +19,7 @@ use crate::{
         MultivariantPlaylistParsingErrorCode, OtherErrorCode, PlaylistNature, PlaylistType,
         PushedSegmentErrorCode, RequestId, SourceBufferId, TimerId,
     },
-    dispatcher::{segment_request_contexts::PendingSegmentRequest, StartingPosition},
+    dispatcher::segment_request_contexts::PendingSegmentRequest,
     media_element::{SegmentQualityContext, SourceBufferCreationError},
     parser::{SegmentTimeInfo, TopLevelPlaylist, TopLevelPlaylistParsingError},
     playlist_store::{
@@ -205,13 +204,33 @@ impl Dispatcher {
                 reason,
                 status,
             } => {
-                if self
-                    .segment_request_contexts
-                    .take(s.id())
-                    .is_some_and(|ctxt| ctxt.is_probe())
+                let req_ctxt = self.segment_request_contexts.take(s.id());
+                if req_ctxt
+                    .as_ref()
+                    .is_some_and(PendingSegmentRequest::is_probe)
                 {
                     self.ready_probe_segment = None;
                 }
+
+                if status.is_some_and(|s| s == 404 || s == 410)
+                    && req_ctxt.as_ref().is_some_and(|ctxt| {
+                        utils::is_stale_segment_request_context(self.playlist_store.as_ref(), ctxt)
+                    })
+                {
+                    Logger::info(
+                        "Core: Ignoring terminal 404/410 for segment no longer in the live window",
+                    );
+                    if req_ctxt
+                        .as_ref()
+                        .is_some_and(PendingSegmentRequest::is_probe)
+                    {
+                        self.recheck_player_state();
+                    } else {
+                        self.check_segments_to_request();
+                    }
+                    return;
+                }
+
                 let time_info = s.time_info();
                 jsSendSegmentRequestError(
                     true,
@@ -487,13 +506,15 @@ impl Dispatcher {
                 None,
                 req_id,
             ),
-            ProbeSegmentContext::Media { time_info } => self.requester.request_segment_unlocked(
-                RequestLaneTag::Probe,
-                &probe_segment.url,
-                probe_segment.byte_range.as_ref(),
-                Some(time_info.clone()),
-                req_id,
-            ),
+            ProbeSegmentContext::Media { time_info, .. } => {
+                self.requester.request_segment_unlocked(
+                    RequestLaneTag::Probe,
+                    &probe_segment.url,
+                    probe_segment.byte_range.as_ref(),
+                    Some(time_info.clone()),
+                    req_id,
+                )
+            }
         }
         true
     }
@@ -585,7 +606,8 @@ impl Dispatcher {
         let Some(ReadyProbeSegment { request, data }) = self.ready_probe_segment.take() else {
             return; // No stored probe segment
         };
-        let Some(media_type) = has_playlist_store_media_type(self.playlist_store.as_ref()) else {
+        let Some(media_type) = utils::has_playlist_store_media_type(self.playlist_store.as_ref())
+        else {
             jsSendOtherError(
                 true,
                 OtherErrorCode::Unknown,
@@ -599,7 +621,7 @@ impl Dispatcher {
             ProbeSegmentContext::Init { id } => {
                 self.on_init_segment_loaded(data, media_type, id);
             }
-            ProbeSegmentContext::Media { time_info } => {
+            ProbeSegmentContext::Media { time_info, .. } => {
                 let Some((_, context)) = self
                     .playlist_store
                     .as_ref()
@@ -717,12 +739,12 @@ impl Dispatcher {
         playlist_id: MediaPlaylistPermanentId,
         refresh_interval: Option<f64>,
     ) {
-        let Some(playlist_store) = self.playlist_store.as_ref() else {
-            return;
-        };
         self.playlist_refresh_timers
             .set_timer(playlist_id.clone(), refresh_interval);
 
+        let Some(playlist_store) = self.playlist_store.as_ref() else {
+            return;
+        };
         if let Some(duration) = playlist_store.segment_target_duration() {
             let mut min_buffer_time = f64::max(3., duration - 1.);
             min_buffer_time = f64::min(8., min_buffer_time);
@@ -933,7 +955,7 @@ impl Dispatcher {
                             .insert(PendingSegmentRequest::Media {
                                 media_type,
                                 time_info: seg.time_info().clone(),
-
+                                sequence: seg.sequence(),
                                 quality_context: seg_info.1,
                             });
                     self.requester
@@ -1048,6 +1070,7 @@ impl Dispatcher {
                 media_type: req_media_type,
                 time_info,
                 quality_context,
+                ..
             } => {
                 if Some(req_media_type) != media_type {
                     Logger::warn("Loaded media segment with mismatched media type context.");
@@ -1105,7 +1128,8 @@ impl Dispatcher {
                 self.stop_current_content();
             }
             Ok(()) => {
-                if was_last_segment(self.playlist_store.as_ref(), media_type, segment_start) {
+                if utils::was_last_segment(self.playlist_store.as_ref(), media_type, segment_start)
+                {
                     Logger::info(&format!(
                         "Last {} segment request finished, declaring its buffer's end",
                         media_type
@@ -1172,7 +1196,7 @@ impl Dispatcher {
             };
 
         // Progress through the "startup steps" of the linked `PlaylistStore`, returning `true`
-        let wanted_position = get_initial_position(playlist_store, starting_position);
+        let wanted_position = utils::get_initial_position(playlist_store, starting_position);
         match playlist_store.startup_status(wanted_position) {
             Ok(StartupStatus::Ready) => false,
             Ok(StartupStatus::AwaitingSupportCheck) => true,
@@ -1304,7 +1328,7 @@ impl Dispatcher {
             return;
         };
 
-        let wanted_start = get_initial_position(playlist_store, starting_pos);
+        let wanted_start = utils::get_initial_position(playlist_store, starting_pos);
         if wanted_start > 0. {
             self.media_element_ref.seek(wanted_start);
         }
@@ -1332,57 +1356,5 @@ impl Dispatcher {
         }
         jsStartObservingPlayback();
         self.consume_probe_segment();
-    }
-}
-
-fn was_last_segment(
-    playlist_store: Option<&PlaylistStore>,
-    media_type: MediaType,
-    seg_start: f64,
-) -> bool {
-    playlist_store
-        .and_then(|c| c.curr_media_playlist(media_type))
-        .map(|pl| {
-            pl.is_ended()
-                && pl
-                    .segment_list()
-                    .media()
-                    .last()
-                    .map(|x| x.start() == seg_start)
-                    .unwrap_or(false)
-        })
-        .unwrap_or(false)
-}
-
-fn has_playlist_store_media_type(playlist_store: Option<&PlaylistStore>) -> Option<MediaType> {
-    let playlist_store = playlist_store?;
-    if playlist_store.has_media_type(MediaType::Video) {
-        Some(MediaType::Video)
-    } else if playlist_store.has_media_type(MediaType::Audio) {
-        Some(MediaType::Audio)
-    } else {
-        None
-    }
-}
-
-/// Returns the expected position at which we want to start playback, in seconds, according to
-/// both configuration and playlist metadata.
-fn get_initial_position(
-    playlist_store: &PlaylistStore,
-    starting_position: Option<StartingPosition>,
-) -> f64 {
-    if let Some(starting_pos) = starting_position {
-        match starting_pos.start_type {
-            StartingPositionType::Absolute => starting_pos.position,
-            StartingPositionType::FromBeginning => {
-                playlist_store.curr_min_position().unwrap_or(0.) + starting_pos.position
-            }
-            StartingPositionType::FromEnd => playlist_store
-                .curr_max_position()
-                .map(|max| max - starting_pos.position)
-                .unwrap_or(playlist_store.expected_start_time()),
-        }
-    } else {
-        playlist_store.expected_start_time()
     }
 }

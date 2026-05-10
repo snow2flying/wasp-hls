@@ -60,6 +60,17 @@ impl SegmentRequestContexts {
     {
         self.contexts.values().any(predicate)
     }
+
+    /// Return the ids for all contexts matching the given predicate.
+    pub(crate) fn ids_matching<F>(&self, predicate: F) -> Vec<SegmentRequestId>
+    where
+        F: Fn(&PendingSegmentRequest) -> bool,
+    {
+        self.contexts
+            .iter()
+            .filter_map(|(request_id, context)| predicate(context).then_some(*request_id))
+            .collect()
+    }
 }
 
 /// Singular item inserted into the `SegmentRequestContexts`.
@@ -76,6 +87,8 @@ pub(crate) enum PendingSegmentRequest {
     Media {
         /// The `MediaType` the media segment is linked to.
         media_type: MediaType,
+        /// Media sequence number identifying that segment within the current playlist lineage.
+        sequence: u32,
         /// Time-related metadata linked to that segment.
         time_info: SegmentTimeInfo,
         /// Additional context required for ABR

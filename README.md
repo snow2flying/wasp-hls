@@ -329,6 +329,7 @@ most of them are not needed for playback):
       anything like that.
 - [x] EXT-X-DEFINE (Used in variable substitutions)
 - [x] EXT-X-START: Used to determine a default start time in the content.
+- [x] EXT-X-MEDIA-SEQUENCE
 - EXT-X-MAP:
   - [x] URI: Used to fetch the initialization segment if one is present
   - [x] BYTERANGE: To perform a range request for the initialization segment
@@ -380,8 +381,6 @@ most of them are not needed for playback):
       handled until now had compatible behaviors from version to version
 - [ ] EXT-X-INDEPENDENT-SEGMENTS: Might needs to be considered once we're
       doing some manual cleaning?
-- [ ] EXT-X-MEDIA-SEQUENCE: For now, playlist are refreshed without needing
-      to identify the media sequence.
 - [ ] EXT-X-I-FRAMES-ONLY: To handle one day, perhaps (very low priority)
 - [ ] EXT-X-PART: low-latency related
 - [ ] EXT-X-PART-INF: low-latency related

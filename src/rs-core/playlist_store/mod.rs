@@ -30,6 +30,8 @@ pub(crate) enum ProbeSegmentContext {
     Init { id: f64 },
     /// This probe segment is a full valid Media segment
     Media {
+        /// Sequence number identifying that segment in the playlist.
+        sequence: u32,
         /// Timing information linked to that media segment
         time_info: SegmentTimeInfo,
     },
@@ -429,6 +431,7 @@ impl PlaylistStore {
                 url: media_segment.url().clone(),
                 byte_range: media_segment.byte_range().cloned(),
                 context: ProbeSegmentContext::Media {
+                    sequence: media_segment.sequence(),
                     time_info: media_segment.time_info().clone(),
                 },
             })
