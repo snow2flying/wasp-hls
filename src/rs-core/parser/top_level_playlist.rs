@@ -5,7 +5,7 @@ use super::{
         MediaPlaylistUrlLocation, MultivariantPlaylist, MultivariantPlaylistParsingError,
     },
 };
-use crate::utils::url::Url;
+use crate::{utils::url::Url, Logger};
 use std::{fmt, io};
 
 pub(crate) enum TopLevelPlaylist {
@@ -39,10 +39,12 @@ pub(crate) struct DirectMediaInfo {
 impl TopLevelPlaylist {
     pub(crate) fn parse(data: &[u8], url: Url) -> Result<Self, TopLevelPlaylistParsingError> {
         if is_multivariant_playlist(data) {
+            Logger::info("Parser: this is a multivariant playlist, parsing...");
             MultivariantPlaylist::parse(io::Cursor::new(data), url)
                 .map(Self::Multivariant)
                 .map_err(TopLevelPlaylistParsingError::Multivariant)
         } else {
+            Logger::info("Parser: this is a top-level media playlist, parsing...");
             DirectMediaPlaylist::parse(data, url)
                 .map(Self::DirectMedia)
                 .map_err(TopLevelPlaylistParsingError::Media)
@@ -154,7 +156,9 @@ fn is_multivariant_playlist(data: &[u8]) -> bool {
         if line.is_empty() {
             continue;
         }
-        if line.starts_with("#EXT-X-STREAM-INF") || line.starts_with("#EXT-X-MEDIA") {
+        // XXX TODO: Maybe we should assume Multivariant and do the reverse check to limit
+        //           impact?
+        if line.starts_with("#EXT-X-STREAM-INF:") || line.starts_with("#EXT-X-MEDIA:") {
             return true;
         }
     }
