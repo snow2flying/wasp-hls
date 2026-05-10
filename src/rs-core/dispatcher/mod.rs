@@ -1,18 +1,19 @@
 use crate::{
     adaptive::AdaptiveQualitySelector,
-    bindings::TimerId,
+    dispatcher::playlist_refresh_timers::PlaylistRefreshTimers,
     media_element::MediaElementReference,
     playlist_store::{PlaylistStore, ProbeSegmentMetadata},
-    requester::{PlaylistFileType, Requester},
+    requester::Requester,
     segment_selector::NextSegmentSelectors,
 };
 
 mod api;
 mod core;
 mod event_listeners;
-mod segment_action_tracker;
+mod playlist_refresh_timers;
+mod segment_request_contexts;
 
-use segment_action_tracker::SegmentActionTracker;
+use segment_request_contexts::SegmentRequestContexts;
 
 pub(crate) use crate::bindings::{MediaSourceReadyState, PlaybackTickReason, StartingPositionType};
 pub(crate) use event_listeners::{JsMemoryBlob, JsTimeRanges, MediaObservation};
@@ -58,11 +59,11 @@ pub struct Dispatcher {
 
     /// Current set-up timers to notify about a needed playlist refresh, associated to the playlist
     /// that needs to be refreshed.
-    playlist_refresh_timers: Vec<(TimerId, PlaylistFileType)>,
+    playlist_refresh_timers: PlaylistRefreshTimers,
 
-    /// Stores data on pending operations linked to init or media segments.
+    /// Stores data on pending requests linked to init or media segments.
     /// Allowing to retreive them once finished.
-    segment_action_tracker: SegmentActionTracker,
+    segment_request_contexts: SegmentRequestContexts,
 
     /// A startup probe segment that has already been fetched and inspected and now only waits for
     /// the regular buffering pipeline to be ready before being pushed.
@@ -75,28 +76,31 @@ enum PlayerReadyState {
     /// No content is currently loaded.
     Stopped,
 
-    /// We're preparing a content's playlist, MediaSource and SourceBuffers
-    Loading {
+    /// We're preparing a content's playlist base information
+    /// Appears after `Stopped` and before `AwaitingMediaSource`.
+    AwaitingPlaylistInfo {
+        starting_position: Option<StartingPosition>,
+    },
+
+    /// We're creating a `MediaSource` and the corresponding buffers.
+    /// Appears after `AwaitingPlaylistInfo` and before `AwaitingSegments`.
+    AwaitingMediaSource {
         starting_position: Option<StartingPosition>,
     },
 
     /// The SourceBuffers are all ready but currently awaiting segments before
     /// being aple to play.
+    /// Appears after `AwaitingMediaSource` and before `Playing`.
     AwaitingSegments,
 
     /// The content has enough segments to play.
     /// Note that this does not mean the media element is currently playing content:
     /// it can still be paused or at a `0` playback rate.
+    /// Appears after `AwaitingSegments`.
     Playing,
 }
 
-impl PlayerReadyState {
-    pub(crate) fn is_loading(&self) -> bool {
-        matches!(self, PlayerReadyState::Loading { .. })
-    }
-}
-
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct StartingPosition {
     start_type: StartingPositionType,
     position: f64,

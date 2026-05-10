@@ -247,8 +247,31 @@ impl PlaylistStore {
         ret
     }
 
+    // TODO: This one is ugly, remove
+    pub(crate) fn direct_media_playlist(
+        &self,
+    ) -> Option<(&MediaPlaylistPermanentId, &MediaPlaylist)> {
+        match &self.playlist {
+            TopLevelPlaylist::DirectMedia(playlist) => Some((playlist.id(), playlist.playlist())),
+            TopLevelPlaylist::Multivariant(_) => None,
+        }
+    }
+
     pub(crate) fn is_curr_media_playlist(&self, id: &MediaPlaylistPermanentId) -> bool {
         Some(id) == self.curr_audio_id.as_ref() || Some(id) == self.curr_video_id.as_ref()
+    }
+
+    /// Returns the `MediaType` currently associated to the given Media Playlist id.
+    ///
+    /// Returns `None` when that playlist is not one of the currently-selected media playlists.
+    pub(crate) fn curr_media_type_for(&self, id: &MediaPlaylistPermanentId) -> Option<MediaType> {
+        if Some(id) == self.curr_video_id.as_ref() {
+            Some(MediaType::Video)
+        } else if Some(id) == self.curr_audio_id.as_ref() {
+            Some(MediaType::Audio)
+        } else {
+            None
+        }
     }
 
     /// Returns `true` if the current playlist linked to the given `MediaType` has been loaded.

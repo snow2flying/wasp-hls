@@ -1,7 +1,7 @@
 use crate::{
     adaptive::AdaptiveQualitySelector,
     bindings::{jsSendOtherError, OtherErrorCode},
-    dispatcher::segment_action_tracker::SegmentActionTracker,
+    dispatcher::{segment_request_contexts::SegmentRequestContexts, PlaylistRefreshTimers},
     media_element::MediaElementReference,
     requester::{PlaylistFileType, Requester},
     segment_selector::NextSegmentSelectors,
@@ -30,8 +30,8 @@ impl Dispatcher {
             last_position: 0.,
             buffer_goal: 30.,
             segment_selectors: NextSegmentSelectors::new(0., 30.),
-            segment_action_tracker: SegmentActionTracker::new(),
-            playlist_refresh_timers: vec![],
+            segment_request_contexts: SegmentRequestContexts::new(),
+            playlist_refresh_timers: PlaylistRefreshTimers::new(),
             ready_probe_segment: None,
         }
     }
@@ -40,7 +40,7 @@ impl Dispatcher {
     pub fn load_content(&mut self, content_url: String, starting_pos: Option<StartingPosition>) {
         Logger::info("load_content called");
         self.stop();
-        self.ready_state = PlayerReadyState::Loading {
+        self.ready_state = PlayerReadyState::AwaitingPlaylistInfo {
             starting_position: starting_pos,
         };
         let content_url = Url::new(content_url);

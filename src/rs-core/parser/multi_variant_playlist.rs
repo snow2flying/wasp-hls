@@ -65,9 +65,7 @@ impl MultivariantPlaylist {
             }
         }
         while let Some(line) = lines.next() {
-            let str_line = if let Ok(s) = line {
-                s
-            } else {
+            let Ok(str_line) = line else {
                 return Err(MultivariantPlaylistParsingError::UnableToReadLine);
             };
             if str_line.is_empty() {
