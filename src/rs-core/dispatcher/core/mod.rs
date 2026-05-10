@@ -1,31 +1,36 @@
 use super::{
     event_listeners::JsTimeRanges, Dispatcher, JsMemoryBlob, MediaObservation,
-    MediaSourceReadyState, PlaybackTickReason, PlayerReadyState, StartingPositionType,
+    MediaSourceReadyState, PlaybackTickReason, PlayerReadyState, ReadyProbeSegment,
+    StartingPositionType,
 };
 use crate::{
     bindings::{
         formatters::{
-            format_audio_tracks_for_js, format_source_buffer_creation_err_for_js,
-            format_variants_info_for_js,
+            format_audio_tracks_for_js, format_direct_media_audio_tracks_for_js,
+            format_direct_media_variants_info_for_js, format_source_buffer_creation_err_for_js,
+            format_variants_info_for_js, DIRECT_MEDIA_AUDIO_TRACK_ID, DIRECT_MEDIA_VARIANT_ID,
         },
         jsAnnounceFetchedContent, jsAnnounceTrackUpdate, jsAnnounceVariantLockStatusChange,
-        jsAnnounceVariantUpdate, jsClearTimer, jsSendMediaPlaylistParsingError,
+        jsAnnounceVariantUpdate, jsInspectSegment, jsSendMediaPlaylistParsingError,
         jsSendMediaPlaylistRequestError, jsSendMultivariantPlaylistParsingError,
         jsSendMultivariantPlaylistRequestError, jsSendOtherError, jsSendPushedSegmentError,
         jsSendRemoveBufferError, jsSendSegmentParsingError, jsSendSegmentRequestError,
         jsSendSourceBufferCreationError, jsSetMediaSourceDuration, jsStartObservingPlayback,
-        jsStopObservingPlayback, jsTimer, jsUpdateContentInfo, AddSourceBufferErrorCode, MediaType,
-        MultivariantPlaylistParsingErrorCode, OtherErrorCode, PlaylistNature,
-        PushedSegmentErrorCode, RequestId, SourceBufferId, TimerId, TimerReason,
+        jsStopObservingPlayback, jsUpdateContentInfo, AddSourceBufferErrorCode, MediaType,
+        MultivariantPlaylistParsingErrorCode, OtherErrorCode, PlaylistNature, PlaylistType,
+        PushedSegmentErrorCode, RequestId, SourceBufferId, TimerId,
     },
+    dispatcher::{segment_request_contexts::PendingSegmentRequest, StartingPosition},
     media_element::{SegmentQualityContext, SourceBufferCreationError},
-    parser::{MultivariantPlaylist, SegmentTimeInfo},
+    parser::{SegmentTimeInfo, TopLevelPlaylist, TopLevelPlaylistParsingError},
     playlist_store::{
         LockVariantResponse, MediaPlaylistPermanentId, PlaylistStore, PlaylistStoreError,
-        SetAudioTrackResponse, VariantUpdateResult,
+        ProbeSegmentContext, ProbeSegmentMetadata, SetAudioTrackResponse, StartupStatus,
+        VariantUpdateResult,
     },
     requester::{
-        FinishedRequestType, PlaylistFileType, PlaylistRequestInfo, RetryResult, SegmentRequestInfo,
+        FinishedRequestType, PlaylistFileType, PlaylistRequestInfo, RequestLaneTag, RetryResult,
+        SegmentRequestInfo,
     },
     utils::url::Url,
     Logger,
@@ -37,10 +42,12 @@ impl Dispatcher {
     pub(super) fn stop_current_content(&mut self) {
         Logger::info("Core: Stopping current content (if one) and resetting player");
         self.requester.reset();
+        self.segment_request_contexts.clear();
         jsStopObservingPlayback();
         self.media_element_ref.reset();
         self.segment_selectors.reset_selectors(0.);
         self.playlist_store = None;
+        self.ready_probe_segment = None;
         self.last_position = 0.;
         self.clean_up_playlist_refresh_timers();
         self.ready_state = PlayerReadyState::Stopped;
@@ -111,23 +118,26 @@ impl Dispatcher {
     /// Method to call once a timer for Playlist refresh, started with the jsTimer JavaScript
     /// function, has finished, with the corrsonding `TimerId` as argument.
     pub(super) fn on_playlist_refresh_timer_ended(&mut self, id: TimerId) {
-        let found = self.playlist_refresh_timers.iter().position(|x| x.0 == id);
-        if let Some(idx) = found {
-            let (_, playlist_type) = self.playlist_refresh_timers.remove(idx);
-            if let Some(playlist_store) = &self.playlist_store {
-                match playlist_type {
-                    PlaylistFileType::MultivariantPlaylist => self
-                        .requester
-                        .fetch_playlist(playlist_store.url().clone(), playlist_type),
-                    PlaylistFileType::MediaPlaylist { ref id, .. } => {
-                        if let Some(u) = playlist_store.media_playlist_url(id) {
-                            self.requester.fetch_playlist(u.clone(), playlist_type)
-                        } else {
-                            Logger::error("Core: Cannot refresh Media Playlist: id not found");
-                        }
-                    }
-                }
-            }
+        let (Some(playlist_id), Some(playlist_store)) = (
+            self.playlist_refresh_timers.resolve_timer(id),
+            &self.playlist_store,
+        ) else {
+            return;
+        };
+
+        if let (Some(url), Some(media_type)) = (
+            playlist_store.media_playlist_url(&playlist_id),
+            playlist_store.curr_media_type_for(&playlist_id),
+        ) {
+            self.requester.fetch_playlist(
+                url.clone(),
+                PlaylistFileType::MediaPlaylist {
+                    id: playlist_id,
+                    media_type,
+                },
+            );
+        } else {
+            Logger::error("Core: Cannot refresh Media Playlist: id not found");
         }
     }
 
@@ -189,11 +199,19 @@ impl Dispatcher {
             .requester
             .on_pending_request_failure(request_id, has_timeouted, status)
         {
+            // Failing segment request
             RetryResult::Failed {
                 request_type: FinishedRequestType::Segment(s),
                 reason,
                 status,
             } => {
+                if self
+                    .segment_request_contexts
+                    .take(s.id())
+                    .is_some_and(|ctxt| ctxt.is_probe())
+                {
+                    self.ready_probe_segment = None;
+                }
                 let time_info = s.time_info();
                 jsSendSegmentRequestError(
                     true,
@@ -206,6 +224,7 @@ impl Dispatcher {
                 );
                 self.stop_current_content();
             }
+            // Failing playlist request
             RetryResult::Failed {
                 request_type: FinishedRequestType::Playlist(x),
                 reason,
@@ -222,7 +241,7 @@ impl Dispatcher {
                             status,
                         );
                     }
-                    PlaylistFileType::MultivariantPlaylist => {
+                    PlaylistFileType::TopLevelPlaylist => {
                         jsSendMultivariantPlaylistRequestError(
                             true,
                             x.url.get_ref(),
@@ -255,7 +274,7 @@ impl Dispatcher {
                 reason,
                 status,
             } => match request_info.playlist_type {
-                PlaylistFileType::MultivariantPlaylist => jsSendMultivariantPlaylistRequestError(
+                PlaylistFileType::TopLevelPlaylist => jsSendMultivariantPlaylistRequestError(
                     false,
                     request_info.url.get_ref(),
                     reason,
@@ -284,9 +303,7 @@ impl Dispatcher {
         Logger::info(&format!("Core: MediaSource state changed: {:?}", state));
         self.media_element_ref
             .update_media_source_ready_state(state);
-        if state == MediaSourceReadyState::Open {
-            self.check_ready_to_load_segments();
-        }
+        self.recheck_player_state();
     }
 
     /// Method to call when a `SourceBuffer`'s creation failed.
@@ -418,7 +435,7 @@ impl Dispatcher {
 
     /// Method to call when a new codec support report has been received.
     pub(super) fn on_codecs_support_update_core(&mut self) {
-        self.check_ready_to_load_media_playlists();
+        self.recheck_player_state();
     }
 
     /// For each media type, check if segment need to be requested, and if that's the case, perform
@@ -440,78 +457,164 @@ impl Dispatcher {
         }
     }
 
-    /// Method called on various events that could lead to start loading segments.
+    /// Start a startup probe request if not already in progress.
     ///
-    /// If all conditions are met, the `Dispatcher` is set to the next
-    /// `AwaitingSegments` `PlayerReadyState`, playback observations begin,
-    /// and the potential initialization segments are requested.
-    fn check_ready_to_load_segments(&mut self) {
-        let starting_pos = match self.ready_state {
-            PlayerReadyState::Loading {
-                ref starting_position,
-            } => starting_position,
-            _ => {
-                return;
-            }
-        };
-
-        match self.media_element_ref.media_source_ready_state() {
-            Some(MediaSourceReadyState::Closed) | None => {
-                return;
-            }
-            _ => {}
+    /// Probe segment requests are segment requests with the goal of obtaining more
+    /// information not found in the playlist(s): which codecs is it and other attributes.
+    ///
+    /// # Returns
+    ///
+    /// Returns `true` if the probe process has been started, or `false` if we
+    /// cannot do that.
+    fn start_probe_segment_request(&mut self, probe_segment: ProbeSegmentMetadata) -> bool {
+        if self.ready_probe_segment.is_some() || self.segment_request_contexts.has(|a| a.is_probe())
+        {
+            return true; // probe already going on
         }
 
-        let playlist_store = if let Some(pl_store) = self.playlist_store.as_ref() {
-            pl_store
-        } else {
+        let req_id = self
+            .segment_request_contexts
+            .insert(PendingSegmentRequest::Probe {
+                // TODO: cloning here may be unnecessary if we're smart about it? Though
+                // it may be not worth it.
+                probe_segment: probe_segment.clone(),
+            });
+        match &probe_segment.context {
+            ProbeSegmentContext::Init { .. } => self.requester.request_segment_unlocked(
+                RequestLaneTag::Probe,
+                &probe_segment.url,
+                probe_segment.byte_range.as_ref(),
+                None,
+                req_id,
+            ),
+            ProbeSegmentContext::Media { time_info } => self.requester.request_segment_unlocked(
+                RequestLaneTag::Probe,
+                &probe_segment.url,
+                probe_segment.byte_range.as_ref(),
+                Some(time_info.clone()),
+                req_id,
+            ),
+        }
+        true
+    }
+
+    fn handle_playlist_store_error(&mut self, err: PlaylistStoreError) {
+        match err {
+            PlaylistStoreError::NoSupportedVariant => {
+                jsSendOtherError(true, OtherErrorCode::NoSupportedVariant, &err.to_string())
+            }
+            PlaylistStoreError::NoInitialVariant => jsSendMultivariantPlaylistParsingError(
+                true,
+                MultivariantPlaylistParsingErrorCode::MultivariantPlaylistWithoutVariant,
+                &err.to_string(),
+            ),
+            PlaylistStoreError::NoProbeSegment => jsSendSegmentParsingError(
+                true,
+                crate::bindings::SegmentParsingErrorCode::UnknownError,
+                Some(MediaType::Video),
+                &err.to_string(),
+            ),
+            PlaylistStoreError::MissingSelectedStreamMetadata => {
+                jsSendOtherError(true, OtherErrorCode::Unknown, &err.to_string())
+            }
+            PlaylistStoreError::UnsupportedStartupStream => {
+                jsSendOtherError(true, OtherErrorCode::NoSupportedVariant, &err.to_string())
+            }
+        }
+    }
+
+    /// Once a "probe segment" has been loaded, it needs to be inspected so information
+    /// can be extracted from it and the state be updated accordingly.
+    ///
+    /// This is what this method does: inspect the segment and update the playlist state
+    /// accordingly.
+    fn do_probe_segment_inspection(
+        &mut self,
+        probe_segment: ProbeSegmentMetadata,
+        segment_media_type: Option<MediaType>,
+        data: JsMemoryBlob,
+    ) {
+        let Some(playlist_store) = self.playlist_store.as_mut() else {
+            Logger::error("Core: asked to do segment inspection without having a playlist store");
             return;
         };
 
-        if playlist_store.are_playlists_ready() {
-            if let Some(starting_pos) = starting_pos {
-                let actual_start = match starting_pos.start_type {
-                    StartingPositionType::Absolute => starting_pos.position,
-                    StartingPositionType::FromBeginning => {
-                        playlist_store.curr_min_position().unwrap_or(0.) + starting_pos.position
-                    }
-                    StartingPositionType::FromEnd => playlist_store
-                        .curr_max_position()
-                        .map(|max| max - starting_pos.position)
-                        .unwrap_or(playlist_store.expected_start_time()),
+        let inspection = match jsInspectSegment(data.id()) {
+            Ok(inspection) => inspection,
+            Err((code, message)) => {
+                jsSendSegmentParsingError(
+                    true,
+                    code,
+                    segment_media_type,
+                    message
+                        .as_deref()
+                        .unwrap_or("Unknown probe segment parsing error"),
+                );
+                self.stop_current_content();
+                return;
+            }
+        };
+
+        // Update playlist information with inspection result
+        playlist_store.set_direct_media_info(crate::parser::DirectMediaInfo {
+            mime_type: inspection.mime_type,
+            media_type: inspection.media_type,
+            codec: inspection.codec,
+        });
+
+        // That might have led to more timing-related information
+        jsUpdateContentInfo(
+            playlist_store.curr_min_position(),
+            playlist_store.curr_max_position(),
+            playlist_store.playlist_type(),
+        );
+
+        // Store segment for future playback
+        self.ready_probe_segment = Some(ReadyProbeSegment {
+            request: probe_segment,
+            data,
+        });
+    }
+
+    /// In certain conditions, a "probe segment" may be fetched initially to gather more
+    /// metadata on the content to play.
+    ///
+    /// As it is usable data and should anyway correspond to the initial segment to load, this
+    /// method allows to both reset that state and to push it to the buffers.
+    fn consume_probe_segment(&mut self) {
+        let Some(ReadyProbeSegment { request, data }) = self.ready_probe_segment.take() else {
+            return; // No stored probe segment
+        };
+        let Some(media_type) = has_playlist_store_media_type(self.playlist_store.as_ref()) else {
+            jsSendOtherError(
+                true,
+                OtherErrorCode::Unknown,
+                "No direct-media type could be resolved after probing",
+            );
+            self.stop_current_content();
+            return;
+        };
+
+        match request.context {
+            ProbeSegmentContext::Init { id } => {
+                self.on_init_segment_loaded(data, media_type, id);
+            }
+            ProbeSegmentContext::Media { time_info } => {
+                let Some((_, context)) = self
+                    .playlist_store
+                    .as_ref()
+                    .and_then(|store| store.curr_media_playlist_segment_info(media_type))
+                else {
+                    jsSendOtherError(
+                        true,
+                        OtherErrorCode::Unknown,
+                        "No direct-media context could be resolved after probing",
+                    );
+                    self.stop_current_content();
+                    return;
                 };
-                if actual_start > 0. {
-                    self.media_element_ref.seek(actual_start);
-                }
-            } else {
-                let start_time = playlist_store.expected_start_time();
-                if start_time > 0. {
-                    self.media_element_ref.seek(start_time);
-                }
+                self.on_media_segment_loaded(data, media_type, time_info, context);
             }
-
-            self.ready_state = PlayerReadyState::AwaitingSegments;
-            if playlist_store.playlist_type() != PlaylistNature::VoD {
-                let _ = jsSetMediaSourceDuration(u32::MAX as f64);
-            } else if let Some(duration) = playlist_store.curr_duration() {
-                let _ = jsSetMediaSourceDuration(duration);
-            } else {
-                Logger::warn("Core: Unknown content duration");
-            }
-
-            if let Some(Err(e)) = self.init_source_buffer(MediaType::Audio) {
-                let (code, msg) = format_source_buffer_creation_err_for_js(e);
-                jsSendSourceBufferCreationError(true, code, MediaType::Audio, &msg);
-                self.stop_current_content();
-                return;
-            }
-            if let Some(Err(e)) = self.init_source_buffer(MediaType::Video) {
-                let (code, msg) = format_source_buffer_creation_err_for_js(e);
-                jsSendSourceBufferCreationError(true, code, MediaType::Video, &msg);
-                self.stop_current_content();
-                return;
-            }
-            jsStartObservingPlayback();
         }
     }
 
@@ -519,47 +622,88 @@ impl Dispatcher {
     fn on_playlist_fetch_success(
         &mut self,
         pl_info: PlaylistRequestInfo,
-        result: Vec<u8>,
+        data: Vec<u8>,
         final_url: Url,
     ) {
         let PlaylistRequestInfo { playlist_type, .. } = pl_info;
-        if let PlaylistFileType::MediaPlaylist { id, media_type } = playlist_type {
-            self.on_media_playlist_loaded(id, result, media_type, final_url);
-        } else {
-            self.on_multivariant_playlist_loaded(result, final_url);
+        match playlist_type {
+            PlaylistFileType::TopLevelPlaylist => {
+                self.on_top_level_playlist_loaded(data, final_url)
+            }
+
+            PlaylistFileType::MediaPlaylist { id, media_type } => {
+                Logger::info(&format!(
+                    "Media playlist loaded successfully: {}",
+                    final_url.get_ref()
+                ));
+                let refresh_interval = {
+                    let Some(playlist_store) = self.playlist_store.as_mut() else {
+                        jsSendOtherError(
+                            true,
+                            OtherErrorCode::Unknown,
+                            "Media playlist loaded but no top-level playlist",
+                        );
+                        self.stop_current_content();
+                        return;
+                    };
+                    match playlist_store.update_media_playlist(&id, data.as_ref(), final_url) {
+                        Err(e) => {
+                            let err_message = e.to_string();
+                            jsSendMediaPlaylistParsingError(
+                                true,
+                                e.into(),
+                                Some(media_type),
+                                &err_message,
+                            );
+                            self.stop_current_content();
+                            return;
+                        }
+                        Ok(p) => p.refresh_interval(),
+                    }
+                };
+                self.process_parsed_media_playlist(id, refresh_interval);
+            }
         }
     }
 
-    /// Method called once a Multivariant Playlist was loaded with success, with its response data
+    /// Method called once the top-level Playlist was loaded with success, with its response data
     /// and url as argument.
-    fn on_multivariant_playlist_loaded(&mut self, data: Vec<u8>, playlist_url: Url) {
-        match MultivariantPlaylist::parse(data.as_ref(), playlist_url) {
-            Err(e) => {
-                let message = e.to_string();
-                jsSendMultivariantPlaylistParsingError(true, e.into(), &message);
+    fn on_top_level_playlist_loaded(&mut self, data: Vec<u8>, playlist_url: Url) {
+        Logger::info("Core: top-level playlist loaded");
+        match TopLevelPlaylist::parse(data.as_ref(), playlist_url) {
+            Err(err) => {
+                let message = err.to_string();
+                match err {
+                    TopLevelPlaylistParsingError::Multivariant(err) => {
+                        jsSendMultivariantPlaylistParsingError(true, err.into(), &message);
+                    }
+                    TopLevelPlaylistParsingError::Media(err) => {
+                        jsSendMediaPlaylistParsingError(true, err.into(), None, &message);
+                    }
+                    TopLevelPlaylistParsingError::NotAPlaylist => {
+                        jsSendOtherError(true, OtherErrorCode::NotAPlaylist, &message);
+                    }
+                }
                 self.stop_current_content();
             }
             Ok(pl) => {
-                Logger::info("Core: Multivariant Playlist parsed successfully");
+                Logger::info("Core: top-level playlist parsed successfully");
                 let estimate = self.adaptive_selector.get_estimate();
                 match PlaylistStore::try_new(pl, estimate) {
                     Ok(pl_store) => {
+                        // TODO: ugly
+                        let direct_media_refresh = pl_store
+                            .direct_media_playlist()
+                            .map(|(id, playlist)| (id.clone(), playlist.refresh_interval()));
+
                         self.playlist_store = Some(pl_store);
-                        self.check_ready_to_load_media_playlists();
+                        if let Some((playlist_id, refresh_interval)) = direct_media_refresh {
+                            self.process_parsed_media_playlist(playlist_id, refresh_interval);
+                        }
+                        self.recheck_player_state();
                     }
                     Err(err) => {
-                        match err {
-                            PlaylistStoreError::NoSupportedVariant => jsSendOtherError(
-                                true,
-                                OtherErrorCode::NoSupportedVariant,
-                                &err.to_string(),
-                            ),
-                            PlaylistStoreError::NoInitialVariant => jsSendMultivariantPlaylistParsingError(
-                                true,
-                                MultivariantPlaylistParsingErrorCode::MultivariantPlaylistWithoutVariant,
-                                &err.to_string(),
-                            ),
-                        };
+                        self.handle_playlist_store_error(err);
                         self.stop_current_content();
                     }
                 }
@@ -567,147 +711,51 @@ impl Dispatcher {
         }
     }
 
-    /// Method called once a Media Playlist was loaded with success, with its id, response data
-    /// and url as argument.
-    fn on_media_playlist_loaded(
+    /// Method called once a Media Playlist was parsed with success
+    fn process_parsed_media_playlist(
         &mut self,
         playlist_id: MediaPlaylistPermanentId,
-        data: Vec<u8>,
-        media_type: MediaType,
-        playlist_url: Url,
+        refresh_interval: Option<f64>,
     ) {
-        Logger::info(&format!(
-            "Media playlist loaded successfully: {}",
-            playlist_url.get_ref()
-        ));
-        if let Some(ref mut playlist_store) = self.playlist_store.as_mut() {
-            match playlist_store.update_media_playlist(&playlist_id, data.as_ref(), playlist_url) {
-                Err(e) => {
-                    let err_message = e.to_string();
-                    jsSendMediaPlaylistParsingError(true, e.into(), media_type, &err_message);
-                    self.stop_current_content();
-                }
-                Ok(p) => {
-                    if let Some(refresh_interval) = p.refresh_interval() {
-                        let timer_id = jsTimer(refresh_interval, TimerReason::MediaPlaylistRefresh);
-                        self.playlist_refresh_timers.push((
-                            timer_id,
-                            PlaylistFileType::MediaPlaylist {
-                                id: playlist_id,
-                                media_type,
-                            },
-                        ));
-                    }
+        let Some(playlist_store) = self.playlist_store.as_ref() else {
+            return;
+        };
+        self.playlist_refresh_timers
+            .set_timer(playlist_id.clone(), refresh_interval);
 
-                    if let Some(duration) = playlist_store.segment_target_duration() {
-                        let mut min_buffer_time = f64::max(3., duration - 1.);
-                        min_buffer_time = f64::min(8., min_buffer_time);
-                        Logger::debug(&format!(
-                            "Core: Updating min_buffer_time: {min_buffer_time}"
-                        ));
-                        self.media_element_ref
-                            .update_min_buffer_time(min_buffer_time);
-                    }
-                    if self.ready_state.is_loading() {
-                        self.check_ready_to_load_segments();
-                    } else {
-                        self.check_segments_to_request();
-                    }
-
-                    if let Some(playlist_store) = self.playlist_store.as_ref() {
-                        let min_pos = playlist_store.curr_min_position();
-                        let max_pos = playlist_store.curr_max_position();
-                        jsUpdateContentInfo(min_pos, max_pos, playlist_store.playlist_type());
-                    }
-                }
-            }
-        } else {
-            jsSendOtherError(
-                true,
-                crate::bindings::OtherErrorCode::Unknown,
-                "Media playlist loaded but no MultivariantPlaylist",
-            );
-            self.stop_current_content();
+        if let Some(duration) = playlist_store.segment_target_duration() {
+            let mut min_buffer_time = f64::max(3., duration - 1.);
+            min_buffer_time = f64::min(8., min_buffer_time);
+            Logger::debug(&format!(
+                "Core: Updating min_buffer_time: {min_buffer_time}"
+            ));
+            self.media_element_ref
+                .update_min_buffer_time(min_buffer_time);
         }
+
+        // That might have led to more timing-related information
+        jsUpdateContentInfo(
+            playlist_store.curr_min_position(),
+            playlist_store.curr_max_position(),
+            playlist_store.playlist_type(),
+        );
+        self.recheck_player_state();
     }
 
-    fn check_ready_to_load_media_playlists(&mut self) {
-        let playlist_store = if let Some(playlist_store) = self.playlist_store.as_mut() {
-            playlist_store
-        } else {
-            // No PlaylistStore == no loaded Multivariant Playlist yet
-            return;
-        };
-
-        match playlist_store.check_codecs() {
-            Ok(false) => {
-                // Awaiting query about codecs support.
-                return;
+    /// Look if progress can be made in playing the current content by checking the full state
+    fn recheck_player_state(&mut self) {
+        match self.ready_state {
+            PlayerReadyState::Stopped => {}
+            PlayerReadyState::AwaitingPlaylistInfo { .. } => {
+                self.inner_advance_awaiting_playlist_info_state();
             }
-            Err(err) => {
-                match err {
-                    PlaylistStoreError::NoSupportedVariant => {
-                        jsSendOtherError(true, OtherErrorCode::NoSupportedVariant, &err.to_string())
-                    }
-                    PlaylistStoreError::NoInitialVariant => jsSendMultivariantPlaylistParsingError(
-                        true,
-                        MultivariantPlaylistParsingErrorCode::MultivariantPlaylistWithoutVariant,
-                        &err.to_string(),
-                    ),
-                };
-                self.stop_current_content();
-                return;
+            PlayerReadyState::AwaitingMediaSource { .. } => {
+                self.inner_advance_awaiting_media_source_state();
             }
-            _ => {}
-        }
-
-        if playlist_store.supported_variants().is_empty() {
-            jsSendOtherError(
-                true,
-                crate::bindings::OtherErrorCode::NoSupportedVariant,
-                "Error while parsing MultivariantPlaylist: no compatible variant found.",
-            );
-            self.stop_current_content();
-            return;
-        }
-
-        use PlaylistFileType::*;
-        [MediaType::Video, MediaType::Audio]
-            .into_iter()
-            .for_each(|mt| {
-                if let Some(id) = playlist_store.curr_media_playlist_id(mt) {
-                    if let Some(url) = playlist_store.media_playlist_url(id) {
-                        let id = id.clone();
-                        let url = url.clone();
-                        self.requester
-                            .fetch_playlist(url, MediaPlaylist { id, media_type: mt });
-                    }
-                }
-            });
-
-        // SAFETY: The following lines are unsafe because they may actually define raw pointers
-        // to point to Rust's heap memory and put it in the returned values.
-        //
-        // However, we're calling the JS binding function it is communicated to directly
-        // after and thus before the corresponding underlying data had a chance to be
-        // dropped.
-        //
-        // Because one of the rules of those bindings is to copy all pointed data
-        // synchronously on call, we should not encounter any issue.
-        let variants_info =
-            unsafe { format_variants_info_for_js(playlist_store.supported_variants().as_slice()) };
-        let audio_tracks_info =
-            unsafe { format_audio_tracks_for_js(playlist_store.audio_tracks()) };
-        let selected_audio_track = playlist_store.selected_audio_track_id();
-        let is_selected = selected_audio_track.is_some();
-        let curr_audio_track = if let Some(selected) = selected_audio_track {
-            Some(selected)
-        } else {
-            playlist_store.curr_audio_track_id()
+            PlayerReadyState::AwaitingSegments | PlayerReadyState::Playing => {
+                self.check_segments_to_request();
+            }
         };
-        jsAnnounceFetchedContent(variants_info, audio_tracks_info);
-        jsAnnounceVariantUpdate(playlist_store.curr_variant().map(|v| v.id()));
-        jsAnnounceTrackUpdate(MediaType::Audio, curr_audio_track, is_selected);
     }
 
     fn init_source_buffer(
@@ -715,15 +763,12 @@ impl Dispatcher {
         media_type: MediaType,
     ) -> Option<Result<(), SourceBufferCreationError>> {
         let content = self.playlist_store.as_mut()?;
-        let media_playlist = content.curr_media_playlist(media_type)?;
-        let mime_type = media_playlist.mime_type(media_type).unwrap_or("");
-        let codecs = content
-            .curr_variant()?
-            .codecs(media_type)
-            .unwrap_or_default();
+        content.curr_media_playlist(media_type)?;
+        let mime_type = content.current_mime_type(media_type)?;
+        let codec = content.current_codec(media_type)?;
         Some(
             self.media_element_ref
-                .create_source_buffer(media_type, mime_type, &codecs),
+                .create_source_buffer(media_type, &mime_type, &codec),
         )
     }
 
@@ -810,10 +855,8 @@ impl Dispatcher {
         [MediaType::Audio, MediaType::Video]
             .into_iter()
             .for_each(|mt| {
-                let pl_store = if let Some(playlist_store) = self.playlist_store.as_ref() {
-                    playlist_store
-                } else {
-                    self.requester.abort_segments_with_type(mt);
+                let Some(pl_store) = self.playlist_store.as_ref() else {
+                    self.abort_segment_requests_with_type(mt);
                     return;
                 };
 
@@ -833,7 +876,7 @@ impl Dispatcher {
                             Logger::debug(&format!(
                                 "Core: {mt} init segment request not needed anymore, abort."
                             ));
-                            self.requester.abort_segments_with_type(mt);
+                            self.abort_segment_requests_with_type(mt);
                         } else {
                             Logger::debug(&format!(
                                 "Core: {mt} init segment request still needed."
@@ -847,23 +890,21 @@ impl Dispatcher {
                             Logger::debug(&format!(
                                 "Core: {mt} media segment request not needed anymore, abort."
                             ));
-                            self.requester.abort_segments_with_type(mt);
+                            self.abort_segment_requests_with_type(mt);
                         } else {
                             Logger::debug(&format!(
                                 "Core: {mt} media segment request still needed."
                             ));
                         }
                     } else {
-                        self.requester.abort_segments_with_type(mt);
+                        self.abort_segment_requests_with_type(mt);
                     }
                 }
             });
     }
 
     fn check_segment_to_request_for_type(&mut self, media_type: MediaType) {
-        let pl_store = if let Some(playlist_store) = self.playlist_store.as_ref() {
-            playlist_store
-        } else {
+        let Some(pl_store) = self.playlist_store.as_ref() else {
             return;
         };
         if !self.requester.has_segment_request_pending(media_type) {
@@ -874,15 +915,29 @@ impl Dispatcher {
                     .get_mut(media_type)
                     .most_needed_segment(seg_info.0, &seg_info.1, inventory);
                 if let Some(i) = most_needed_segment.init_segment() {
+                    let req_id =
+                        self.segment_request_contexts
+                            .insert(PendingSegmentRequest::Init {
+                                media_type,
+                                init_segment_id: i.id(),
+                            });
                     self.requester.request_init_segment(
                         media_type,
                         i.url().clone(),
                         i.byte_range(),
-                        seg_info.1,
+                        req_id,
                     );
                 } else if let Some(seg) = most_needed_segment.media_segment() {
+                    let req_id =
+                        self.segment_request_contexts
+                            .insert(PendingSegmentRequest::Media {
+                                media_type,
+                                time_info: seg.time_info().clone(),
+
+                                quality_context: seg_info.1,
+                            });
                     self.requester
-                        .request_media_segment(media_type, seg, seg_info.1);
+                        .request_media_segment(media_type, seg, req_id);
                 }
             }
         }
@@ -912,42 +967,50 @@ impl Dispatcher {
         abort_prev: bool,
         flush: bool,
     ) {
-        if let Some(pl_store) = self.playlist_store.as_mut() {
-            changed_media_types.iter().for_each(|mt| {
-                let mt = *mt;
-                Logger::info(&format!("Core: {} MediaPlaylist changed", mt));
+        if self.playlist_store.is_none() {
+            return;
+        }
 
-                let selector = self.segment_selectors.get_mut(mt);
-                if abort_prev {
-                    self.requester.abort_segments_with_type(mt);
+        for mt in changed_media_types.iter().copied() {
+            Logger::info(&format!("Core: {} MediaPlaylist changed", mt));
+
+            if abort_prev {
+                self.abort_segment_requests_with_type(mt);
+            }
+            if flush {
+                if let Err(e) = self.media_element_ref.flush(mt) {
+                    Logger::warn(&format!(
+                        "Could not remove data from the previous {mt} buffer: {}",
+                        e
+                    ));
                 }
-                if flush {
-                    if let Err(e) = self.media_element_ref.flush(mt) {
-                        Logger::warn(&format!(
-                            "Could not remove data from the previous {mt} buffer: {}",
-                            e
-                        ));
-                    }
-                    selector.restart_from_position(self.media_element_ref.wanted_position() - 0.2);
-                }
-                if pl_store.curr_media_playlist(mt).is_none() {
-                    if let Some(id) = pl_store.curr_media_playlist_id(mt) {
-                        if let Some(url) = pl_store.media_playlist_url(id) {
-                            use PlaylistFileType::*;
-                            Logger::debug("Core: Media changed, requesting its media playlist");
-                            let id = id.clone();
-                            let url = url.clone();
-                            self.requester
-                                .fetch_playlist(url, MediaPlaylist { id, media_type: mt });
-                        }
-                    }
+                self.segment_selectors
+                    .get_mut(mt)
+                    .restart_from_position(self.media_element_ref.wanted_position() - 0.2);
+            }
+
+            let playlist_to_fetch = self.playlist_store.as_ref().and_then(|pl_store| {
+                if pl_store.curr_media_playlist(mt).is_some() {
+                    None
+                } else {
+                    let id = pl_store.curr_media_playlist_id(mt)?.clone();
+                    let url = pl_store.media_playlist_url(&id)?.clone();
+                    Some((id, url))
                 }
             });
-            if !changed_media_types.is_empty() {
-                self.clean_up_playlist_refresh_timers();
+
+            if let Some((id, url)) = playlist_to_fetch {
+                use PlaylistFileType::*;
+                Logger::debug("Core: Media changed, requesting its media playlist");
+                self.requester
+                    .fetch_playlist(url, MediaPlaylist { id, media_type: mt });
             }
-            self.check_segments_to_request();
         }
+
+        if !changed_media_types.is_empty() {
+            self.clean_up_playlist_refresh_timers();
+        }
+        self.check_segments_to_request();
     }
 
     /// Method called once a segment request ended with success
@@ -959,12 +1022,12 @@ impl Dispatcher {
         duration_ms: f64,
     ) {
         Logger::lazy_info(&|| {
-            let media_type = segment_req.media_type();
+            let lane_label = segment_req.lane_tag().label();
             match segment_req.time_info() {
-                None => format!("Loaded {} init segment", media_type),
+                None => format!("Loaded {} init segment", lane_label),
                 Some(time_info) => format!(
                     "Loaded {} segment: t: {}, d: {}",
-                    media_type,
+                    lane_label,
                     time_info.start(),
                     time_info.duration()
                 ),
@@ -975,11 +1038,35 @@ impl Dispatcher {
             .add_metric(duration_ms, resource_size);
 
         let media_type = segment_req.media_type();
-        let (_, _, time_info, context) = segment_req.deconstruct();
-        if let Some(time_info) = time_info {
-            self.on_media_segment_loaded(result, media_type, time_info, context);
-        } else {
-            self.on_init_segment_loaded(result, media_type);
+        let Some(req_ctxt) = self.segment_request_contexts.take(segment_req.id()) else {
+            Logger::warn("Loaded segment with unknown pending context.");
+            return;
+        };
+
+        match req_ctxt {
+            PendingSegmentRequest::Media {
+                media_type: req_media_type,
+                time_info,
+                quality_context,
+            } => {
+                if Some(req_media_type) != media_type {
+                    Logger::warn("Loaded media segment with mismatched media type context.");
+                }
+                self.on_media_segment_loaded(result, req_media_type, time_info, quality_context);
+            }
+            PendingSegmentRequest::Init {
+                media_type: req_media_type,
+                init_segment_id,
+            } => {
+                if Some(req_media_type) != media_type {
+                    Logger::warn("Loaded init segment with mismatched media type context.");
+                }
+                self.on_init_segment_loaded(result, req_media_type, init_segment_id);
+            }
+            PendingSegmentRequest::Probe { probe_segment } => {
+                self.do_probe_segment_inspection(probe_segment, media_type, result);
+                self.recheck_player_state();
+            }
         }
     }
 
@@ -1014,7 +1101,7 @@ impl Dispatcher {
             Err(x) => {
                 let media_type = x.media_type();
                 let message = x.to_string();
-                jsSendSegmentParsingError(true, x.into(), media_type, &message);
+                jsSendSegmentParsingError(true, x.into(), Some(media_type), &message);
                 self.stop_current_content();
             }
             Ok(()) => {
@@ -1029,39 +1116,222 @@ impl Dispatcher {
         }
     }
 
-    fn on_init_segment_loaded(&mut self, data: JsMemoryBlob, media_type: MediaType) {
+    fn on_init_segment_loaded(&mut self, data: JsMemoryBlob, media_type: MediaType, init_id: f64) {
         match self.media_element_ref.push_init_segment(media_type, data) {
             Err(x) => {
                 let media_type = x.media_type();
                 let message = x.to_string();
-                jsSendSegmentParsingError(true, x.into(), media_type, &message);
+                jsSendSegmentParsingError(true, x.into(), Some(media_type), &message);
                 self.stop_current_content();
             }
-            Ok(()) => self.segment_selectors.get_mut(media_type).validate_init(),
+            Ok(()) => self
+                .segment_selectors
+                .get_mut(media_type)
+                .validate_init(init_id),
         }
 
         self.check_best_variant();
         self.check_segments_to_request();
     }
 
+    fn abort_segment_requests_with_type(&mut self, media_type: MediaType) {
+        let aborted_reqs = self.requester.abort_segments_with_type(media_type);
+        for req_id in aborted_reqs {
+            if self
+                .segment_request_contexts
+                .take(req_id)
+                .is_some_and(|ctxt| ctxt.is_probe())
+            {
+                self.ready_probe_segment = None;
+            }
+        }
+    }
+
     /// Removes from `self.playlist_refresh_timers` timers for playlist that are not current
     /// anymore and abort their corresponding timers
     fn clean_up_playlist_refresh_timers(&mut self) {
         if let Some(ref pl_store) = self.playlist_store {
-            self.playlist_refresh_timers.retain(|x| {
-                if let PlaylistFileType::MediaPlaylist { id, .. } = &x.1 {
-                    if !pl_store.is_curr_media_playlist(id) {
-                        jsClearTimer(x.0);
-                        return false;
+            self.playlist_refresh_timers
+                .retain(|id| pl_store.is_curr_media_playlist(id))
+        } else {
+            self.playlist_refresh_timers.clear_all_timers();
+        }
+    }
+
+    /// Try to progress `ready_state` when in the `AwaitingPlaylistInfo` state
+    fn inner_advance_awaiting_playlist_info_state(&mut self) {
+        let (starting_position, playlist_store) =
+            match (self.playlist_store.as_mut(), &self.ready_state) {
+                (
+                    Some(playlist_store),
+                    PlayerReadyState::AwaitingPlaylistInfo { starting_position },
+                ) => (*starting_position, playlist_store),
+                _ => {
+                    return;
+                }
+            };
+
+        // Progress through the "startup steps" of the linked `PlaylistStore`, returning `true`
+        let wanted_position = get_initial_position(playlist_store, starting_position);
+        match playlist_store.startup_status(wanted_position) {
+            Ok(StartupStatus::Ready) => false,
+            Ok(StartupStatus::AwaitingSupportCheck) => true,
+            Ok(StartupStatus::NeedsProbe(probe_segment)) => {
+                if self.start_probe_segment_request(probe_segment) {
+                    return;
+                } else {
+                    jsSendSegmentParsingError(
+                        true,
+                        crate::bindings::SegmentParsingErrorCode::UnknownError,
+                        Some(MediaType::Video),
+                        "No probe segment was available to determine startup metadata",
+                    );
+                    self.stop_current_content();
+                    return;
+                }
+            }
+            Err(err) => {
+                self.handle_playlist_store_error(err);
+                self.stop_current_content();
+                return;
+            }
+        };
+
+        // Ensure there's at least one variant that is supported here
+        if playlist_store.playlist_kind() == PlaylistType::MultivariantPlaylist
+            && playlist_store.supported_variants().is_empty()
+        {
+            jsSendOtherError(
+                true,
+                crate::bindings::OtherErrorCode::NoSupportedVariant,
+                "Error while parsing MultivariantPlaylist: no compatible variant found.",
+            );
+            self.stop_current_content();
+            return;
+        }
+
+        // Start fetching initial media playlists if needed
+        use PlaylistFileType::*;
+        [MediaType::Video, MediaType::Audio]
+            .into_iter()
+            .for_each(|mt| {
+                if playlist_store.curr_media_playlist(mt).is_some() {
+                    return; // Already fetched
+                }
+                if let Some(id) = playlist_store.curr_media_playlist_id(mt) {
+                    if let Some(url) = playlist_store.media_playlist_url(id) {
+                        let id = id.clone();
+                        let url = url.clone();
+                        self.requester
+                            .fetch_playlist(url, MediaPlaylist { id, media_type: mt });
                     }
                 }
-                true
             });
+
+        // Now "Announce" lifecycle events if needed
+
+        // SAFETY: The following lines are unsafe because they may actually define raw pointers
+        // to point to Rust's heap memory and put it in the returned values.
+        //
+        // However, we're calling the JS binding function it is communicated to directly
+        // after and thus before the corresponding underlying data had a chance to be
+        // dropped.
+        //
+        // Because one of the rules of those bindings is to copy all pointed data
+        // synchronously on call, we should not encounter any issue.
+        let (variants_info, audio_tracks_info) =
+            if playlist_store.playlist_kind() == PlaylistType::MediaPlaylist {
+                let has_audio_track = playlist_store.has_media_type(MediaType::Audio);
+                (
+                    unsafe { format_direct_media_variants_info_for_js() },
+                    unsafe { format_direct_media_audio_tracks_for_js(has_audio_track) },
+                )
+            } else {
+                (
+                    unsafe {
+                        format_variants_info_for_js(playlist_store.supported_variants().as_slice())
+                    },
+                    unsafe { format_audio_tracks_for_js(playlist_store.audio_tracks()) },
+                )
+            };
+        let selected_audio_track = playlist_store.selected_audio_track_id();
+        let is_selected = selected_audio_track.is_some();
+        let curr_audio_track = if let Some(selected) = selected_audio_track {
+            Some(selected)
+        } else if playlist_store.playlist_kind() == PlaylistType::MediaPlaylist
+            && playlist_store.has_media_type(MediaType::Audio)
+        {
+            Some(DIRECT_MEDIA_AUDIO_TRACK_ID)
         } else {
-            while let Some(timer_info) = self.playlist_refresh_timers.pop() {
-                jsClearTimer(timer_info.0);
-            }
+            playlist_store.curr_audio_track_id()
+        };
+        jsAnnounceFetchedContent(
+            playlist_store.playlist_kind(),
+            variants_info,
+            audio_tracks_info,
+        );
+
+        let curr_variant = if playlist_store.playlist_kind() == PlaylistType::MediaPlaylist {
+            Some(DIRECT_MEDIA_VARIANT_ID)
+        } else {
+            playlist_store.curr_variant().map(|v| v.id())
+        };
+        jsAnnounceVariantUpdate(curr_variant);
+        jsAnnounceTrackUpdate(MediaType::Audio, curr_audio_track, is_selected);
+
+        if playlist_store.are_playlists_ready() {
+            self.ready_state = PlayerReadyState::AwaitingMediaSource { starting_position };
+            self.recheck_player_state();
         }
+    }
+
+    /// Try to progress `ready_state` when in the `AwaitingMediaSource` state
+    fn inner_advance_awaiting_media_source_state(&mut self) {
+        let starting_pos = match (
+            &self.ready_state,
+            self.media_element_ref.media_source_ready_state(),
+        ) {
+            (_, Some(MediaSourceReadyState::Closed) | None) => {
+                return;
+            }
+            (PlayerReadyState::AwaitingMediaSource { starting_position }, _) => *starting_position,
+            _ => {
+                return;
+            }
+        };
+
+        let Some(playlist_store) = self.playlist_store.as_ref() else {
+            return;
+        };
+
+        let wanted_start = get_initial_position(playlist_store, starting_pos);
+        if wanted_start > 0. {
+            self.media_element_ref.seek(wanted_start);
+        }
+
+        self.ready_state = PlayerReadyState::AwaitingSegments;
+        if playlist_store.playlist_type() != PlaylistNature::VoD {
+            let _ = jsSetMediaSourceDuration(u32::MAX as f64);
+        } else if let Some(duration) = playlist_store.curr_duration() {
+            let _ = jsSetMediaSourceDuration(duration);
+        } else {
+            Logger::warn("Core: Unknown content duration");
+        }
+
+        if let Some(Err(e)) = self.init_source_buffer(MediaType::Audio) {
+            let (code, msg) = format_source_buffer_creation_err_for_js(e);
+            jsSendSourceBufferCreationError(true, code, MediaType::Audio, &msg);
+            self.stop_current_content();
+            return;
+        }
+        if let Some(Err(e)) = self.init_source_buffer(MediaType::Video) {
+            let (code, msg) = format_source_buffer_creation_err_for_js(e);
+            jsSendSourceBufferCreationError(true, code, MediaType::Video, &msg);
+            self.stop_current_content();
+            return;
+        }
+        jsStartObservingPlayback();
+        self.consume_probe_segment();
     }
 }
 
@@ -1082,4 +1352,37 @@ fn was_last_segment(
                     .unwrap_or(false)
         })
         .unwrap_or(false)
+}
+
+fn has_playlist_store_media_type(playlist_store: Option<&PlaylistStore>) -> Option<MediaType> {
+    let playlist_store = playlist_store?;
+    if playlist_store.has_media_type(MediaType::Video) {
+        Some(MediaType::Video)
+    } else if playlist_store.has_media_type(MediaType::Audio) {
+        Some(MediaType::Audio)
+    } else {
+        None
+    }
+}
+
+/// Returns the expected position at which we want to start playback, in seconds, according to
+/// both configuration and playlist metadata.
+fn get_initial_position(
+    playlist_store: &PlaylistStore,
+    starting_position: Option<StartingPosition>,
+) -> f64 {
+    if let Some(starting_pos) = starting_position {
+        match starting_pos.start_type {
+            StartingPositionType::Absolute => starting_pos.position,
+            StartingPositionType::FromBeginning => {
+                playlist_store.curr_min_position().unwrap_or(0.) + starting_pos.position
+            }
+            StartingPositionType::FromEnd => playlist_store
+                .curr_max_position()
+                .map(|max| max - starting_pos.position)
+                .unwrap_or(playlist_store.expected_start_time()),
+        }
+    } else {
+        playlist_store.expected_start_time()
+    }
 }

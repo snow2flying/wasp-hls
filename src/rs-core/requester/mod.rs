@@ -3,7 +3,6 @@ use crate::{
         formatters::format_range_for_js, jsAbortRequest, jsFetch, jsGetRandom, jsTimer, MediaType,
         RequestErrorReason, RequestId, TimerId, TimerReason,
     },
-    media_element::SegmentQualityContext,
     parser::{ByteRange, MediaSegmentInfo, SegmentTimeInfo},
     playlist_store::MediaPlaylistPermanentId,
     utils::url::Url,
@@ -15,6 +14,38 @@ mod configuration;
 pub(crate) use configuration::RequesterConfiguration;
 
 const PRIORITY_STEPS: [f64; 6] = [2., 4., 8., 12., 18., 25.];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RequestLaneTag {
+    Audio,
+    Video,
+    Probe,
+}
+
+impl RequestLaneTag {
+    fn from_media_type(media_type: MediaType) -> Self {
+        match media_type {
+            MediaType::Audio => Self::Audio,
+            MediaType::Video => Self::Video,
+        }
+    }
+
+    fn media_type(self) -> Option<MediaType> {
+        match self {
+            Self::Audio => Some(MediaType::Audio),
+            Self::Video => Some(MediaType::Video),
+            Self::Probe => None,
+        }
+    }
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Audio => "audio",
+            Self::Video => "video",
+            Self::Probe => "probe",
+        }
+    }
+}
 
 /// The `Requester` is the module performing HTTP(s) requests.
 ///
@@ -82,20 +113,27 @@ pub(crate) struct Requester {
 /// Identify a type of Playlist requested.
 #[derive(PartialEq)]
 pub(crate) enum PlaylistFileType {
-    /// This is a Multivariant Playlist
-    MultivariantPlaylist,
+    /// This is the top-level Playlist loaded through the public `load` API.
+    TopLevelPlaylist,
     /// This is a Media Playlist with this associated `id` and `MediaType`.
     MediaPlaylist {
+        // Identifier uniquely identifying that playlist
         id: MediaPlaylistPermanentId,
+        // The media type associated to the media playlist.
+        // TODO: The media_type should probably be removed long-term here.
+        //       With segments, it makes sense due to the "lane concept" (one
+        //       in-flight request for the given type). For playlists, the only
+        //       reason is due to how it will be then exploited once the request
+        //       is finished, which could be re-computed anyway.
         media_type: MediaType,
     },
 }
 
-/// Metadata associated with a pending Playlist (either a Multivariant Playlist or a Media
+/// Metadata associated with a pending Playlist (either a top-level Playlist or a Media
 /// Playlist request.
 pub(crate) struct PlaylistRequestInfo {
     /// ID identifying the request on the JavaScript-side.
-    request_id: RequestId,
+    host_id: RequestId,
 
     /// Url on which the request is done
     pub(crate) url: Url,
@@ -109,15 +147,15 @@ pub(crate) struct PlaylistRequestInfo {
     /// If `true` the request is not really pending, we're currently pending for some
     /// timer to finish before retrying it.
     ///
-    /// In that case, the `request_id` corresponds to the one of the previous request
+    /// In that case, the `host_id` corresponds to the one of the previous request
     /// and should not be relied on.
     pub(crate) is_waiting_for_retry: bool,
 }
 
 /// Metadata associated with a pending media segment request.
 pub(crate) struct WaitingSegmentInfo {
-    /// type of media of the segment requested
-    media_type: MediaType,
+    /// Requester-side lane in which that request is scheduled.
+    lane_tag: RequestLaneTag,
 
     /// Url on which the request is done
     url: Url,
@@ -126,16 +164,19 @@ pub(crate) struct WaitingSegmentInfo {
 
     /// Start and end of the requested segment.
     /// `None` if the segment contains no media data, such as initialization segments
+    ///
+    /// TODO: This is only used for priorization and logging here it seems, maybe a more
+    /// explicit priority-oriented value would be better?
     time_info: Option<SegmentTimeInfo>,
 
-    /// Information about the quality linked to that segment
-    context: SegmentQualityContext,
+    /// Opaque identifier allowing the dispatcher layer to recover what should happen when the
+    /// request completes.
+    caller_id: u32,
 }
 
 impl WaitingSegmentInfo {
-    /// Returns the type of media of the awaiting segment.
-    pub(crate) fn media_type(&self) -> MediaType {
-        self.media_type
+    pub(crate) fn lane_tag(&self) -> RequestLaneTag {
+        self.lane_tag
     }
 
     /// Returns a reference to the URL leading to this awaiting segment.
@@ -159,17 +200,16 @@ impl WaitingSegmentInfo {
         self.time_info.as_ref()
     }
 
-    /// "Context" allowing to detect and compare the quality of this segment with others.
-    pub(crate) fn context(&self) -> &SegmentQualityContext {
-        &self.context
+    pub(crate) fn id(&self) -> u32 {
+        self.caller_id
     }
 }
 
 /// Trait unifying the Requester's segment which are either in a pending request or which are
 /// awaiting one.
 pub(crate) trait RequesterSegmentInfo {
-    /// Returns the type of media of the corresponding segment.
-    fn media_type(&self) -> MediaType;
+    /// Returns the requester-side lane to which the corresponding request belongs.
+    fn lane_tag(&self) -> RequestLaneTag;
     /// Returns the start time, in playlist time in seconds, at which the segment starts at.
     ///
     /// Should be `None` only for initialization segment.
@@ -187,8 +227,8 @@ pub(crate) trait RequesterSegmentInfo {
 }
 
 impl RequesterSegmentInfo for SegmentRequestInfo {
-    fn media_type(&self) -> MediaType {
-        self.media_type
+    fn lane_tag(&self) -> RequestLaneTag {
+        self.lane_tag
     }
 
     fn start_time(&self) -> Option<f64> {
@@ -205,8 +245,8 @@ impl RequesterSegmentInfo for SegmentRequestInfo {
 }
 
 impl RequesterSegmentInfo for WaitingSegmentInfo {
-    fn media_type(&self) -> MediaType {
-        self.media_type
+    fn lane_tag(&self) -> RequestLaneTag {
+        self.lane_tag
     }
 
     fn start_time(&self) -> Option<f64> {
@@ -225,12 +265,10 @@ impl RequesterSegmentInfo for WaitingSegmentInfo {
 /// Metadata associated with a pending media segment request.
 pub(crate) struct SegmentRequestInfo {
     /// ID identifying the request on the JavaScript-side.
-    request_id: RequestId,
+    host_id: RequestId,
 
-    context: SegmentQualityContext,
-
-    /// type of media of the segment requested
-    media_type: MediaType,
+    /// Requester-side lane in which that request is scheduled.
+    lane_tag: RequestLaneTag,
 
     /// Url on which the request is done
     url: Url,
@@ -241,20 +279,28 @@ pub(crate) struct SegmentRequestInfo {
     /// `None` if the segment contains no media data, such as initialization segments
     time_info: Option<SegmentTimeInfo>,
 
+    /// Opaque identifier allowing the dispatcher layer to recover what should happen when the
+    /// request completes.
+    caller_id: u32,
+
     /// Number of time the request has already been attempted.
     attempts_failed: u32,
 
     /// If `true` the request is not really pending, we're currently pending for some
     /// timer to finish before retrying it.
     ///
-    /// In that case, the `request_id` corresponds to the one of the previous request
+    /// In that case, the `host_id` corresponds to the one of the previous request
     /// and should not be relied on.
     is_waiting_for_retry: bool,
 }
 
 impl SegmentRequestInfo {
-    pub(crate) fn media_type(&self) -> MediaType {
-        self.media_type
+    pub(crate) fn lane_tag(&self) -> RequestLaneTag {
+        self.lane_tag
+    }
+
+    pub(crate) fn media_type(&self) -> Option<MediaType> {
+        self.lane_tag.media_type()
     }
 
     pub(crate) fn url(&self) -> &Url {
@@ -269,27 +315,16 @@ impl SegmentRequestInfo {
         self.time_info.as_ref()
     }
 
+    pub(crate) fn id(&self) -> u32 {
+        self.caller_id
+    }
+
     pub(crate) fn attempts_failed(&self) -> u32 {
         self.attempts_failed
     }
 
     pub(crate) fn is_waiting_for_retry(&self) -> bool {
         self.is_waiting_for_retry
-    }
-
-    pub(crate) fn context(&self) -> &SegmentQualityContext {
-        &self.context
-    }
-
-    pub(crate) fn deconstruct(
-        self,
-    ) -> (
-        Url,
-        Option<ByteRange>,
-        Option<SegmentTimeInfo>,
-        SegmentQualityContext,
-    ) {
-        (self.url, self.byte_range, self.time_info, self.context)
     }
 }
 
@@ -362,23 +397,21 @@ impl Requester {
     }
 
     /// Fetch either the MultivariantPlaylist or a MediaPlaylist reachable
-    /// through the given `url` and add its `request_id` to `pending_playlist_requests`.
+    /// through the given `url` and add its `host_id` to `pending_playlist_requests`.
     ///
     /// Once it succeeds, the `__web_event__request_finished` function will be called.
     pub(crate) fn fetch_playlist(&mut self, url: Url, playlist_type: PlaylistFileType) {
         let timeout = match playlist_type {
-            PlaylistFileType::MultivariantPlaylist => {
+            PlaylistFileType::TopLevelPlaylist => {
                 self.config.multi_variant_playlist_request_timeout
             }
             PlaylistFileType::MediaPlaylist { .. } => self.config.media_playlist_request_timeout,
         };
         let url_ref = url.get_ref();
-        let request_id = jsFetch(url_ref, None, None, timeout);
-        Logger::info(&format!(
-            "Req: Fetching playlist u:{url_ref}, id:{request_id}"
-        ));
+        let host_id = jsFetch(url_ref, None, None, timeout);
+        Logger::info(&format!("Req: Fetching playlist u:{url_ref}, id:{host_id}"));
         self.pending_playlist_requests.push(PlaylistRequestInfo {
-            request_id,
+            host_id,
             url,
             playlist_type,
             attempts_failed: 0,
@@ -387,7 +420,7 @@ impl Requester {
     }
 
     /// Fetch the initialization segment whose metadata is given here add its
-    /// `request_id` to `pending_segment_requests`.
+    /// `host_id` to `pending_segment_requests`.
     ///
     /// Once it succeeds, the `__web_event__request_finished` function will be called.
     pub(crate) fn request_init_segment(
@@ -395,9 +428,15 @@ impl Requester {
         media_type: MediaType,
         url: Url,
         byte_range: Option<&ByteRange>,
-        context: SegmentQualityContext,
+        caller_id: u32,
     ) {
-        self.request_segment_now(&url, byte_range, media_type, None, context);
+        self.request_segment_now(
+            &url,
+            byte_range,
+            RequestLaneTag::from_media_type(media_type),
+            None,
+            caller_id,
+        );
     }
 
     /// Returns `true` if a segment with the given identifying characteristics is currently either
@@ -411,11 +450,13 @@ impl Requester {
         url: &Url,
         byte_range: Option<&ByteRange>,
     ) -> bool {
-        self.pending_segment_requests.iter().any(|s| {
-            s.media_type == media_type && &s.url == url && s.byte_range.as_ref() == byte_range
-        }) || self.segment_waiting_queue.iter().any(|s| {
-            s.media_type == media_type && &s.url == url && s.byte_range.as_ref() == byte_range
-        })
+        let lane_tag = RequestLaneTag::from_media_type(media_type);
+        self.pending_segment_requests
+            .iter()
+            .any(|s| s.lane_tag == lane_tag && &s.url == url && s.byte_range.as_ref() == byte_range)
+            || self.segment_waiting_queue.iter().any(|s| {
+                s.lane_tag == lane_tag && &s.url == url && s.byte_range.as_ref() == byte_range
+            })
     }
 
     /// Fetch a segment in the right format through the given `url`.
@@ -432,7 +473,7 @@ impl Requester {
         &mut self,
         media_type: MediaType,
         seg: &MediaSegmentInfo,
-        context: SegmentQualityContext,
+        caller_id: u32,
     ) {
         Logger::info(&format!(
             "Req: Asking to request {} segment: t: {}, d: {}",
@@ -440,19 +481,32 @@ impl Requester {
             seg.start(),
             seg.duration()
         ));
+        let lane_tag = RequestLaneTag::from_media_type(media_type);
         let time_info = Some(seg.time_info().clone());
         if self.can_start_request(seg.start()) {
-            self.request_segment_now(seg.url(), seg.byte_range(), media_type, time_info, context)
+            self.request_segment_now(seg.url(), seg.byte_range(), lane_tag, time_info, caller_id)
         } else {
             Logger::debug("Req: pushing segment request to queue");
             self.segment_waiting_queue.push(WaitingSegmentInfo {
-                media_type,
+                lane_tag,
                 url: seg.url().clone(),
                 byte_range: seg.byte_range().cloned(),
                 time_info,
-                context,
+                caller_id,
             });
         }
+    }
+
+    // TODO: Merge it with the others?
+    pub(crate) fn request_segment_unlocked(
+        &mut self,
+        lane_tag: RequestLaneTag,
+        url: &Url,
+        byte_range: Option<&ByteRange>,
+        time_info: Option<SegmentTimeInfo>,
+        caller_id: u32,
+    ) {
+        self.request_segment_now(url, byte_range, lane_tag, time_info, caller_id);
     }
 
     pub(crate) fn lock_segment_requests(&mut self) -> bool {
@@ -467,25 +521,26 @@ impl Requester {
     }
 
     pub(crate) fn has_segment_request_pending(&self, media_type: MediaType) -> bool {
+        let lane_tag = RequestLaneTag::from_media_type(media_type);
         self.pending_segment_requests
             .iter()
-            .any(|r| r.media_type == media_type)
+            .any(|r| r.lane_tag == lane_tag)
             || self
                 .segment_waiting_queue
                 .iter()
-                .any(|r| r.media_type == media_type)
+                .any(|r| r.lane_tag == lane_tag)
     }
 
     pub(crate) fn on_pending_request_success(
         &mut self,
-        request_id: RequestId,
+        host_id: RequestId,
     ) -> Option<FinishedRequestType> {
-        self.end_pending_request(request_id)
+        self.end_pending_request(host_id)
     }
 
     pub(crate) fn on_pending_request_failure(
         &'_ mut self,
-        request_id: RequestId,
+        host_id: RequestId,
         has_timeouted: bool,
         status: Option<u32>,
     ) -> RetryResult<'_> {
@@ -500,16 +555,16 @@ impl Requester {
             if let Some(pos) = self
                 .pending_segment_requests
                 .iter()
-                .position(|x| x.request_id == request_id)
+                .position(|x| x.host_id == host_id)
             {
                 self.retry_pending_segment_request(pos, reason, status)
             } else if let Some(pos) = self
                 .pending_playlist_requests
                 .iter()
-                .position(|x| x.request_id == request_id)
+                .position(|x| x.host_id == host_id)
             {
                 match self.pending_playlist_requests[pos].playlist_type {
-                    PlaylistFileType::MultivariantPlaylist => self.retry_playlist_request(
+                    PlaylistFileType::TopLevelPlaylist => self.retry_playlist_request(
                         pos,
                         reason,
                         status,
@@ -523,12 +578,12 @@ impl Requester {
                     ),
                 }
             } else {
-                Logger::info(&format!("Req: Request to retry not found, id:{request_id}"));
+                Logger::info(&format!("Req: Request to retry not found, id:{host_id}"));
                 RetryResult::NotFound
             }
         } else {
-            Logger::info(&format!("Req: Cannot retry request id:{request_id}"));
-            match self.end_pending_request(request_id) {
+            Logger::info(&format!("Req: Cannot retry request id:{host_id}"));
+            match self.end_pending_request(host_id) {
                 None => RetryResult::NotFound,
                 Some(req) => RetryResult::Failed {
                     request_type: req,
@@ -547,34 +602,34 @@ impl Requester {
                 let seg = self
                     .pending_segment_requests
                     .iter_mut()
-                    .find(|s| s.request_id == timer.1);
+                    .find(|s| s.host_id == timer.1);
                 if let Some(seg) = seg {
                     seg.is_waiting_for_retry = false;
                     let (range_start, range_end) = format_range_for_js(seg.byte_range.as_ref());
-                    let request_id = jsFetch(
+                    let host_id = jsFetch(
                         seg.url.get_ref(),
                         range_start,
                         range_end,
                         self.config.segment_request_timeout,
                     );
-                    seg.request_id = request_id;
+                    seg.host_id = host_id;
                 } else {
                     let pla = self
                         .pending_playlist_requests
                         .iter_mut()
-                        .find(|p| p.request_id == timer.1);
+                        .find(|p| p.host_id == timer.1);
                     if let Some(pla) = pla {
                         pla.is_waiting_for_retry = false;
                         let timeout = match pla.playlist_type {
-                            PlaylistFileType::MultivariantPlaylist => {
+                            PlaylistFileType::TopLevelPlaylist => {
                                 self.config.multi_variant_playlist_request_timeout
                             }
                             PlaylistFileType::MediaPlaylist { .. } => {
                                 self.config.media_playlist_request_timeout
                             }
                         };
-                        let request_id = jsFetch(pla.url.get_ref(), None, None, timeout);
-                        pla.request_id = request_id;
+                        let host_id = jsFetch(pla.url.get_ref(), None, None, timeout);
+                        pla.host_id = host_id;
                     }
                 }
             } else {
@@ -597,7 +652,7 @@ impl Requester {
 
     pub(crate) fn abort_all(&mut self) {
         for elt in self.pending_playlist_requests.drain(..) {
-            jsAbortRequest(elt.request_id);
+            jsAbortRequest(elt.host_id);
         }
         self.abort_all_segments();
         self.check_segment_queue();
@@ -606,32 +661,36 @@ impl Requester {
     pub(crate) fn abort_all_segments(&mut self) {
         while let Some(last_req) = self.pending_segment_requests.pop() {
             log_segment_abort(&last_req);
-            jsAbortRequest(last_req.request_id);
+            jsAbortRequest(last_req.host_id);
         }
         while let Some(last_req) = self.segment_waiting_queue.pop() {
             log_segment_abort(&last_req);
         }
     }
 
-    pub(crate) fn abort_segments_with_type(&mut self, media_type: MediaType) {
+    pub(crate) fn abort_segments_with_type(&mut self, media_type: MediaType) -> Vec<u32> {
+        let lane_tag = RequestLaneTag::from_media_type(media_type);
         let mut i = 0;
         let mut aborted_pending = false;
+        let mut aborted_requests = vec![];
         while i < self.pending_segment_requests.len() {
             let next_req = &self.pending_segment_requests[i];
-            if next_req.media_type() == media_type {
+            if next_req.lane_tag() == lane_tag {
                 log_segment_abort(next_req);
                 aborted_pending = true;
-                jsAbortRequest(next_req.request_id);
-                self.pending_segment_requests.remove(i);
+                jsAbortRequest(next_req.host_id);
+                let removed = self.pending_segment_requests.remove(i);
+                aborted_requests.push(removed.caller_id);
             } else {
                 i += 1;
             }
         }
         while i < self.segment_waiting_queue.len() {
             let next_req = &self.segment_waiting_queue[i];
-            if next_req.media_type() == media_type {
+            if next_req.lane_tag() == lane_tag {
                 log_segment_abort(next_req);
-                self.segment_waiting_queue.remove(i);
+                let removed = self.segment_waiting_queue.remove(i);
+                aborted_requests.push(removed.caller_id);
             } else {
                 i += 1;
             }
@@ -639,25 +698,23 @@ impl Requester {
         if aborted_pending {
             self.check_segment_queue();
         }
+        aborted_requests
     }
 
-    fn end_pending_request(&mut self, request_id: RequestId) -> Option<FinishedRequestType> {
-        if let Some(res) = self.end_pending_segment_request(request_id) {
+    fn end_pending_request(&mut self, host_id: RequestId) -> Option<FinishedRequestType> {
+        if let Some(res) = self.end_pending_segment_request(host_id) {
             Some(FinishedRequestType::Segment(res))
         } else {
             Some(FinishedRequestType::Playlist(
-                self.end_pending_playlist_request(request_id)?,
+                self.end_pending_playlist_request(host_id)?,
             ))
         }
     }
 
-    fn end_pending_playlist_request(
-        &mut self,
-        request_id: RequestId,
-    ) -> Option<PlaylistRequestInfo> {
+    fn end_pending_playlist_request(&mut self, host_id: RequestId) -> Option<PlaylistRequestInfo> {
         let mut i = 0;
         while i < self.pending_playlist_requests.len() {
-            if self.pending_playlist_requests[i].request_id == request_id {
+            if self.pending_playlist_requests[i].host_id == host_id {
                 let req = self.pending_playlist_requests.remove(i);
                 return Some(req);
             } else {
@@ -667,10 +724,10 @@ impl Requester {
         None
     }
 
-    fn end_pending_segment_request(&mut self, request_id: RequestId) -> Option<SegmentRequestInfo> {
+    fn end_pending_segment_request(&mut self, host_id: RequestId) -> Option<SegmentRequestInfo> {
         let mut i = 0;
         while i < self.pending_segment_requests.len() {
-            if self.pending_segment_requests[i].request_id == request_id {
+            if self.pending_segment_requests[i].host_id == host_id {
                 let removed = self.pending_segment_requests.remove(i);
                 self.check_segment_queue();
                 return Some(removed);
@@ -692,7 +749,7 @@ impl Requester {
         if max_retry >= 0 && req.attempts_failed >= (max_retry as u32) {
             Logger::info(&format!(
                 "Req: Too much attempts for segment request id:{} a:{}",
-                req.request_id, req.attempts_failed
+                req.host_id, req.attempts_failed
             ));
             let seg = self.pending_segment_requests.remove(pos);
             RetryResult::Failed {
@@ -711,10 +768,10 @@ impl Requester {
             );
             Logger::info(&format!(
                 "Req: Retrying segment request after timer id:{} d:{} a:{}",
-                req.request_id, retry_delay, req.attempts_failed
+                req.host_id, retry_delay, req.attempts_failed
             ));
             let timer_id = jsTimer(retry_delay, TimerReason::RetryRequest);
-            self.retry_timers.push((timer_id, req.request_id));
+            self.retry_timers.push((timer_id, req.host_id));
             let req = self.pending_segment_requests.get(pos).unwrap();
             RetryResult::RetriedSegment {
                 reason,
@@ -735,7 +792,7 @@ impl Requester {
         if max_retry >= 0 && req.attempts_failed >= (max_retry as u32) {
             Logger::info(&format!(
                 "Req: Too much attempts for playlist request id:{} a:{}",
-                req.request_id, req.attempts_failed
+                req.host_id, req.attempts_failed
             ));
             let pl = self.pending_playlist_requests.remove(pos);
             RetryResult::Failed {
@@ -748,7 +805,7 @@ impl Requester {
             req.attempts_failed += 1;
             req.is_waiting_for_retry = true;
             let (base, max) = match req.playlist_type {
-                PlaylistFileType::MultivariantPlaylist => (
+                PlaylistFileType::TopLevelPlaylist => (
                     self.config.multi_variant_playlist_backoff_base,
                     self.config.multi_variant_playlist_backoff_max,
                 ),
@@ -760,10 +817,10 @@ impl Requester {
             let retry_delay = get_waiting_delay(req.attempts_failed, base, max);
             Logger::info(&format!(
                 "Req: Retrying playlist request after timer id:{} d:{} a:{}",
-                req.request_id, retry_delay, req.attempts_failed
+                req.host_id, retry_delay, req.attempts_failed
             ));
             let timer_id = jsTimer(retry_delay, TimerReason::RetryRequest);
-            self.retry_timers.push((timer_id, req.request_id));
+            self.retry_timers.push((timer_id, req.host_id));
 
             let req = self.pending_playlist_requests.get(pos).unwrap();
             RetryResult::RetriedPlaylist {
@@ -776,14 +833,14 @@ impl Requester {
 
     fn retry_pending_playlist_request(
         &mut self,
-        request_id: RequestId,
+        host_id: RequestId,
         reason: RequestErrorReason,
         status: Option<u32>,
     ) -> RetryResult<'_> {
         let pos = self
             .pending_playlist_requests
             .iter_mut()
-            .position(|x| x.request_id == request_id);
+            .position(|x| x.host_id == host_id);
         if let Some(pos) = pos {
             if self.pending_playlist_requests[pos].attempts_failed >= 3 {
                 let seg = self.pending_playlist_requests.remove(pos);
@@ -797,7 +854,7 @@ impl Requester {
                 req.attempts_failed += 1;
                 req.is_waiting_for_retry = true;
                 let timer_id = jsTimer(1000., TimerReason::RetryRequest);
-                self.retry_timers.push((timer_id, req.request_id));
+                self.retry_timers.push((timer_id, req.host_id));
                 RetryResult::RetriedPlaylist {
                     reason,
                     status,
@@ -831,9 +888,9 @@ impl Requester {
                         self.request_segment_now(
                             &seg.url,
                             seg.byte_range.as_ref(),
-                            seg.media_type,
+                            seg.lane_tag,
                             seg.time_info,
-                            seg.context,
+                            seg.caller_id,
                         );
                     },
                 );
@@ -843,9 +900,9 @@ impl Requester {
                 self.request_segment_now(
                     &seg.url,
                     seg.byte_range.as_ref(),
-                    seg.media_type,
+                    seg.lane_tag,
                     seg.time_info,
-                    seg.context,
+                    seg.caller_id,
                 );
             }
         }
@@ -893,30 +950,30 @@ impl Requester {
         &mut self,
         url: &Url,
         byte_range: Option<&ByteRange>,
-        media_type: MediaType,
+        lane_tag: RequestLaneTag,
         time_info: Option<SegmentTimeInfo>,
-        context: SegmentQualityContext,
+        caller_id: u32,
     ) {
         let (range_start, range_end) = format_range_for_js(byte_range);
         let url_ref = url.get_ref();
-        let request_id = jsFetch(
+        let host_id = jsFetch(
             url_ref,
             range_start,
             range_end,
             self.config.segment_request_timeout,
         );
         Logger::debug(&format!(
-            "Req: Performing segment request. u:{url_ref} id:{request_id}"
+            "Req: Performing segment request. u:{url_ref} id:{host_id}"
         ));
         self.pending_segment_requests.push(SegmentRequestInfo {
-            request_id,
-            media_type,
+            host_id,
+            lane_tag,
             url: url.clone(),
             byte_range: byte_range.cloned(),
             time_info,
+            caller_id,
             attempts_failed: 0,
             is_waiting_for_retry: false,
-            context,
         });
     }
 
@@ -937,11 +994,11 @@ impl Requester {
 
 fn log_segment_abort(seg: &impl RequesterSegmentInfo) {
     Logger::lazy_info(&|| {
-        let media_type = seg.media_type();
+        let lane_label = seg.lane_tag().label();
         if let (Some(start), Some(duration)) = (seg.start_time(), seg.duration()) {
-            format!("Req: Aborting {media_type} segment: t: {start}, d: {duration}")
+            format!("Req: Aborting {lane_label} segment: t: {start}, d: {duration}")
         } else {
-            format!("Req: Aborting {media_type} init segment")
+            format!("Req: Aborting {lane_label} init segment")
         }
     });
 }

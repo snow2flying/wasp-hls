@@ -5,6 +5,7 @@ import {
 } from "./memory.js";
 import type { HostResult } from "./types.js";
 
+// TODO: Maybe more safety into that one
 const OPTIONAL_ID_NONE = 0xffffffff;
 
 export function unwrapResult<Value, ErrorCode extends number>(

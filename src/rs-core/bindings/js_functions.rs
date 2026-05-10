@@ -3,9 +3,9 @@
 use super::{
     AddSourceBufferErrorCode, AttachMediaSourceErrorCode, EndOfStreamErrorCode, LogLevel,
     MediaPlaylistParsingErrorCode, MediaSourceDurationUpdateErrorCode, MediaType,
-    MultivariantPlaylistParsingErrorCode, OtherErrorCode, PlaylistNature, PushedSegmentErrorCode,
-    RemoveBufferErrorCode, RemoveMediaSourceErrorCode, RequestErrorReason, SegmentParsingErrorCode,
-    SourceBufferCreationErrorCode, TimerReason,
+    MultivariantPlaylistParsingErrorCode, OtherErrorCode, PlaylistNature, PlaylistType,
+    PushedSegmentErrorCode, RemoveBufferErrorCode, RemoveMediaSourceErrorCode, RequestErrorReason,
+    SegmentParsingErrorCode, SourceBufferCreationErrorCode, TimerReason,
 };
 use crate::{
     media_element::PushSegmentError,
@@ -63,6 +63,17 @@ unsafe extern "C" {
         err_desc_len_out: *mut u32,
     ) -> u32;
     fn __js_func__is_type_supported(media_type: u32, typ_ptr: *const u8, typ_len: u32) -> i32;
+    fn __js_func__inspect_segment(
+        segment_id: ResourceId,
+        media_type_out: *mut u32,
+        parsed_mime_type_ptr_out: *mut u32,
+        parsed_mime_type_len_out: *mut u32,
+        codec_ptr_out: *mut u32,
+        codec_len_out: *mut u32,
+        err_code_out: *mut u32,
+        err_desc_ptr_out: *mut u32,
+        err_desc_len_out: *mut u32,
+    ) -> u32;
     fn __js_func__append_buffer(
         source_buffer_id: SourceBufferId,
         segment_id: ResourceId,
@@ -103,6 +114,7 @@ unsafe extern "C" {
         playlist_nat: u32,
     );
     fn __js_func__announce_fetched_content(
+        playlist_type: u32,
         variant_info_ptr: *const u32,
         variant_info_len: u32,
         audio_tracks_info_ptr: *const u32,
@@ -439,6 +451,54 @@ pub fn jsIsTypeSupported(media_type: MediaType, typ: &str) -> Option<bool> {
     }
 }
 
+/// Recuperate more information on a segment, identified by its `ResourceId`.
+///
+/// This can generally be relied on to e.g. obtain the `codec` and mime-type
+/// directly from segment metadata.
+///
+/// # Arguments
+///
+/// * `segment_id` - `ResourceId` of the segment you want more metadata from
+///
+/// # Returns
+///
+/// A result:
+///
+/// - When `Ok`, transports the parsed metadata from the segment
+/// - When `Err`, transports both the error code that prevented the inspection,
+///   and an optional description as a `String`.
+pub fn jsInspectSegment(
+    segment_id: ResourceId,
+) -> Result<InspectedSegmentMetadata, (SegmentParsingErrorCode, Option<String>)> {
+    let mut media_type = 0;
+    let mut parsed_mime_type_ptr = 0;
+    let mut parsed_mime_type_len = 0;
+    let mut codec_ptr = 0;
+    let mut codec_len = 0;
+    let mut out = JsErrorOut::default();
+    let success = unsafe {
+        __js_func__inspect_segment(
+            segment_id,
+            &mut media_type,
+            &mut parsed_mime_type_ptr,
+            &mut parsed_mime_type_len,
+            &mut codec_ptr,
+            &mut codec_len,
+            &mut out.code,
+            &mut out.desc_ptr,
+            &mut out.desc_len,
+        )
+    };
+    if success == 0 {
+        return Err(take_js_error_out(out, SegmentParsingErrorCode::from_raw));
+    }
+    Ok(InspectedSegmentMetadata {
+        media_type: MediaType::from_raw(media_type),
+        mime_type: owned_string_from_abi(parsed_mime_type_ptr, parsed_mime_type_len),
+        codec: owned_string_from_abi(codec_ptr, codec_len),
+    })
+}
+
 /// Append media data to the given SourceBuffer.
 ///
 /// This process is asynchronous, meaning that the data might not be appended
@@ -623,9 +683,14 @@ pub fn jsUpdateContentInfo(
     }
 }
 
-pub fn jsAnnounceFetchedContent(variant_info: Vec<u32>, audio_tracks_info: Vec<u32>) {
+pub fn jsAnnounceFetchedContent(
+    playlist_type: PlaylistType,
+    variant_info: Vec<u32>,
+    audio_tracks_info: Vec<u32>,
+) {
     unsafe {
         __js_func__announce_fetched_content(
+            playlist_type as u32,
             variant_info.as_ptr(),
             variant_info.len() as u32,
             audio_tracks_info.as_ptr(),
@@ -671,7 +736,7 @@ pub fn jsSendSegmentRequestError(
     url: &str,
     is_init: bool,
     time_info: Option<(f64, f64)>,
-    media_type: MediaType,
+    media_type: Option<MediaType>,
     reason: RequestErrorReason,
     status: Option<u32>,
 ) {
@@ -683,7 +748,7 @@ pub fn jsSendSegmentRequestError(
             url.as_ptr(),
             url.len() as u32,
             bool_to_raw(is_init),
-            media_type as u32,
+            opt_u32_to_raw(media_type.map(|m| m as u32)),
             opt_f64_to_raw_ptr(start),
             opt_f64_to_raw_ptr(duration),
             reason as u32,
@@ -768,14 +833,14 @@ pub fn jsSendMultivariantPlaylistParsingError(
 pub fn jsSendMediaPlaylistParsingError(
     fatal: bool,
     code: MediaPlaylistParsingErrorCode,
-    media_type: MediaType,
+    media_type: Option<MediaType>,
     message: &str,
 ) {
     unsafe {
         __js_func__send_media_playlist_parsing_error(
             bool_to_raw(fatal),
             code as u32,
-            media_type as u32,
+            opt_u32_to_raw(media_type.map(|m| m as u32)),
             message.as_ptr(),
             message.len() as u32,
         )
@@ -786,14 +851,14 @@ pub fn jsSendMediaPlaylistParsingError(
 pub fn jsSendSegmentParsingError(
     fatal: bool,
     code: SegmentParsingErrorCode,
-    media_type: MediaType,
+    media_type: Option<MediaType>,
     message: &str,
 ) {
     unsafe {
         __js_func__send_segment_parsing_error(
             bool_to_raw(fatal),
             code as u32,
-            media_type as u32,
+            opt_u32_to_raw(media_type.map(|m| m as u32)),
             message.as_ptr(),
             message.len() as u32,
         )
@@ -901,9 +966,26 @@ impl From<MediaPlaylistUpdateError> for MediaPlaylistParsingErrorCode {
     }
 }
 
+impl From<MediaPlaylistParsingError> for MediaPlaylistParsingErrorCode {
+    fn from(value: MediaPlaylistParsingError) -> Self {
+        MediaPlaylistUpdateError::ParsingError(value).into()
+    }
+}
+
 pub struct ParsedSegmentInfo {
     pub start: Option<f64>,
     pub duration: Option<f64>,
+}
+
+/// Result of a segment inspection (e.g. when calling `jsInspectSegment`)
+pub struct InspectedSegmentMetadata {
+    /// The container-level mime-type inferred from the segment's metadata itself.
+    pub mime_type: String,
+    /// The media type associated to the inspected segment.
+    pub media_type: MediaType,
+    /// The identified codec string from the segment's metadata itself.
+    /// e.g. `mp4a.40.2` or `avc1.4D401F` etc.
+    pub codec: String,
 }
 
 impl From<PushSegmentError> for SegmentParsingErrorCode {

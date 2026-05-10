@@ -18,6 +18,7 @@ import {
 import {
   MediaType,
   PlaylistNature,
+  PlaylistType,
   StartingPositionType,
 } from "../wasm/index.js";
 import DEFAULT_CONFIG from "./default_config.ts";
@@ -52,7 +53,7 @@ import {
   onUpdateMediaSourceDurationMessage,
   onUpdatePlaybackRateMessage,
   onWarningMessage,
-  onMultivariantPlaylistParsedMessage,
+  onTopLevelPlaylistParsedMessage,
   onVariantUpdateMessage,
   onTrackUpdateMessage,
   onFlushMessage,
@@ -362,8 +363,11 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
   }
 
   /**
-   * Loads a new HLS content whose MultivariantPlaylist's URL is given in
+   * Loads a new HLS content whose top-level playlist's URL is given in
    * argument.
+   *
+   * That top-level playlist can be either a Multivariant Playlist or a Media
+   * Playlist.
    *
    * This method can only be called if the `WaspHlsPlayer` is initialized.
    * If that's the case, you should receive synchronously a `"loading"` event,
@@ -406,6 +410,7 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
       minimumPosition: undefined,
       maximumPosition: undefined,
       playlistType: undefined,
+      topLevelPlaylistType: undefined,
       loadingAborter,
       error: null,
     };
@@ -868,6 +873,22 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
     if (this.__contentMetadata__ === null) {
       throw new Error("No content loaded");
     }
+    if (
+      this.__contentMetadata__.topLevelPlaylistType ===
+      PlaylistType.MediaPlaylist
+    ) {
+      const variant =
+        this.__contentMetadata__.variants.find((v) => v.id === variantId) ??
+        null;
+      if (variant === null) {
+        throw new Error(`Unknown variant id: ${variantId}`);
+      }
+      if (this.__contentMetadata__.lockedVariant !== variant) {
+        this.__contentMetadata__.lockedVariant = variant;
+        this.trigger("variantLockUpdate", this.getLockedVariant());
+      }
+      return;
+    }
     postMessageToWorker(this.__worker__, {
       type: MainMessageType.LockVariant,
       value: {
@@ -889,6 +910,16 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
     }
     if (this.__contentMetadata__ === null) {
       throw new Error("No content loaded");
+    }
+    if (
+      this.__contentMetadata__.topLevelPlaylistType ===
+      PlaylistType.MediaPlaylist
+    ) {
+      if (this.__contentMetadata__.lockedVariant !== null) {
+        this.__contentMetadata__.lockedVariant = null;
+        this.trigger("variantLockUpdate", this.getLockedVariant());
+      }
+      return;
     }
     postMessageToWorker(this.__worker__, {
       type: MainMessageType.LockVariant,
@@ -1078,10 +1109,8 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
         case WorkerMessageType.MediaOffsetUpdate:
           onMediaOffsetUpdateMessage(data, this.__contentMetadata__);
           break;
-        case WorkerMessageType.MultivariantPlaylistParsed:
-          if (
-            onMultivariantPlaylistParsedMessage(data, this.__contentMetadata__)
-          ) {
+        case WorkerMessageType.TopLevelPlaylistParsed:
+          if (onTopLevelPlaylistParsedMessage(data, this.__contentMetadata__)) {
             this.trigger("variantListUpdate", this.getVariantList());
             this.trigger("audioTrackListUpdate", this.getAudioTrackList());
           }

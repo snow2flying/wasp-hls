@@ -15,6 +15,7 @@ export default class WaspOtherError extends Error {
   /** Specifies the exact error encountered. */
   public readonly code:
     | "MediaSourceAttachmentError"
+    | "NotAPlaylist"
     | "NoSupportedVariant"
     | "UnfoundLockedVariant"
     | "Unknown";
@@ -48,6 +49,9 @@ export default class WaspOtherError extends Error {
         break;
       case OtherErrorCode.NoSupportedVariant:
         this.code = WaspErrorCode.NoSupportedVariant;
+        break;
+      case OtherErrorCode.NotAPlaylist:
+        this.code = WaspErrorCode.NotAPlaylist;
         break;
       default:
         this.code = WaspErrorCode.Unknown;

@@ -25,7 +25,7 @@ import type {
   ContentInfoUpdateWorkerMessage,
   ContentStoppedWorkerMessage,
   WarningWorkerMessage,
-  MultivariantPlaylistParsedWorkerMessage,
+  TopLevelPlaylistParsedWorkerMessage,
   VariantUpdateWorkerMessage,
   TrackUpdateWorkerMessage,
   FlushWorkerMessage,
@@ -906,23 +906,27 @@ export function onContentInfoUpdateMessage(
 }
 
 /**
- * Handles `MultivariantPlaylistParsedWorkerMessage` messages.
+ * Handles `TopLevelPlaylistParsedWorkerMessage` messages.
  * @param {Object} msg - The worker's message received.
  * @param {Object|null} contentMetadata - Metadata of the content currently
  * playing. `null` if no content is currently playing.
  * This object may be mutated.
  * @returns {boolean} - `true` if the message concerned the current content.
  */
-export function onMultivariantPlaylistParsedMessage(
-  msg: MultivariantPlaylistParsedWorkerMessage,
+export function onTopLevelPlaylistParsedMessage(
+  msg: TopLevelPlaylistParsedWorkerMessage,
   contentMetadata: ContentMetadata | null,
 ): boolean {
   if (contentMetadata?.contentId !== msg.value.contentId) {
     logger.info("API: Ignoring warning due to wrong `contentId`");
     return false;
   }
+  contentMetadata.topLevelPlaylistType = msg.value.playlistType;
   contentMetadata.variants = msg.value.variants;
   contentMetadata.audioTracks = msg.value.audioTracks;
+  if (contentMetadata.lockedVariant !== null) {
+    contentMetadata.lockedVariant = null;
+  }
   return true;
 }
 

@@ -4,11 +4,15 @@
 
 Returns the list of available "audio tracks" for the currently loaded content.
 
-Audio tracks are one or multiple renditions (e.g. when there's multiple audio
-qualities) associated to a given set of characteristics: a language,
-accessibility concepts etc..
+Audio tracks group one or more renditions sharing the same characteristics:
+language, accessibility role, etc. Multiple renditions may exist under one track
+when, for example, several audio quality levels are available.
 
-This method will returns an array of objects, each object containing the
+These correspond to distinctly selectable tracks, not just to the presence of
+audio samples in the content: muxed media playlists containing video and audio
+combined will generally not be exposed as a separate audio track.
+
+This method will return an array of objects, each object containing the
 information available for a particular audio track.
 
 Each of those objects should contain the following keys (same than for the
@@ -23,8 +27,8 @@ Each of those objects should contain the following keys (same than for the
 
   `undefined` if unknown or if there's no language involved.
 
-- `assocLanguage` (`string | undefined`): A secondary language associated to the
-  audio track, as a [language tag](https://datatracker.ietf.org/doc/html/rfc5646).
+- `assocLanguage` (`string | undefined`): A secondary language associated with
+  the audio track, as a [language tag](https://datatracker.ietf.org/doc/html/rfc5646).
   Such language is often used in a different role than the language specified
   through the `language` property (e.g., written versus spoken, or a fallback
   dialect).

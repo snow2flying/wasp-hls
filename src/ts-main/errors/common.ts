@@ -84,13 +84,17 @@ export const WaspErrorCode = {
    */
   MediaSourceAttachmentError: "MediaSourceAttachmentError",
   /**
-   * No supported variant was found in the Multivariant Playlist.
+   * No supported startup stream was found for the current content.
    */
   NoSupportedVariant: "NoSupportedVariant",
   /**
    * The variant locked through the `lockVariant` API was not found.
    */
   UnfoundLockedVariant: "UnfoundLockedVariant",
+  /**
+   * The loaded resource does not seem to be an HLS playlist.
+   */
+  NotAPlaylist: "NotAPlaylist",
   /** An unknown error arised. */
   Unknown: "Unknown",
 

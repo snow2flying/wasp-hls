@@ -5,12 +5,13 @@ import type {
   MultivariantPlaylistParsingErrorCode,
   OtherErrorCode,
   PlaylistNature,
+  PlaylistType,
   PushedSegmentErrorCode,
   RequestErrorReason,
-  SegmentParsingErrorCode,
   SourceBufferCreationErrorCode,
   TimerReason,
 } from "./enums.js";
+import { SegmentParsingErrorCode } from "./enums.js";
 import {
   getWasmExports,
   getUint8Memory,
@@ -145,6 +146,33 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         );
         return value === undefined ? -1 : value ? 1 : 0;
       },
+      __js_func__inspect_segment(
+        resourceId: number,
+        mediaTypeOut: number,
+        parsedMimeTypePtrOut: number,
+        parsedMimeTypeLenOut: number,
+        codecPtrOut: number,
+        codecLenOut: number,
+        errCodeOut: number,
+        errDescPtrOut: number,
+        errDescLenOut: number,
+      ): number {
+        const result = bindings.inspectSegment(resourceId);
+        if (result.errorCode === undefined && result.value !== undefined) {
+          getUint32Memory()[mediaTypeOut >>> 2] = result.value.mediaType;
+          writeOptionalString(
+            result.value.mimeType,
+            parsedMimeTypePtrOut,
+            parsedMimeTypeLenOut,
+          );
+          writeOptionalString(result.value.codec, codecPtrOut, codecLenOut);
+          return 1;
+        }
+        getUint32Memory()[errCodeOut >>> 2] =
+          result.errorCode ?? SegmentParsingErrorCode.UnknownError;
+        writeOptionalString(result.description, errDescPtrOut, errDescLenOut);
+        return 0;
+      },
       __js_func__append_buffer(
         sourceBufferId: number,
         resourceId: number,
@@ -236,6 +264,7 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         );
       },
       __js_func__announce_fetched_content(
+        playlistType: number,
         variantInfoPtr: number,
         variantInfoLen: number,
         audioTracksInfoPtr: number,
@@ -243,6 +272,7 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
       ): void {
         const buffer = getWasmExports().memory.buffer;
         bindings.announceFetchedContent(
+          playlistType as PlaylistType,
           new Uint32Array(buffer, variantInfoPtr, variantInfoLen),
           new Uint32Array(buffer, audioTracksInfoPtr, audioTracksInfoLen),
         );
@@ -364,7 +394,7 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         bindings.sendMediaPlaylistParsingError(
           fatal !== 0,
           code as MediaPlaylistParsingErrorCode,
-          mediaType as MediaType,
+          rawOptionalId(mediaType) as MediaType | undefined,
           readString(messagePtr, messageLen),
         );
       },
@@ -378,7 +408,7 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         bindings.sendSegmentParsingError(
           fatal !== 0,
           code as SegmentParsingErrorCode,
-          mediaType as MediaType,
+          rawOptionalId(mediaType) as MediaType | undefined,
           readString(messagePtr, messageLen),
         );
       },

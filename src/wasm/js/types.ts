@@ -11,6 +11,7 @@ import type {
   OtherErrorCode,
   PlaybackTickReason,
   PlaylistNature,
+  PlaylistType,
   PushedSegmentErrorCode,
   RemoveBufferErrorCode,
   RemoveMediaSourceErrorCode,
@@ -24,6 +25,12 @@ import type {
 export interface AppendBufferValue {
   start: number | undefined;
   duration: number | undefined;
+}
+
+export interface InspectSegmentValue {
+  codec: string;
+  mimeType: string;
+  mediaType: MediaType;
 }
 
 export interface HostResult<Value, ErrorCode extends number> {
@@ -54,6 +61,9 @@ export interface HostBindings {
     typ: string,
   ): HostResult<number, AddSourceBufferErrorCode>;
   isTypeSupported(mediaType: MediaType, typ: string): boolean | undefined;
+  inspectSegment(
+    resourceId: number,
+  ): HostResult<InspectSegmentValue, SegmentParsingErrorCode>;
   appendBuffer(
     sourceBufferId: number,
     resourceId: number,
@@ -78,6 +88,7 @@ export interface HostBindings {
     playlistNature: PlaylistNature,
   ): void;
   announceFetchedContent(
+    playlistType: PlaylistType,
     variantInfo: Uint32Array,
     audioTracksInfo: Uint32Array,
   ): void;
@@ -127,13 +138,13 @@ export interface HostBindings {
   sendMediaPlaylistParsingError(
     fatal: boolean,
     code: MediaPlaylistParsingErrorCode,
-    mediaType: MediaType,
+    mediaType: MediaType | undefined,
     message: string,
   ): void;
   sendSegmentParsingError(
     fatal: boolean,
     code: SegmentParsingErrorCode,
-    mediaType: MediaType,
+    mediaType: MediaType | undefined,
     message: string,
   ): void;
   sendPushedSegmentError(

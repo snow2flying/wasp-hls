@@ -85,6 +85,15 @@ impl SegmentList {
     pub(crate) fn media(&self) -> &[MediaSegmentInfo] {
         self.media.as_slice()
     }
+
+    /// Returns information on the segment including the position given, in seconds.
+    ///
+    /// Returns `None` if no such media segment is found.
+    pub(crate) fn segment_from_pos(&self, pos: f64) -> Option<&MediaSegmentInfo> {
+        self.media
+            .iter()
+            .find(|s| s.end() > pos && s.start() <= pos)
+    }
 }
 
 /// Information linked to an initialization segment.
@@ -532,7 +541,9 @@ impl MediaPlaylist {
                 if is_precise {
                     Some(actual_time)
                 } else {
-                    self.segment_from_pos(actual_time).map(|s| s.start())
+                    self.segment_list
+                        .segment_from_pos(actual_time)
+                        .map(|s| s.start())
                 }
             })
     }
@@ -649,15 +660,5 @@ impl MediaPlaylist {
     /// Returns `None` if unknown.
     fn extension(&self) -> Option<&str> {
         self.segment_list.media().first().map(|s| s.url.extension())
-    }
-
-    /// Returns information on the segment including the position given, in seconds.
-    ///
-    /// Returns `None` if no such media segment is found.
-    fn segment_from_pos(&self, pos: f64) -> Option<&MediaSegmentInfo> {
-        self.segment_list
-            .media()
-            .iter()
-            .find(|s| s.end() > pos && s.start() <= pos)
     }
 }

@@ -9,6 +9,7 @@ import type {
   PushedSegmentErrorCode,
   StartingPositionType,
   PlaylistNature,
+  PlaylistType,
   AddSourceBufferErrorCode,
 } from "../wasm/index.js";
 import { MediaSourceReadyState, PlaybackTickReason } from "../wasm/index.js";
@@ -76,7 +77,7 @@ export type WorkerMessage =
   | InitializationErrorWorkerMessage
 
   // Related to content information
-  | MultivariantPlaylistParsedWorkerMessage
+  | TopLevelPlaylistParsedWorkerMessage
   | ContentInfoUpdateWorkerMessage
   | MediaOffsetUpdateWorkerMessage
   | VariantUpdateWorkerMessage
@@ -120,7 +121,7 @@ export const enum WorkerMessageType {
   Error = "err",
   Warning = "warn",
   ContentInfoUpdate = "content-upd",
-  MultivariantPlaylistParsed = "m-playlist",
+  TopLevelPlaylistParsed = "m-playlist",
   TrackUpdate = "track-upd",
   ContentStopped = "ctnt-stop",
   Seek = "seek",
@@ -313,7 +314,7 @@ export interface SegmentRequestErrorWorkerInfo {
     isInit: boolean;
     start?: number | undefined;
     duration?: number | undefined;
-    mediaType: MediaType;
+    mediaType: MediaType | undefined;
     byteRange?: [number, number] | undefined;
     reason: RequestErrorReason;
     status?: number | undefined;
@@ -407,8 +408,8 @@ export interface ContentInfoUpdateWorkerMessage {
   };
 }
 
-export interface MultivariantPlaylistParsedWorkerMessage {
-  type: WorkerMessageType.MultivariantPlaylistParsed;
+export interface TopLevelPlaylistParsedWorkerMessage {
+  type: WorkerMessageType.TopLevelPlaylistParsed;
   value: {
     /**
      * The identifier for the content on which an error was received.
@@ -416,6 +417,7 @@ export interface MultivariantPlaylistParsedWorkerMessage {
      * `LoadContentMainMessage`.
      */
     contentId: string;
+    playlistType: PlaylistType;
     variants: VariantInfo[];
     audioTracks: AudioTrackInfo[];
   };

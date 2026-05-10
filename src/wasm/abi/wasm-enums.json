@@ -13,7 +13,8 @@
         "NoSupportedVariant": 0,
         "UnfoundLockedVariant": 1,
         "MediaSourceAttachmentError": 2,
-        "Unknown": 3
+        "NotAPlaylist": 3,
+        "Unknown": 4
       }
     },
     "SourceBufferCreationErrorCode": {

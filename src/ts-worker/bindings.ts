@@ -33,10 +33,12 @@ import {
 } from "../wasm/index.js";
 import type {
   HostBindings,
+  InspectSegmentValue,
   MediaPlaylistParsingErrorCode,
   MultivariantPlaylistParsingErrorCode,
   OtherErrorCode,
   PlaylistNature,
+  PlaylistType,
   RequestErrorReason,
   SourceBufferCreationErrorCode,
   TimerReason,
@@ -51,6 +53,7 @@ import {
 import type { RequestId, ResourceId, TimerId } from "./globals.ts";
 import {
   getDurationFromTrun,
+  getIsoBmffCodecs,
   getMDHDTimescale,
   getTrackFragmentDecodeTime,
 } from "./isobmff-utils.js";
@@ -78,7 +81,7 @@ export function sendSegmentRequestError(
   url: string,
   isInit: boolean,
   timeInfo: [number, number] | undefined,
-  mediaType: MediaType,
+  mediaType: MediaType | undefined,
   reason: RequestErrorReason,
   status: number | undefined,
 ): void {
@@ -282,7 +285,7 @@ export function sendMultivariantPlaylistParsingError(
 export function sendMediaPlaylistParsingError(
   fatal: boolean,
   code: MediaPlaylistParsingErrorCode,
-  mediaType: MediaType,
+  mediaType: MediaType | undefined,
   message: string,
 ): void {
   const contentId = playerInstance.getContentInfo()?.contentId;
@@ -340,7 +343,7 @@ export function sendSourceBufferCreationError(
 export function sendSegmentParsingError(
   fatal: boolean,
   code: SegmentParsingErrorCode,
-  mediaType: MediaType,
+  mediaType: MediaType | undefined,
   message: string,
 ): void {
   const contentId = playerInstance.getContentInfo()?.contentId;
@@ -1023,6 +1026,137 @@ export function appendBuffer(
 }
 
 /**
+ * Recuperate more information on a segment, identified by its `ResourceId`.
+ *
+ * This can generally be relied on to e.g. obtain the `codec` and mime-type
+ * directly from segment metadata.
+ *
+ * @param resourceId - `ResourceId` of the segment you want more metadata from
+ * @returns - Object describing the result of the operation.
+ */
+export function inspectSegment(resourceId: ResourceId): {
+  value: InspectSegmentValue | undefined;
+  errorCode: SegmentParsingErrorCode | undefined;
+  description: string | undefined;
+} {
+  const segment = jsMemoryResources.get(resourceId);
+  if (segment === undefined) {
+    return {
+      value: undefined,
+      errorCode: SegmentParsingErrorCode.NoResource,
+      description:
+        "Segment inspection error: No resource with the given `resourceId`",
+    };
+  }
+
+  const inspection = inspectProbeSegment(segment);
+  if (inspection === undefined) {
+    return {
+      value: undefined,
+      errorCode: SegmentParsingErrorCode.UnknownError,
+      description:
+        "Segment inspection error: no codec metadata was found in the probe segment",
+    };
+  }
+  return {
+    value: inspection,
+    errorCode: undefined,
+    description: undefined,
+  };
+}
+
+function inspectProbeSegment(
+  segment: Uint8Array,
+): InspectSegmentValue | undefined {
+  const codecs = getIsoBmffCodecs(segment);
+  if (codecs.length > 0) {
+    const mediaType = inferMediaTypeFromCodecs(codecs);
+    return {
+      mediaType,
+      mimeType: mediaType === MediaType.Audio ? "audio/mp4" : "video/mp4",
+      codec: codecs.join(","),
+    };
+  }
+
+  const transmuxedSegment = createTransmuxer().transmuxSegment(segment);
+  if (transmuxedSegment === null) {
+    return undefined;
+  }
+  const transmuxedCodecs = getIsoBmffCodecs(transmuxedSegment);
+  if (transmuxedCodecs.length === 0) {
+    return undefined;
+  }
+  const mediaType = inferMediaTypeFromCodecs(transmuxedCodecs);
+  if (isLikelyAacProbeSegment(segment)) {
+    return {
+      mediaType,
+      mimeType: "audio/aac",
+      codec: transmuxedCodecs.join(","),
+    };
+  }
+  if (isLikelyMpeg2TsProbeSegment(segment)) {
+    return {
+      mediaType,
+      mimeType: mediaType === MediaType.Audio ? "audio/mp2t" : "video/mp2t",
+      codec: transmuxedCodecs.join(","),
+    };
+  }
+  return undefined;
+}
+
+function inferMediaTypeFromCodecs(codecs: string[]): MediaType {
+  return codecs.some((codec) => !isAudioCodec(codec))
+    ? MediaType.Video
+    : MediaType.Audio;
+}
+
+function isAudioCodec(codec: string): boolean {
+  return /^(mp4a|ac-3|ec-3|ac-4|opus|flac|alac)\b/i.test(codec);
+}
+
+function isLikelyAacProbeSegment(data: Uint8Array): boolean {
+  const offset = getId3Offset(data, 0);
+  return (
+    data.length >= offset + 2 &&
+    (data[offset] & 0xff) === 0xff &&
+    (data[offset + 1] & 0xf0) === 0xf0 &&
+    (data[offset + 1] & 0x16) === 0x10
+  );
+}
+
+function getId3Offset(data: Uint8Array, initialOffset: number): number {
+  if (
+    data.length - initialOffset < 10 ||
+    data[initialOffset] !== 0x49 ||
+    data[initialOffset + 1] !== 0x44 ||
+    data[initialOffset + 2] !== 0x33
+  ) {
+    return initialOffset;
+  }
+
+  const flags = data[initialOffset + 5];
+  const footerPresent = (flags & 16) >> 4;
+  const size =
+    (data[initialOffset + 6] << 21) |
+    (data[initialOffset + 7] << 14) |
+    (data[initialOffset + 8] << 7) |
+    data[initialOffset + 9];
+  const tagSize = Math.max(0, size) + (footerPresent === 1 ? 20 : 10);
+  return getId3Offset(data, initialOffset + tagSize);
+}
+
+function isLikelyMpeg2TsProbeSegment(data: Uint8Array): boolean {
+  if (data.length < 188 || data[0] !== 0x47) {
+    return false;
+  }
+  return (
+    data.length === 188 ||
+    data[188] === 0x47 ||
+    (data.length >= 377 && data[376] === 0x47)
+  );
+}
+
+/**
  * @param {number} sourceBufferId
  * @param {number} start
  * @param {number} end
@@ -1246,6 +1380,7 @@ export function updateContentInfo(
 }
 
 export function announceFetchedContent(
+  playlistType: PlaylistType,
   variantInfo: Uint32Array,
   audioTracksInfo: Uint32Array,
 ): void {
@@ -1384,9 +1519,10 @@ export function announceFetchedContent(
     }
   }
   postMessageToMain({
-    type: WorkerMessageType.MultivariantPlaylistParsed,
+    type: WorkerMessageType.TopLevelPlaylistParsed,
     value: {
       contentId: contentInfo.contentId,
+      playlistType,
       variants: variantInfoObj,
       audioTracks: audioTracksObj,
     },
@@ -1559,6 +1695,7 @@ export function getWaspHostCapabilities(): HostBindings {
     setMediaSourceDuration,
     addSourceBuffer,
     isTypeSupported,
+    inspectSegment,
     appendBuffer,
     removeBuffer,
     endOfStream,

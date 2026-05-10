@@ -65,9 +65,7 @@ impl MultivariantPlaylist {
             }
         }
         while let Some(line) = lines.next() {
-            let str_line = if let Ok(s) = line {
-                s
-            } else {
+            let Ok(str_line) = line else {
                 return Err(MultivariantPlaylistParsingError::UnableToReadLine);
             };
             if str_line.is_empty() {
@@ -393,17 +391,21 @@ impl MultivariantPlaylist {
     ///   - The given `MediaPlaylistPermanentId` is linked to some media which isn't linked to
     ///     a MediaPlaylist. In that condition, it is the MediaPlaylist linked to its Variant
     ///     stream that should be done.
+    ///   - The given resource is not linked to a MultiVariantPlaylist
     ///
-    /// Both are probably an error as a `MediaPlaylistPermanentId` should always identify a
+    /// Those are probably errors as a `MediaPlaylistPermanentId` should always identify a
     /// `MediaPlaylist`.
     pub(crate) fn media_playlist_url(&self, wanted_id: &MediaPlaylistPermanentId) -> Option<&Url> {
         match wanted_id.location() {
             MediaPlaylistUrlLocation::Variant => Some(self.variant(wanted_id.id())?.url()),
             MediaPlaylistUrlLocation::AudioTrack => self.audio_url(wanted_id.id()),
             MediaPlaylistUrlLocation::OtherMedia => self.other_media_url(wanted_id.id()),
+            MediaPlaylistUrlLocation::Direct => None, // Should not happen
         }
     }
 
+    /// Returns reference to the `MediaPlaylist` whose `MediaPlaylistPermanentId` is given in
+    /// argument.
     pub(crate) fn media_playlist(
         &self,
         wanted_id: &MediaPlaylistPermanentId,
@@ -414,6 +416,7 @@ impl MultivariantPlaylist {
             }
             MediaPlaylistUrlLocation::AudioTrack => self.audio_playlist(wanted_id.id()),
             MediaPlaylistUrlLocation::OtherMedia => self.other_media_playlist(wanted_id.id()),
+            MediaPlaylistUrlLocation::Direct => None, // Should not happen
         }
     }
 
@@ -433,6 +436,8 @@ impl MultivariantPlaylist {
             MediaPlaylistUrlLocation::OtherMedia => {
                 self.update_other_media_playlist(id.id(), data, url)
             }
+            // Should not happen
+            MediaPlaylistUrlLocation::Direct => Err(MediaPlaylistUpdateError::NotFound),
         }
     }
 
@@ -658,7 +663,7 @@ pub struct MediaPlaylistPermanentId {
 }
 
 impl MediaPlaylistPermanentId {
-    fn new(location: MediaPlaylistUrlLocation, id: u32) -> Self {
+    pub(crate) fn new(location: MediaPlaylistUrlLocation, id: u32) -> Self {
         Self { location, id }
     }
 
@@ -676,13 +681,16 @@ impl MediaPlaylistPermanentId {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum MediaPlaylistUrlLocation {
+pub(crate) enum MediaPlaylistUrlLocation {
     /// This Media Playlist's URL is defined by a variant in the `MultivariantPlaylist` object.
     Variant,
     /// This Media Playlist's URL is an audio-specific track in the `MultivariantPlaylist` object.
     AudioTrack,
     /// This Media Playlist's URL is defined as another media in the `MultivariantPlaylist` object.
     OtherMedia,
+    /// This Media Playlist was directly loaded as the top-level playlist.
+    /// In that case, no `MultiVariantPlaylist` should be available.
+    Direct,
 }
 
 #[cfg(test)]

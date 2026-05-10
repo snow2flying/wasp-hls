@@ -472,7 +472,7 @@ Its `name` property is set to `"WaspOtherError"`:
 
 ```js
 player.addEventlistener("error", (error) => {
-  if (error.name === "WaspSourceBufferCreationError") {
+  if (error.name === "WaspOtherError") {
     // An uncategorized error happened
   }
 });
@@ -480,7 +480,7 @@ player.addEventlistener("error", (error) => {
 
 ### Error codes
 
-A `WaspSegmentParsingError`'s `code` property can be set to any of the following
+A `WaspOtherError`'s `code` property can be set to any of the following
 values:
 
 - `"MediaSourceAttachmentError"`:
@@ -488,10 +488,14 @@ values:
   to attach it to the `MediaSource` HTMLMediaElement.
 
 - `"NoSupportedVariant"`:
-  No supported variant was found in the Multivariant Playlist.
+  No supported startup stream was found for the current content.
+  This is generally due to insufficient codec support on the current platform.
 
 - `"UnfoundLockedVariant"`:
   The variant locked through the `lockVariant` API was not found.
+
+- `"NotAPlaylist"`:
+  The loaded resource does not seem to be an HLS playlist.
 
 - `"Unknown"`:
   An unknown error arised.
