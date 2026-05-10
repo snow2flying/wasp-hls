@@ -12,6 +12,7 @@ mod core;
 mod event_listeners;
 mod playlist_refresh_timers;
 mod segment_request_contexts;
+mod utils;
 
 use segment_request_contexts::SegmentRequestContexts;
 
