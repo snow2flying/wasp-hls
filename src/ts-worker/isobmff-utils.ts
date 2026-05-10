@@ -192,7 +192,7 @@ function getTrackCodec(trak: Uint8Array): string | undefined {
 
 function getCodecFromStsd(
   stsd: Uint8Array,
-  _handlerType: number,
+  handlerType: number,
 ): string | undefined {
   if (stsd.length < 16) {
     return undefined;
@@ -211,18 +211,79 @@ function getCodecFromStsd(
       return undefined;
     }
     const sampleEntry = stsd.subarray(contentStart, boxEnd);
-    switch (boxName) {
-      case 0x61766331: /* avc1 */
-      case 0x61766333 /* avc3 */:
-        return getAvcCodec(sampleEntry, boxName);
-      case 0x6d703461 /* mp4a */:
-        return getMp4aCodec(sampleEntry);
-      default:
-        break;
+    const codec = getCodecFromSampleEntry(sampleEntry, boxName, handlerType);
+    if (codec !== undefined) {
+      return codec;
     }
     cursor = boxEnd;
   }
   return undefined;
+}
+
+function getCodecFromSampleEntry(
+  sampleEntry: Uint8Array,
+  boxName: number,
+  handlerType: number,
+): string | undefined {
+  switch (boxName) {
+    case 0x61766331: /* avc1 */
+    case 0x61766333 /* avc3 */:
+      return getAvcCodec(sampleEntry, boxName);
+    case 0x6d703461 /* mp4a */:
+      return getMp4aCodec(sampleEntry);
+    case 0x656e6376: /* encv */
+    case 0x656e6361 /* enca */:
+      return getEncryptedCodec(sampleEntry, handlerType);
+    case 0x68766331: /* hvc1 */
+    case 0x68657631 /* hev1 */:
+      return getHevcCodec(sampleEntry, boxName);
+    case 0x76703038: /* vp08 */
+    case 0x76703039 /* vp09 */:
+      return getVpCodec(sampleEntry, boxName);
+    case 0x61763031 /* av01 */:
+      return getAv1Codec(sampleEntry);
+    case 0x64766831: /* dvh1 */
+    case 0x64766865: /* dvhe */
+    case 0x64766131: /* dva1 */
+    case 0x64766176: /* dvav */
+    case 0x61763032 /* av02 */:
+    case 0x61632d33: /* ac-3 */
+    case 0x65632d33: /* ec-3 */
+    case 0x61632d34: /* ac-4 */
+    case 0x4f707573: /* Opus */
+    case 0x664c6143: /* fLaC */
+    case 0x616c6163 /* alac */:
+      return fourCC(boxName);
+    default:
+      return undefined;
+  }
+}
+
+function getEncryptedCodec(
+  sampleEntry: Uint8Array,
+  handlerType: number,
+): string | undefined {
+  const boxes = sampleEntry.subarray(getSampleEntryHeaderSize(handlerType));
+  const frma = getBoxContent(boxes, 0x66726d61 /* frma */);
+  if (frma === null || frma.length < 4) {
+    return undefined;
+  }
+  const originalFormat = be4toi(frma, 0);
+  if (originalFormat === 0x656e6376 || originalFormat === 0x656e6361) {
+    return undefined;
+  }
+  return getCodecFromSampleEntry(sampleEntry, originalFormat, handlerType);
+}
+
+function getSampleEntryHeaderSize(handlerType: number): number {
+  switch (handlerType) {
+    case 0x76696465 /* vide */:
+      return 78;
+    case 0x736f756e /* soun */:
+      return 28;
+    default:
+      return 8;
+  }
 }
 
 function getAvcCodec(
@@ -248,38 +309,194 @@ function getMp4aCodec(sampleEntry: Uint8Array): string | undefined {
     return undefined;
   }
 
-  let objectTypeIndication: number | undefined;
-  let cursor = 4; // version + flags
-  while (cursor + 2 <= esds.length) {
-    const tag = esds[cursor];
+  return getCodecFromEsdsDescriptors(esds.subarray(4));
+}
+
+function getHevcCodec(
+  sampleEntry: Uint8Array,
+  boxName: number,
+): string | undefined {
+  if (sampleEntry.length < 78) {
+    return undefined;
+  }
+  const hvcC = getBoxContent(sampleEntry.subarray(78), 0x68766343 /* hvcC */);
+  if (hvcC === null || hvcC.length < 13) {
+    return undefined;
+  }
+
+  const profileByte = hvcC[1];
+  const profileSpace = (profileByte >> 6) & 0x03;
+  const tierFlag = (profileByte >> 5) & 0x01;
+  const profileIdc = profileByte & 0x1f;
+  const compatibilityFlags = reverseBits32(be4toi(hvcC, 2));
+  const levelIdc = hvcC[12];
+  const constraintBytes = trimTrailingZeroBytes(hvcC.subarray(6, 12));
+
+  let profileSpacePrefix = "";
+  if (profileSpace === 1) {
+    profileSpacePrefix = "A";
+  } else if (profileSpace === 2) {
+    profileSpacePrefix = "B";
+  } else if (profileSpace === 3) {
+    profileSpacePrefix = "C";
+  }
+  const constraintString =
+    constraintBytes.length === 0
+      ? "0"
+      : Array.from(constraintBytes, (value) =>
+          value.toString(16).toUpperCase(),
+        ).join(".");
+  return `${fourCC(boxName)}.${profileSpacePrefix}${profileIdc}.${compatibilityFlags
+    .toString(16)
+    .toUpperCase()}.${tierFlag === 1 ? "H" : "L"}${levelIdc}.${constraintString}`;
+}
+
+function getVpCodec(
+  sampleEntry: Uint8Array,
+  boxName: number,
+): string | undefined {
+  if (sampleEntry.length < 78) {
+    return undefined;
+  }
+  const vpcC = getBoxContent(sampleEntry.subarray(78), 0x76706343 /* vpcC */);
+  if (vpcC === null || vpcC.length < 12) {
+    return undefined;
+  }
+
+  const profile = vpcC[4];
+  const level = vpcC[5];
+  const packed = vpcC[6];
+  const bitDepth = packed >> 4;
+  const chromaSubsampling = (packed >> 1) & 0x07;
+  const videoFullRangeFlag = packed & 0x01;
+  const colourPrimaries = vpcC[7];
+  const transferCharacteristics = vpcC[8];
+  const matrixCoefficients = vpcC[9];
+
+  return `${fourCC(boxName)}.${toDecimalString(profile)}.${toDecimalString(level)}.${toDecimalString(bitDepth)}.${toDecimalString(chromaSubsampling)}.${toDecimalString(colourPrimaries)}.${toDecimalString(transferCharacteristics)}.${toDecimalString(matrixCoefficients)}.${toDecimalString(videoFullRangeFlag)}`;
+}
+
+function getAv1Codec(sampleEntry: Uint8Array): string | undefined {
+  if (sampleEntry.length < 78) {
+    return undefined;
+  }
+  const boxes = sampleEntry.subarray(78);
+  const av1C = getBoxContent(boxes, 0x61763143 /* av1C */);
+  if (av1C === null || av1C.length < 4) {
+    return undefined;
+  }
+
+  const profileAndLevel = av1C[1];
+  const profile = (profileAndLevel >> 5) & 0x07;
+  const level = profileAndLevel & 0x1f;
+  const features = av1C[2];
+  const tier = (features & 0x80) !== 0 ? "H" : "M";
+  const highBitdepth = (features & 0x40) !== 0;
+  const twelveBit = (features & 0x20) !== 0;
+  let bitDepth = 8;
+  if (highBitdepth) {
+    bitDepth = twelveBit ? 12 : 10;
+  }
+
+  return `av01.${profile}.${toDecimalString(level)}${tier}.${toDecimalString(bitDepth)}`;
+}
+
+function getCodecFromEsdsDescriptors(
+  data: Uint8Array,
+  objectTypeIndication?: number,
+): string | undefined {
+  let cursor = 0;
+  while (cursor + 2 <= data.length) {
+    const tag = data[cursor];
     cursor += 1;
-    const parsedLength = readDescriptorLength(esds, cursor);
+    const parsedLength = readDescriptorLength(data, cursor);
     if (parsedLength === null) {
       return undefined;
     }
     const [descriptorLength, descriptorHeaderLength] = parsedLength;
     cursor += descriptorHeaderLength;
-    if (cursor + descriptorLength > esds.length) {
+    if (cursor + descriptorLength > data.length) {
       return undefined;
     }
 
+    const descriptor = data.subarray(cursor, cursor + descriptorLength);
+    let nextObjectTypeIndication = objectTypeIndication;
     if (tag === 0x04 /* DecoderConfigDescriptor */) {
-      objectTypeIndication = esds[cursor];
-    } else if (tag === 0x05 /* DecoderSpecificInfo */) {
-      if (objectTypeIndication === undefined || descriptorLength === 0) {
+      if (descriptor.length < 13) {
         return undefined;
       }
-      const audioObjectType = getAudioObjectType(
-        esds.subarray(cursor, cursor + descriptorLength),
-      );
+      nextObjectTypeIndication = descriptor[0];
+    } else if (tag === 0x05 /* DecoderSpecificInfo */) {
+      if (objectTypeIndication === undefined || descriptor.length === 0) {
+        return undefined;
+      }
+      const audioObjectType = getAudioObjectType(descriptor);
       if (audioObjectType === undefined) {
         return undefined;
       }
       return `mp4a.${objectTypeIndication.toString(16)}.${audioObjectType}`;
     }
+
+    const nestedDescriptor = getNestedEsdsDescriptors(
+      tag,
+      descriptor,
+      nextObjectTypeIndication,
+    );
+    const nestedCodec =
+      nestedDescriptor === undefined
+        ? undefined
+        : getCodecFromEsdsDescriptors(
+            nestedDescriptor,
+            nextObjectTypeIndication,
+          );
+    if (nestedCodec !== undefined) {
+      return nestedCodec;
+    }
     cursor += descriptorLength;
   }
   return undefined;
+}
+
+function getNestedEsdsDescriptors(
+  tag: number,
+  descriptor: Uint8Array,
+  objectTypeIndication?: number,
+): Uint8Array | undefined {
+  switch (tag) {
+    case 0x03: {
+      if (descriptor.length < 3) {
+        return undefined;
+      }
+      let cursor = 2; // ES_ID
+      const flags = descriptor[cursor];
+      cursor += 1;
+      if ((flags & 0x80) !== 0) {
+        cursor += 2;
+      }
+      if ((flags & 0x40) !== 0) {
+        if (cursor >= descriptor.length) {
+          return undefined;
+        }
+        const urlLength = descriptor[cursor];
+        cursor += 1 + urlLength;
+      }
+      if ((flags & 0x20) !== 0) {
+        cursor += 2;
+      }
+      return cursor <= descriptor.length
+        ? descriptor.subarray(cursor)
+        : undefined;
+    }
+    case 0x04:
+      return descriptor.subarray(13);
+    case 0x05:
+      return undefined;
+    default:
+      if (objectTypeIndication === 0x40) {
+        return descriptor;
+      }
+      return undefined;
+  }
 }
 
 function getAudioObjectType(data: Uint8Array): number | undefined {
@@ -354,6 +571,28 @@ function getNextBox(
 
 function toHex(value: number): string {
   return value.toString(16).padStart(2, "0");
+}
+
+function toDecimalString(value: number): string {
+  return value.toString(10).padStart(2, "0");
+}
+
+function trimTrailingZeroBytes(buf: Uint8Array): Uint8Array {
+  let end = buf.length;
+  while (end > 0 && buf[end - 1] === 0) {
+    end--;
+  }
+  return buf.subarray(0, end);
+}
+
+function reverseBits32(value: number): number {
+  let reversed = 0;
+  let current = value >>> 0;
+  for (let i = 0; i < 32; i++) {
+    reversed = (reversed << 1) | (current & 0x01);
+    current >>>= 1;
+  }
+  return reversed >>> 0;
 }
 
 function fourCC(value: number): string {
