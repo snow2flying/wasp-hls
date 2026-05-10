@@ -717,28 +717,13 @@ impl Dispatcher {
         playlist_id: MediaPlaylistPermanentId,
         refresh_interval: Option<f64>,
     ) {
+        self.playlist_refresh_timers
+            .set_timer(playlist_id.clone(), refresh_interval);
+        self.check_stale_segment_requests(&playlist_id);
+
         let Some(playlist_store) = self.playlist_store.as_ref() else {
             return;
         };
-        self.playlist_refresh_timers
-            .set_timer(playlist_id.clone(), refresh_interval);
-        if let Some(media_type) = playlist_store.curr_media_type_for(&playlist_id) {
-            if let Some(playlist) = playlist_store.curr_media_playlist(media_type) {
-                let stale_request_ids = self.segment_request_contexts.ids_matching(|context| {
-                    matches!(
-                        context,
-                        PendingSegmentRequest::Media {
-                            media_type: req_media_type,
-                            sequence,
-                            ..
-                        } if *req_media_type == media_type
-                            && !playlist.contains_sequence(*sequence)
-                    )
-                });
-                self.requester.abort_segments(&stale_request_ids);
-            }
-        }
-
         if let Some(duration) = playlist_store.segment_target_duration() {
             let mut min_buffer_time = f64::max(3., duration - 1.);
             min_buffer_time = f64::min(8., min_buffer_time);
@@ -1172,6 +1157,40 @@ impl Dispatcher {
                 .retain(|id| pl_store.is_curr_media_playlist(id))
         } else {
             self.playlist_refresh_timers.clear_all_timers();
+        }
+    }
+
+    /// After a media playlist update, we may have requests pending for segment that do
+    /// not exist anymore. Abort them if that's the case.
+    ///
+    /// XXX TODO: Is that what we want to do? Maybe HLS put a delay in place before
+    /// segment eviction server-side? To check.
+    fn check_stale_segment_requests(&mut self, playlist_id: &MediaPlaylistPermanentId) {
+        let Some(playlist_store) = self.playlist_store.as_ref() else {
+            return; // no content loaded
+        };
+        let Some(media_type) = playlist_store.curr_media_type_for(playlist_id) else {
+            return; // No active media playlist found with that id
+        };
+        let Some(playlist) = playlist_store.curr_media_playlist(media_type) else {
+            return; // No active playlist for the given media type, should not happen
+        };
+
+        // Now select segment requests with stale ids
+        let stale_request_ids = self.segment_request_contexts.ids_matching(|context| {
+            matches!(
+                context,
+                PendingSegmentRequest::Media {
+                    media_type: req_media_type,
+                    sequence,
+                    ..
+                } if *req_media_type == media_type
+                    && !playlist.contains_sequence(*sequence)
+            )
+        });
+        self.requester.abort_segments(&stale_request_ids); // and abort them
+        for req_id in stale_request_ids {
+            self.segment_request_contexts.take(req_id);
         }
     }
 
