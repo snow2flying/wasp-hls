@@ -494,5 +494,8 @@ values:
 - `"UnfoundLockedVariant"`:
   The variant locked through the `lockVariant` API was not found.
 
+- `"NotAPlaylist"`:
+  The loaded resource does not seem to be an HLS playlist.
+
 - `"Unknown"`:
   An unknown error arised.

@@ -38,16 +38,20 @@ pub(crate) struct DirectMediaInfo {
 
 impl TopLevelPlaylist {
     pub(crate) fn parse(data: &[u8], url: Url) -> Result<Self, TopLevelPlaylistParsingError> {
-        if is_multivariant_playlist(data) {
-            Logger::info("Parser: this is a multivariant playlist, parsing...");
-            MultivariantPlaylist::parse(io::Cursor::new(data), url)
-                .map(Self::Multivariant)
-                .map_err(TopLevelPlaylistParsingError::Multivariant)
-        } else {
-            Logger::info("Parser: this is a top-level media playlist, parsing...");
-            DirectMediaPlaylist::parse(data, url)
-                .map(Self::DirectMedia)
-                .map_err(TopLevelPlaylistParsingError::Media)
+        match classify_playlist(data) {
+            PlaylistKind::Multivariant => {
+                Logger::info("Parser: this is a multivariant playlist, parsing...");
+                MultivariantPlaylist::parse(io::Cursor::new(data), url)
+                    .map(Self::Multivariant)
+                    .map_err(TopLevelPlaylistParsingError::Multivariant)
+            }
+            PlaylistKind::Media => {
+                Logger::info("Parser: this is a top-level media playlist, parsing...");
+                DirectMediaPlaylist::parse(data, url)
+                    .map(Self::DirectMedia)
+                    .map_err(TopLevelPlaylistParsingError::Media)
+            }
+            PlaylistKind::NotAPlaylist => Err(TopLevelPlaylistParsingError::NotAPlaylist),
         }
     }
 
@@ -139,6 +143,7 @@ impl DirectMediaPlaylist {
 pub(crate) enum TopLevelPlaylistParsingError {
     Multivariant(MultivariantPlaylistParsingError),
     Media(MediaPlaylistParsingError),
+    NotAPlaylist,
 }
 
 impl fmt::Display for TopLevelPlaylistParsingError {
@@ -146,21 +151,79 @@ impl fmt::Display for TopLevelPlaylistParsingError {
         match self {
             Self::Multivariant(err) => err.fmt(f),
             Self::Media(err) => err.fmt(f),
+            Self::NotAPlaylist => {
+                write!(f, "The loaded resource does not seem to be an HLS playlist")
+            }
         }
     }
 }
 
-fn is_multivariant_playlist(data: &[u8]) -> bool {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PlaylistKind {
+    Multivariant,
+    Media,
+    NotAPlaylist,
+}
+
+pub fn classify_playlist(data: &[u8]) -> PlaylistKind {
+    let mut first_non_empty_line = true;
+
     for line in data.split(|b| *b == b'\n') {
-        let line = std::str::from_utf8(line).unwrap_or("").trim();
+        let line = match std::str::from_utf8(line) {
+            Ok(l) => l.trim(),
+            Err(_) => continue,
+        };
+
         if line.is_empty() {
             continue;
         }
-        // XXX TODO: Maybe we should assume Multivariant and do the reverse check to limit
-        //           impact?
+
+        if first_non_empty_line {
+            first_non_empty_line = false;
+            if line != "#EXTM3U" {
+                return PlaylistKind::NotAPlaylist;
+            }
+            continue;
+        }
+
         if line.starts_with("#EXT-X-STREAM-INF:") || line.starts_with("#EXT-X-MEDIA:") {
-            return true;
+            return PlaylistKind::Multivariant;
+        }
+
+        if line.starts_with("#EXT-X-TARGETDURATION")
+            || line.starts_with("#EXT-X-MEDIA-SEQUENCE")
+            || line.starts_with("#EXTINF:")
+        {
+            return PlaylistKind::Media;
         }
     }
-    false
+
+    // Reached end of file without finding media playlist tags.
+    // If #EXTM3U was present, assume Multivariant.
+    if first_non_empty_line {
+        PlaylistKind::NotAPlaylist
+    } else {
+        PlaylistKind::Multivariant
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{classify_playlist, PlaylistKind};
+
+    #[test]
+    fn classifies_non_playlist_input() {
+        assert_eq!(
+            classify_playlist(b"<html>not hls</html>"),
+            PlaylistKind::NotAPlaylist
+        );
+    }
+
+    #[test]
+    fn classifies_media_playlist_input() {
+        assert_eq!(
+            classify_playlist(b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nseg.ts\n"),
+            PlaylistKind::Media
+        );
+    }
 }

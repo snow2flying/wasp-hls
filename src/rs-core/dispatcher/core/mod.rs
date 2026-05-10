@@ -680,6 +680,9 @@ impl Dispatcher {
                     TopLevelPlaylistParsingError::Media(err) => {
                         jsSendMediaPlaylistParsingError(true, err.into(), None, &message);
                     }
+                    TopLevelPlaylistParsingError::NotAPlaylist => {
+                        jsSendOtherError(true, OtherErrorCode::NotAPlaylist, &message);
+                    }
                 }
                 self.stop_current_content();
             }

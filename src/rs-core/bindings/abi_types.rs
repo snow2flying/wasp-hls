@@ -24,7 +24,8 @@ pub enum OtherErrorCode {
     NoSupportedVariant = 0,
     UnfoundLockedVariant = 1,
     MediaSourceAttachmentError = 2,
-    Unknown = 3,
+    NotAPlaylist = 3,
+    Unknown = 4,
 }
 
 impl OtherErrorCode {
@@ -33,7 +34,8 @@ impl OtherErrorCode {
             0 => Self::NoSupportedVariant,
             1 => Self::UnfoundLockedVariant,
             2 => Self::MediaSourceAttachmentError,
-            3 => Self::Unknown,
+            3 => Self::NotAPlaylist,
+            4 => Self::Unknown,
             _ => Self::Unknown,
         }
     }

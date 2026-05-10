@@ -91,6 +91,10 @@ export const WaspErrorCode = {
    * The variant locked through the `lockVariant` API was not found.
    */
   UnfoundLockedVariant: "UnfoundLockedVariant",
+  /**
+   * The loaded resource does not seem to be an HLS playlist.
+   */
+  NotAPlaylist: "NotAPlaylist",
   /** An unknown error arised. */
   Unknown: "Unknown",
 

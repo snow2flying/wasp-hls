@@ -11,7 +11,8 @@ export const OtherErrorCode = Object.freeze({
   NoSupportedVariant: 0,
   UnfoundLockedVariant: 1,
   MediaSourceAttachmentError: 2,
-  Unknown: 3,
+  NotAPlaylist: 3,
+  Unknown: 4,
 } as const);
 export type OtherErrorCode =
   (typeof OtherErrorCode)[keyof typeof OtherErrorCode];
