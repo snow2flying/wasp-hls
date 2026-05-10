@@ -4,6 +4,9 @@ use crate::{
 };
 
 static NULL_RESOLUTION: VideoResolution = VideoResolution::new(0, 0);
+pub(crate) const DIRECT_MEDIA_VARIANT_ID: u32 = 0;
+pub(crate) const DIRECT_MEDIA_AUDIO_TRACK_ID: u32 = 0;
+static DIRECT_MEDIA_TRACK_NAME: &str = "main";
 
 pub(crate) unsafe fn format_variants_info_for_js(variants: &[&VariantStream]) -> Vec<u32> {
     let mut ret: Vec<u32> = vec![];
@@ -24,6 +27,19 @@ pub(crate) unsafe fn format_variants_info_for_js(variants: &[&VariantStream]) ->
         ret.push(video_range.as_ptr() as u32);
     });
     ret
+}
+
+pub(crate) unsafe fn format_direct_media_variants_info_for_js() -> Vec<u32> {
+    vec![
+        1,
+        DIRECT_MEDIA_VARIANT_ID,
+        0,
+        0,
+        0,
+        0,
+        0,
+        "".as_ptr() as u32,
+    ]
 }
 
 pub(crate) fn format_range_for_js(original: Option<&ByteRange>) -> (Option<usize>, Option<usize>) {
@@ -111,5 +127,29 @@ pub(crate) unsafe fn format_audio_tracks_for_js(tracks: &[AudioTrack]) -> Vec<u3
             .iter()
             .for_each(|sample_rate| ret.push(*sample_rate));
     });
+    ret
+}
+
+pub(crate) unsafe fn format_direct_media_audio_tracks_for_js(has_audio_track: bool) -> Vec<u32> {
+    let mut ret: Vec<u32> = vec![];
+    ret.push(if has_audio_track { 1 } else { 0 });
+    if has_audio_track {
+        ret.push(DIRECT_MEDIA_AUDIO_TRACK_ID);
+
+        ret.push(0);
+        ret.push("".as_ptr() as u32);
+
+        ret.push(0);
+        ret.push("".as_ptr() as u32);
+
+        ret.push(DIRECT_MEDIA_TRACK_NAME.len() as u32);
+        ret.push(DIRECT_MEDIA_TRACK_NAME.as_ptr() as u32);
+
+        ret.push(0);
+        ret.push(0);
+        ret.push(0);
+        ret.push(0);
+        ret.push(0);
+    }
     ret
 }

@@ -38,7 +38,6 @@ import {
   AddSourceBufferErrorCode,
   MediaType,
   OtherErrorCode,
-  PlaylistType,
 } from "../wasm/index.js";
 import {
   WaspMediaPlaylistParsingError,
@@ -56,8 +55,6 @@ import PlaybackObserver from "./observePlayback.ts";
 import postMessageToWorker from "./postMessageToWorker.ts";
 import type { ContentMetadata } from "./types.ts";
 import { clearElementSrc, getErrorInformation } from "./utils.ts";
-
-const DIRECT_MEDIA_VARIANT_ID = 0;
 
 /**
  * Interval, in milliseconds, at which playback observations are sent to the
@@ -925,25 +922,10 @@ export function onTopLevelPlaylistParsedMessage(
     return false;
   }
   contentMetadata.topLevelPlaylistType = msg.value.playlistType;
-  contentMetadata.variants =
-    msg.value.playlistType === PlaylistType.MultivariantPlaylist
-      ? msg.value.variants
-      : [
-          {
-            id: DIRECT_MEDIA_VARIANT_ID,
-            // TODO: from container if/when available?
-            width: undefined,
-            height: undefined,
-            frameRate: undefined,
-            bandwidth: undefined,
-            videoRange: undefined,
-          },
-        ];
+  contentMetadata.variants = msg.value.variants;
   contentMetadata.audioTracks = msg.value.audioTracks;
-  if (msg.value.playlistType !== PlaylistType.MultivariantPlaylist) {
-    contentMetadata.currVariant = contentMetadata.variants[0];
+  if (contentMetadata.lockedVariant !== null) {
     contentMetadata.lockedVariant = null;
-    contentMetadata.currentAudioTrack = undefined;
   }
   return true;
 }
@@ -993,16 +975,9 @@ export function onVariantUpdateMessage(
     logger.info("API: Ignoring warning due to wrong `contentId`");
     return false;
   }
-  let variant = contentMetadata.variants.find(
+  const variant = contentMetadata.variants.find(
     (v) => v.id === msg.value.variantId,
   );
-  if (
-    variant === undefined &&
-    contentMetadata.topLevelPlaylistType === PlaylistType.MediaPlaylist &&
-    msg.value.variantId === DIRECT_MEDIA_VARIANT_ID
-  ) {
-    variant = contentMetadata.variants[0];
-  }
   if (variant === undefined) {
     logger.warn("API: VariantUpdate for an unfound variant");
   }
@@ -1037,16 +1012,9 @@ export function onVariantLockStatusChangeMessage(
     return false;
   }
 
-  let variant = contentMetadata.variants.find(
+  const variant = contentMetadata.variants.find(
     (v) => v.id === msg.value.lockedVariant,
   );
-  if (
-    variant === undefined &&
-    contentMetadata.topLevelPlaylistType === PlaylistType.MediaPlaylist &&
-    msg.value.lockedVariant === DIRECT_MEDIA_VARIANT_ID
-  ) {
-    variant = contentMetadata.variants[0];
-  }
   if (variant === undefined) {
     logger.warn("API: VariantLockStatusChange for an unfound variant");
     if (contentMetadata.lockedVariant !== null) {

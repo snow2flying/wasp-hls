@@ -6,6 +6,10 @@ Returns the information on the currently loaded audio track.
 Returns `undefined` if unknown, if no content is loaded or if the content
 has no audio track.
 
+Note that an audio track is only declared through this API if it is distinctly
+selectable. If you currently rely on a muxed media playlists containing video
+and audio combined, it generally will return `undefined`.
+
 When set, the returned object has the following properties (same than for a
 `getAudioTrackList` call):
 

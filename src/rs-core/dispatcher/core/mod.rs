@@ -6,8 +6,9 @@ use super::{
 use crate::{
     bindings::{
         formatters::{
-            format_audio_tracks_for_js, format_source_buffer_creation_err_for_js,
-            format_variants_info_for_js,
+            format_audio_tracks_for_js, format_direct_media_audio_tracks_for_js,
+            format_direct_media_variants_info_for_js, format_source_buffer_creation_err_for_js,
+            format_variants_info_for_js, DIRECT_MEDIA_AUDIO_TRACK_ID, DIRECT_MEDIA_VARIANT_ID,
         },
         jsAnnounceFetchedContent, jsAnnounceTrackUpdate, jsAnnounceVariantLockStatusChange,
         jsAnnounceVariantUpdate, jsInspectSegment, jsSendMediaPlaylistParsingError,
@@ -1235,14 +1236,29 @@ impl Dispatcher {
         //
         // Because one of the rules of those bindings is to copy all pointed data
         // synchronously on call, we should not encounter any issue.
-        let variants_info =
-            unsafe { format_variants_info_for_js(playlist_store.supported_variants().as_slice()) };
-        let audio_tracks_info =
-            unsafe { format_audio_tracks_for_js(playlist_store.audio_tracks()) };
+        let (variants_info, audio_tracks_info) =
+            if playlist_store.playlist_kind() == PlaylistType::MediaPlaylist {
+                let has_audio_track = playlist_store.has_media_type(MediaType::Audio);
+                (
+                    unsafe { format_direct_media_variants_info_for_js() },
+                    unsafe { format_direct_media_audio_tracks_for_js(has_audio_track) },
+                )
+            } else {
+                (
+                    unsafe {
+                        format_variants_info_for_js(playlist_store.supported_variants().as_slice())
+                    },
+                    unsafe { format_audio_tracks_for_js(playlist_store.audio_tracks()) },
+                )
+            };
         let selected_audio_track = playlist_store.selected_audio_track_id();
         let is_selected = selected_audio_track.is_some();
         let curr_audio_track = if let Some(selected) = selected_audio_track {
             Some(selected)
+        } else if playlist_store.playlist_kind() == PlaylistType::MediaPlaylist
+            && playlist_store.has_media_type(MediaType::Audio)
+        {
+            Some(DIRECT_MEDIA_AUDIO_TRACK_ID)
         } else {
             playlist_store.curr_audio_track_id()
         };
@@ -1252,11 +1268,13 @@ impl Dispatcher {
             audio_tracks_info,
         );
 
-        // NOTE: We could also "invent" a variant id / audio track id from this point on?
-        if playlist_store.playlist_kind() == PlaylistType::MultivariantPlaylist {
-            jsAnnounceVariantUpdate(playlist_store.curr_variant().map(|v| v.id()));
-            jsAnnounceTrackUpdate(MediaType::Audio, curr_audio_track, is_selected);
-        }
+        let curr_variant = if playlist_store.playlist_kind() == PlaylistType::MediaPlaylist {
+            Some(DIRECT_MEDIA_VARIANT_ID)
+        } else {
+            playlist_store.curr_variant().map(|v| v.id())
+        };
+        jsAnnounceVariantUpdate(curr_variant);
+        jsAnnounceTrackUpdate(MediaType::Audio, curr_audio_track, is_selected);
 
         if playlist_store.are_playlists_ready() {
             self.ready_state = PlayerReadyState::AwaitingMediaSource { starting_position };

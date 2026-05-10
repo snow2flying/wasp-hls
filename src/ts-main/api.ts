@@ -1111,29 +1111,19 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
           break;
         case WorkerMessageType.TopLevelPlaylistParsed:
           if (onTopLevelPlaylistParsedMessage(data, this.__contentMetadata__)) {
-            // XXX TODO: Only when codecs known?
             this.trigger("variantListUpdate", this.getVariantList());
             this.trigger("audioTrackListUpdate", this.getAudioTrackList());
-            if (
-              this.__contentMetadata__?.topLevelPlaylistType ===
-              PlaylistType.MediaPlaylist
-            ) {
-              // XXX TODO: Only when codecs known?
-              this.trigger("variantUpdate", this.getCurrentVariant());
-            }
           }
           break;
         case WorkerMessageType.TrackUpdate:
           if (onTrackUpdateMessage(data, this.__contentMetadata__)) {
             if (data.value.mediaType === MediaType.Audio) {
-              // XXX TODO: Only when codecs known?
               this.trigger("audioTrackUpdate", this.getCurrentAudioTrack());
             }
           }
           break;
         case WorkerMessageType.VariantUpdate:
           if (onVariantUpdateMessage(data, this.__contentMetadata__)) {
-            // XXX TODO: Only when codecs known?
             this.trigger("variantUpdate", this.getCurrentVariant());
           }
           break;

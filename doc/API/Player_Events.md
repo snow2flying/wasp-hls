@@ -419,10 +419,13 @@ You can also know at any time the list of available variants by calling the
 The `"audioTrackUpdate` event is sent when the currently-loaded audio track has
 changed.
 
-Note that what we call "audio track" here may actually be a set of multiple
-audio qualities (generally dispatched in various variants) all with the same
-characteristics (same language, same name, same accessibility, same number of
-channels etc.).
+Audio tracks group one or more renditions sharing the same characteristics:
+language, accessibility role, etc. Multiple renditions may exist under one track
+when, for example, several audio quality levels are available.
+
+These correspond to distinctly selectable tracks, not just to the presence of
+audio samples in the content: muxed media playlists containing video and audio
+combined will generally not be exposed as a separate audio track.
 
 The payload of that event contains the information available on that audio track
 if known, or `undefined` either if the characteristics of the audio track is
@@ -479,6 +482,10 @@ method.
 
 The `"audioTrackListUpdate` event is sent when the list of available audio
 tracks has changed.
+
+Only selectable audio tracks are listed through that event. Muxed media
+playlists containing video and audio combined will not generally lead to an
+audio track being exposed through this API
 
 The payload of that event contains an array object, each object containing the
 information available for a particular audio track.
