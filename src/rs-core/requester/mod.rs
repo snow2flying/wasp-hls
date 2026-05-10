@@ -685,6 +685,7 @@ impl Requester {
                 i += 1;
             }
         }
+        i = 0;
         while i < self.segment_waiting_queue.len() {
             let next_req = &self.segment_waiting_queue[i];
             if next_req.lane_tag() == lane_tag {
