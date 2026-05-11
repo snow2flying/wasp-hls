@@ -102,7 +102,7 @@ export interface HostBindings {
   appendBuffer(
     sourceBufferId: number,
     resourceId: number,
-    segmentHints?: SegmentHints,
+    segmentHints: SegmentHints,
   ): HostResult<AppendBufferValue, SegmentParsingErrorCode>;
   removeBuffer(
     sourceBufferId: number,
