@@ -178,8 +178,8 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         resourceId: number,
         // XXX TODO: timescale for both start and duration? Could be merged with `hasTimingInformation`
         hasTimingInformation: number,
-        segmentDuration: number,
         baseDecodeTimeStart: number,
+        segmentDuration: number,
         resetReason: number,
         hasStartOut: number,
         startOut: number,

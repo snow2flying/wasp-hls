@@ -11,9 +11,7 @@ use crate::Logger;
 pub(crate) use source_buffers::{PushSegmentError, RemoveDataError};
 
 pub(crate) use self::segment_inventory::{BufferedChunk, SegmentQualityContext};
-pub(crate) use source_buffers::{
-    AppendContinuityInfo, BufferStateResetReason, MediaSegmentPushData,
-};
+pub(crate) use source_buffers::{BufferStateData, BufferStateUpdate, MediaSegmentPushData};
 
 mod segment_inventory;
 mod source_buffers;
@@ -358,7 +356,7 @@ impl MediaElementReference {
         media_type: MediaType,
         metadata: MediaSegmentPushData,
     ) -> Result<(), PushSegmentError> {
-        let (base_decode_time_start, has_validated_buffered_content) = match media_type {
+        let (inferred_segment_start, has_validated_buffered_content) = match media_type {
             MediaType::Audio => (
                 self.audio_inventory
                     .contiguous_anchor(metadata.start(), 0.25),
@@ -377,7 +375,7 @@ impl MediaElementReference {
                 let metadata_start = metadata.start();
                 let response = sb.push_media_segment(
                     metadata,
-                    base_decode_time_start,
+                    inferred_segment_start,
                     has_validated_buffered_content,
                 )?;
                 if let Some(media_start) = response.media_start() {
@@ -409,7 +407,7 @@ impl MediaElementReference {
         media_type: MediaType,
         start: f64,
         end: f64,
-        state_change: Option<BufferStateResetReason>,
+        state_change: Option<BufferStateUpdate>,
     ) -> Result<(), RemoveDataError> {
         match self.buffer_mut_for(media_type) {
             None => Err(RemoveDataError::NoSourceBuffer(media_type)),
@@ -423,7 +421,7 @@ impl MediaElementReference {
     pub(crate) fn set_pending_append_reset_reason(
         &mut self,
         media_type: MediaType,
-        reason: BufferStateResetReason,
+        reason: BufferStateUpdate,
     ) -> Result<(), RemoveDataError> {
         match self.buffer_mut_for(media_type) {
             None => Err(RemoveDataError::NoSourceBuffer(media_type)),
@@ -445,7 +443,7 @@ impl MediaElementReference {
     pub(crate) fn flush(
         &mut self,
         media_type: MediaType,
-        reset_reason: BufferStateResetReason,
+        reset_reason: BufferStateUpdate,
     ) -> Result<(), RemoveDataError> {
         match self.buffer_mut_for(media_type) {
             None => Err(RemoveDataError::NoSourceBuffer(media_type)),

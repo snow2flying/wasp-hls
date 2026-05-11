@@ -8,7 +8,7 @@ use super::{
     SegmentParsingErrorCode, SourceBufferCreationErrorCode, TimerReason,
 };
 use crate::{
-    media_element::{AppendContinuityInfo, BufferStateResetReason, PushSegmentError},
+    media_element::{BufferStateData, BufferStateUpdate, PushSegmentError},
     parser::{
         MediaPlaylistParsingError, MediaPlaylistUpdateError, MultivariantPlaylistParsingError,
     },
@@ -525,7 +525,7 @@ pub fn jsInspectSegment(
 pub fn jsAppendBuffer(
     source_buffer_id: SourceBufferId,
     segment_id: ResourceId,
-    continuity_info: Option<&AppendContinuityInfo>,
+    buffer_state_data: Option<&BufferStateData>,
 ) -> Result<Option<ParsedSegmentInfo>, (SegmentParsingErrorCode, Option<String>)> {
     let mut has_start = 0;
     let mut start = 0.0;
@@ -536,14 +536,14 @@ pub fn jsAppendBuffer(
         __js_func__append_buffer(
             source_buffer_id,
             segment_id,
-            bool_to_raw(continuity_info.is_some()),
-            continuity_info
+            bool_to_raw(buffer_state_data.is_some()),
+            buffer_state_data
                 .map(|t| t.base_decode_time_start())
                 .unwrap_or(0.),
-            continuity_info.map(|t| t.duration()).unwrap_or(0.),
-            continuity_info
+            buffer_state_data.map(|t| t.duration()).unwrap_or(0.),
+            buffer_state_data
                 .map(|t| t.reset_reason() as u32)
-                .unwrap_or(BufferStateResetReason::None as u32),
+                .unwrap_or(BufferStateUpdate::None as u32),
             &mut has_start,
             &mut start,
             &mut has_duration,

@@ -14,7 +14,7 @@ use crate::{
         OtherErrorCode, PushedSegmentErrorCode, RequestId, SourceBufferId, TimerId,
     },
     dispatcher::segment_request_contexts::PendingSegmentRequest,
-    media_element::{BufferStateResetReason, SegmentQualityContext},
+    media_element::{BufferStateUpdate, SegmentQualityContext},
     parser::{SegmentTimeInfo, TopLevelPlaylist, TopLevelPlaylistParsingError},
     playlist_store::{
         LockVariantResponse, MediaPlaylistPermanentId, PlaylistStore, ProbeSegmentMetadata,
@@ -178,7 +178,7 @@ impl Dispatcher {
                 SetAudioTrackResponse::AudioMediaUpdate => self.handle_media_playlist_update(
                     &[MediaType::Audio],
                     true,
-                    Some(BufferStateResetReason::AudioTrackSwitch),
+                    Some(BufferStateUpdate::AudioTrackSwitch),
                 ),
                 SetAudioTrackResponse::VariantUpdate {
                     updates,
@@ -756,7 +756,7 @@ impl Dispatcher {
         for media_type in [MediaType::Audio, MediaType::Video] {
             let _ = self
                 .media_element_ref
-                .set_pending_append_reset_reason(media_type, BufferStateResetReason::Seek);
+                .set_pending_append_reset_reason(media_type, BufferStateUpdate::Seek);
             let previous = previous_needed
                 .iter()
                 .find(|(mt, _)| *mt == media_type)
@@ -898,7 +898,7 @@ impl Dispatcher {
         };
 
         let flush_reason = if flush {
-            Some(BufferStateResetReason::VariantSwitch)
+            Some(BufferStateUpdate::VariantSwitch)
         } else {
             None
         };
@@ -918,7 +918,7 @@ impl Dispatcher {
         &mut self,
         changed_media_types: &[MediaType],
         abort_prev: bool,
-        flush: Option<BufferStateResetReason>,
+        flush: Option<BufferStateUpdate>,
     ) {
         if self.playlist_store.is_none() {
             return;
