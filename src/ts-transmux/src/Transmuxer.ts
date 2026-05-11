@@ -1,8 +1,6 @@
 import { isLikelyAacData } from "./aac-utils.ts";
 import AdtsPacketParser from "./AdtsPacketParser.ts";
-import {
-  toVideoTsFromTimescale,
-} from "./clock-utils.ts";
+import { toVideoTsFromTimescale } from "./clock-utils.ts";
 import type { ElementaryPacket } from "./ElementaryPacketParser.ts";
 import ElementaryPacketParser from "./ElementaryPacketParser.ts";
 import FullMp4SegmentConstructor from "./FullMp4SegmentConstructor.ts";

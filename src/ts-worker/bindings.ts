@@ -972,7 +972,10 @@ export function appendBuffer(
     sourceBufferObj.lastInitTrackInfoByTrackId = initTrackInfoByTrackId;
   }
 
-  if (segmentPreciseTiming === undefined && sourceBufferObj.lastInitTrackInfoByTrackId) {
+  if (
+    segmentPreciseTiming === undefined &&
+    sourceBufferObj.lastInitTrackInfoByTrackId
+  ) {
     const timeInfo = getTimeInformationFromMp4(
       segment,
       sourceBufferObj.lastInitTrackInfoByTrackId,

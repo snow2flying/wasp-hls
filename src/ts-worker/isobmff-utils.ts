@@ -47,7 +47,9 @@ function getDurationFromTrun(buffer: Uint8Array): number | undefined {
 
 function getInitTrackInfo(
   buffer: Uint8Array,
-): Map<number, { timescale: number; type: "audio" | "video" | "other" }> | undefined {
+):
+  | Map<number, { timescale: number; type: "audio" | "video" | "other" }>
+  | undefined {
   const moov = getBoxContent(buffer, 0x6d6f6f76 /* moov */);
   if (moov === null) {
     return undefined;
@@ -148,14 +150,12 @@ function getIsobmfTimeInfo(
 }
 
 function isTrackTimeCandidate(
-  candidate:
-    | {
-        time: number;
-        duration: number;
-        timescale: number;
-        trackType: "audio" | "video" | "other";
-      }
-    | null,
+  candidate: {
+    time: number;
+    duration: number;
+    timescale: number;
+    trackType: "audio" | "video" | "other";
+  } | null,
 ): candidate is {
   time: number;
   duration: number;
@@ -165,9 +165,7 @@ function isTrackTimeCandidate(
   return candidate !== null;
 }
 
-function getTrackTypeFromTRAK(
-  trak: Uint8Array,
-): "audio" | "video" | "other" {
+function getTrackTypeFromTRAK(trak: Uint8Array): "audio" | "video" | "other" {
   const mdia = getBoxContent(trak, 0x6d646961 /* mdia */);
   if (mdia === null) {
     return "other";

@@ -126,11 +126,7 @@ impl SourceBuffer {
             "Buffer {} ({}): Pushing initialization segment",
             self.id, self.typ
         ));
-        match jsAppendBuffer(
-            self.id,
-            segment_data.id(),
-            &SegmentHints::new(0, 1, true),
-        ) {
+        match jsAppendBuffer(self.id, segment_data.id(), &SegmentHints::new(0, 1, true)) {
             Err(err) => Err(PushSegmentError::from_js_append_buffer_error(
                 self.media_type,
                 err,
