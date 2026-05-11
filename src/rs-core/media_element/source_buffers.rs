@@ -44,14 +44,9 @@ pub(super) struct SourceBuffer {
     /// taken on buffer updates.
     needs_reflush: bool,
 
-    /// Time information on the last media segment scheduled on that buffer.
-    last_media_segment_time_info: Option<SegmentTimeInfo>,
-
     /// Explicit reason why the next media append should reseed transmux state.
     pending_reset_reason: AppendResetReason,
 }
-
-const CONTIGUITY_EPSILON_SECONDS: f64 = 0.25;
 
 impl SourceBuffer {
     /// Create a new `SourceBuffer` for the given `MediaType` and the mime-type indicated by `typ`.
@@ -75,7 +70,6 @@ impl SourceBuffer {
                 needs_reflush: false,
                 last_segment_pushed: false,
                 media_type,
-                last_media_segment_time_info: None,
                 pending_reset_reason: AppendResetReason::None,
             }),
             Err(err) => Err(AddSourceBufferError::from_js_add_source_buffer_error(
@@ -152,13 +146,17 @@ impl SourceBuffer {
         data: MediaSegmentPushData,
         parse_time_info: bool,
         base_decode_time_start: Option<f64>,
+        has_validated_buffered_content: bool,
     ) -> Result<AppendBufferResponse, PushSegmentError> {
         self.last_segment_pushed = false;
         self.was_used = true;
         let segment_data = data.segment_data.id();
         let segment_time_info = data.time_info().clone();
-        let continuity_info =
-            self.compute_append_continuity_info(&segment_time_info, base_decode_time_start);
+        let continuity_info = self.compute_append_continuity_info(
+            &segment_time_info,
+            base_decode_time_start,
+            has_validated_buffered_content,
+        );
         let id = data.id;
         self.queue
             .push_back(SourceBufferQueueElement::PushMedia((data, id)));
@@ -173,10 +171,7 @@ impl SourceBuffer {
                 self.media_type,
                 err,
             )),
-            Ok(x) => {
-                self.last_media_segment_time_info = Some(segment_time_info);
-                Ok(AppendBufferResponse { parsed: x })
-            }
+            Ok(x) => Ok(AppendBufferResponse { parsed: x }),
         }
     }
 
@@ -289,19 +284,16 @@ impl SourceBuffer {
         &mut self,
         segment_time_info: &SegmentTimeInfo,
         base_decode_time_start: Option<f64>,
+        has_validated_buffered_content: bool,
     ) -> AppendContinuityInfo {
         let reset_reason = if self.pending_reset_reason != AppendResetReason::None {
             let reason = self.pending_reset_reason;
             self.pending_reset_reason = AppendResetReason::None;
             reason
+        } else if has_validated_buffered_content && base_decode_time_start.is_none() {
+            AppendResetReason::PlaylistDiscontinuity
         } else {
-            match self.last_media_segment_time_info.as_ref() {
-                None => AppendResetReason::None,
-                Some(previous) if is_contiguous(previous, segment_time_info) => {
-                    AppendResetReason::None
-                }
-                Some(_) => AppendResetReason::PlaylistDiscontinuity,
-            }
+            AppendResetReason::None
         };
         AppendContinuityInfo::new(
             segment_time_info.start(),
@@ -621,9 +613,4 @@ impl AppendContinuityInfo {
     pub(crate) fn reset_reason(&self) -> AppendResetReason {
         self.reset_reason
     }
-}
-
-fn is_contiguous(previous: &SegmentTimeInfo, next: &SegmentTimeInfo) -> bool {
-    let expected_start = previous.end();
-    (next.start() - expected_start).abs() <= CONTIGUITY_EPSILON_SECONDS
 }

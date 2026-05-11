@@ -359,13 +359,17 @@ impl MediaElementReference {
         metadata: MediaSegmentPushData,
     ) -> Result<(), PushSegmentError> {
         let has_media_offset = self.media_offset.is_some();
-        let base_decode_time_start = match media_type {
-            MediaType::Audio => self
-                .audio_inventory
-                .contiguous_anchor(metadata.start(), 0.25),
-            MediaType::Video => self
-                .video_inventory
-                .contiguous_anchor(metadata.start(), 0.25),
+        let (base_decode_time_start, has_validated_buffered_content) = match media_type {
+            MediaType::Audio => (
+                self.audio_inventory
+                    .contiguous_anchor(metadata.start(), 0.25),
+                self.audio_inventory.has_validated_segments(),
+            ),
+            MediaType::Video => (
+                self.video_inventory
+                    .contiguous_anchor(metadata.start(), 0.25),
+                self.video_inventory.has_validated_segments(),
+            ),
         };
         match self.buffer_mut_for(media_type) {
             None => Err(PushSegmentError::NoSourceBuffer(media_type)),
@@ -374,8 +378,12 @@ impl MediaElementReference {
                 let metadata_start = metadata.start();
                 let do_time_parsing = !has_media_offset
                     && (media_type == MediaType::Audio || media_type == MediaType::Video);
-                let response =
-                    sb.push_media_segment(metadata, do_time_parsing, base_decode_time_start)?;
+                let response = sb.push_media_segment(
+                    metadata,
+                    do_time_parsing,
+                    base_decode_time_start,
+                    has_validated_buffered_content,
+                )?;
                 if let Some(media_start) = response.media_start() {
                     let media_offset = media_start - metadata_start;
                     Logger::info(&format!(
@@ -466,6 +474,18 @@ impl MediaElementReference {
             MediaType::Audio => self.audio_inventory.inventory(),
             MediaType::Video => self.video_inventory.inventory(),
         }
+    }
+
+    pub(crate) fn has_buffered_data_at(&self, media_type: MediaType, position: f64) -> bool {
+        match media_type {
+            MediaType::Audio => self.audio_inventory.contains_position(position),
+            MediaType::Video => self.video_inventory.contains_position(position),
+        }
+    }
+
+    pub(crate) fn has_operations_pending(&self, media_type: MediaType) -> bool {
+        self.buffer_for(media_type)
+            .is_some_and(source_buffers::SourceBuffer::has_operations_pending)
     }
 
     /// Method to call once a `MediaObservation` has been received.

@@ -375,6 +375,7 @@ impl Dispatcher {
     ) {
         self.media_element_ref
             .on_source_buffer_update(source_buffer_id, buffered, true);
+        self.check_segments_to_request();
     }
 
     /// Method to call when a `SourceBuffer`'s `appendBuffer` call led to an `error` event.
@@ -774,7 +775,10 @@ impl Dispatcher {
                 .find(|(mt, _)| *mt == media_type)
                 .map(|(_, key)| *key)
                 .unwrap_or(None);
-            if previous != next {
+            let has_buffered_data_at_seek_pos = self
+                .media_element_ref
+                .has_buffered_data_at(media_type, wanted_pos);
+            if previous != next && !has_buffered_data_at_seek_pos {
                 let _ = self.media_element_ref.remove_data(
                     media_type,
                     wanted_pos,
@@ -854,6 +858,9 @@ impl Dispatcher {
         let Some(pl_store) = self.playlist_store.as_ref() else {
             return;
         };
+        if self.media_element_ref.has_operations_pending(media_type) {
+            return;
+        }
         if !self.requester.has_segment_request_pending(media_type) {
             let inventory = self.media_element_ref.inventory(media_type);
             if let Some(seg_info) = pl_store.curr_media_playlist_segment_info(media_type) {
@@ -1041,16 +1048,7 @@ impl Dispatcher {
             .media_element_ref
             .announce_incoming_media_segment(media_type, data, time_info, context);
 
-        // Check next segment BEFORE actually pushing, as the pushing operation could take in the
-        // tens of ms or even in the hundreds depending on segment size and platform performance.
-        //
-        // We still announce the incoming segment first to ensure the `MediaElementReference`'s
-        // inventory is up-to-date.
         self.check_best_variant();
-        self.segment_selectors
-            .get_mut(media_type)
-            .validate_media_until(segment_end);
-        self.check_segments_to_request();
 
         match self
             .media_element_ref
@@ -1063,6 +1061,10 @@ impl Dispatcher {
                 self.stop_current_content();
             }
             Ok(()) => {
+                self.segment_selectors
+                    .get_mut(media_type)
+                    .validate_media_until(segment_end);
+                self.check_segments_to_request();
                 if utils::was_last_segment(self.playlist_store.as_ref(), media_type, segment_start)
                 {
                     Logger::info(&format!(
