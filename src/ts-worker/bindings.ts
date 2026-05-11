@@ -56,7 +56,7 @@ import type { RequestId, ResourceId, TimerId } from "./globals.ts";
 import {
   getIsoBmffCodecs,
   getMDHDTimescales,
-  getSegmentTimeInformation,
+  getIsobmfTimeInfo,
 } from "./isobmff-utils.js";
 import postMessageToMain from "./postMessage.js";
 import { getTransmuxedType, createTransmuxer } from "./transmux.js";
@@ -1390,7 +1390,7 @@ function getTimeInformationFromMp4(
   segment: Uint8Array,
   initTimescaleByTrackId: Map<number, number>,
 ): { time: number; duration: number | undefined; timescale: number } | null {
-  return getSegmentTimeInformation(segment, initTimescaleByTrackId);
+  return getIsobmfTimeInfo(segment, initTimescaleByTrackId);
 }
 
 function splitTimeValue(value: number): ISafeU64 {

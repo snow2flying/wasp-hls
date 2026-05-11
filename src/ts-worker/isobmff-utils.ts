@@ -88,7 +88,7 @@ function getMDHDTimescales(
   return timescales.size === 0 ? undefined : timescales;
 }
 
-function getSegmentTimeInformation(
+function getIsobmfTimeInfo(
   buffer: Uint8Array,
   initTimescaleByTrackId: Map<number, number>,
 ): { time: number; duration: number | undefined; timescale: number } | null {
@@ -939,7 +939,7 @@ function be8toi(bytes: Uint8Array, offset: number): number {
 
 export {
   getDurationFromTrun,
-  getSegmentTimeInformation,
+  getIsobmfTimeInfo,
   getTrackFragmentDecodeTime,
   getMDHDTimescale,
   getMDHDTimescales,
