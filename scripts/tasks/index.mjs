@@ -28,6 +28,7 @@ import { exec } from "../utils/exec.mjs";
 import { cleanBuildDirectory } from "../utils/fs.mjs";
 import launchStaticServer from "../launch_static_server.mjs";
 import { watchDemo } from "./watch.mjs";
+import { reportSuccess } from "./report.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const rawArgs = process.argv.slice(2);
@@ -56,6 +57,7 @@ async function run() {
           await buildAll(ROOT, {
             release: flags.has("--release"),
           });
+          reportSuccess("Builds");
           return;
         case "demo":
           if (flags.has("--watch")) {
@@ -63,6 +65,7 @@ async function run() {
           } else {
             await buildDemoFull(ROOT, { release: flags.has("--release") });
           }
+          reportSuccess("Demo build");
           return;
         case "wasm":
           assertNoFlag(
@@ -71,6 +74,7 @@ async function run() {
             '"--watch" is only supported for "build demo".',
           );
           await buildWasm(ROOT, { release: flags.has("--release") });
+          reportSuccess("WASM build");
           return;
         case "worker":
           assertNoFlag(
@@ -79,6 +83,7 @@ async function run() {
             '"--watch" is only supported for "build demo".',
           );
           await buildWorker(ROOT, { release: flags.has("--release") });
+          reportSuccess("ts-worker build");
           return;
         case "main":
           assertNoFlag(
@@ -87,10 +92,12 @@ async function run() {
             '"--watch" is only supported for "build demo".',
           );
           await buildMain(ROOT, { release: flags.has("--release") });
+          reportSuccess("ts-main build");
           return;
         case "docs":
           assertNoFlags(flags, 'Flags are not supported for "build docs".');
           await buildDocs(ROOT);
+          reportSuccess("documentation build");
           return;
         default:
           throw new Error(`Unknown build scope "${scope}".\n\n${helpText()}`);
@@ -101,23 +108,29 @@ async function run() {
       switch (scope ?? "all") {
         case "all":
           await checkAll(ROOT);
+          reportSuccess("All checks");
           return;
         case "main":
           await generateWasmAbi(ROOT);
           await checkMain(ROOT);
+          reportSuccess("ts-main checks");
           return;
         case "worker":
           await generateWasmAbi(ROOT);
           await checkWorker(ROOT);
+          reportSuccess("ts-worker checks");
           return;
         case "common":
           await checkCommon(ROOT);
+          reportSuccess("ts-common checks");
           return;
         case "demo":
           await checkDemo(ROOT);
+          reportSuccess("demo checks");
           return;
         case "rust":
           await checkRust(ROOT);
+          reportSuccess("Rust checks");
           return;
         default:
           throw new Error(`Unknown check scope "${scope}".\n\n${helpText()}`);
@@ -128,21 +141,25 @@ async function run() {
       if (flags.has("--check")) {
         await exec("cargo", ["fmt", "--check"], { cwd: ROOT });
         await exec("prettier", [".", "--check"], { cwd: ROOT });
+        reportSuccess("Code formatting checks");
       } else {
         await exec("cargo", ["fmt"], { cwd: ROOT });
         await exec("prettier", ["--write", ".", "--loglevel", "warn"], {
           cwd: ROOT,
         });
+        reportSuccess("Code formatting");
       }
       return;
     }
     case "generate":
       ensureNoArgs(rest);
       await generateWasmAbi(ROOT);
+      reportSuccess("WASM ABI code generation");
       return;
     case "clean":
       ensureNoArgs(rest);
       cleanBuildDirectory(join(ROOT, "build"), { preserveDemoBundle: false });
+      reportSuccess("Build directory cleanup");
       return;
     case "serve":
       ensureNoArgs(rest);

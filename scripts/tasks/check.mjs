@@ -10,11 +10,13 @@ import { reportStep } from "./report.mjs";
 /** @param {string} root */
 export async function checkAll(root) {
   await generateWasmAbi(root);
-  await checkMain(root);
-  await checkWorker(root);
-  await checkCommon(root);
-  await checkDemo(root);
-  await checkRust(root);
+  await Promise.all([
+    checkMain(root),
+    checkWorker(root),
+    checkCommon(root),
+    checkDemo(root),
+    checkRust(root),
+  ]);
 }
 
 /** @param {string} root */
