@@ -61,9 +61,8 @@ export type TransmuxResetReason =
   | "buffer-flush";
 
 export interface TransmuxContinuityInfo {
-  start: number;
-  duration: number | undefined;
   baseDecodeTimeStart: number;
+  duration: number | undefined;
   resetReason: TransmuxResetReason;
 }
 
@@ -445,8 +444,11 @@ export default class Transmuxer {
     if (continuity !== undefined) {
       timing =
         continuity.duration === undefined
-          ? { start: continuity.start }
-          : { start: continuity.start, duration: continuity.duration };
+          ? { start: continuity.baseDecodeTimeStart }
+          : {
+              start: continuity.baseDecodeTimeStart,
+              duration: continuity.duration,
+            };
     }
     if (timing === undefined) {
       this._currentSegmentTiming = null;

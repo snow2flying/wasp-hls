@@ -957,6 +957,13 @@ export function appendBuffer(
     timescale === undefined
       ? null
       : getTimeInformationFromMp4(segment, timescale);
+  console.warn(
+    "!!!!!! TIMEINFO FROM MP4",
+    "\n",
+    JSON.stringify(continuityInfo),
+    "\n",
+    JSON.stringify(timeInfo),
+  );
   const transferableSegment = new Uint8Array(segment);
   try {
     if (sourceBufferObj.sourceBuffer !== null) {

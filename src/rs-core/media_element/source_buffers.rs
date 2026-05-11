@@ -316,9 +316,8 @@ impl SourceBuffer {
             base_decode_time_start.unwrap_or_else(|| segment_time_info.start())
         };
         AppendContinuityInfo::new(
-            segment_time_info.start(),
-            segment_time_info.duration(),
             base_decode_time_start,
+            segment_time_info.duration(),
             reset_reason,
         )
     }
@@ -597,41 +596,33 @@ pub(crate) enum AppendResetReason {
 /// Context about the continuity context of a pushed segment with a previously-pushed one.
 #[derive(Clone, Debug)]
 pub(crate) struct AppendContinuityInfo {
-    /// Start of that segment
-    start: f64,
+    /// Exact time anchor to use when computing the next base decode time.
+    base_decode_time_start: f64,
     /// Duration of that segment
     duration: f64,
-    /// Exact playlist-time anchor to use when computing the next base decode time.
-    base_decode_time_start: f64,
     reset_reason: AppendResetReason,
 }
 
 impl AppendContinuityInfo {
     /// Create a new `AppendContinuityInfo`
     pub(crate) fn new(
-        start: f64,
-        duration: f64,
         base_decode_time_start: f64,
+        duration: f64,
         reset_reason: AppendResetReason,
     ) -> Self {
         Self {
-            start,
-            duration,
             base_decode_time_start,
+            duration,
             reset_reason,
         }
     }
 
-    pub(crate) fn start(&self) -> f64 {
-        self.start
+    pub(crate) fn base_decode_time_start(&self) -> f64 {
+        self.base_decode_time_start
     }
 
     pub(crate) fn duration(&self) -> f64 {
         self.duration
-    }
-
-    pub(crate) fn base_decode_time_start(&self) -> f64 {
-        self.base_decode_time_start
     }
 
     pub(crate) fn reset_reason(&self) -> AppendResetReason {

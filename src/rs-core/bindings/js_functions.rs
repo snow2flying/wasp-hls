@@ -79,9 +79,9 @@ unsafe extern "C" {
         segment_id: ResourceId,
 
         has_timing_information: u32,
-        segment_start: f64,
-        segment_duration: f64,
+        // XXX TODO: timescale for both start and duration? Could be merged with `hasTimingInformation`
         base_decode_time_start: f64,
+        segment_duration: f64,
         reset_reason: u32,
 
         has_start_out: *mut u32,
@@ -537,11 +537,10 @@ pub fn jsAppendBuffer(
             source_buffer_id,
             segment_id,
             bool_to_raw(continuity_info.is_some()),
-            continuity_info.map(|t| t.start()).unwrap_or(0.),
-            continuity_info.map(|t| t.duration()).unwrap_or(0.),
             continuity_info
                 .map(|t| t.base_decode_time_start())
                 .unwrap_or(0.),
+            continuity_info.map(|t| t.duration()).unwrap_or(0.),
             continuity_info
                 .map(|t| t.reset_reason() as u32)
                 .unwrap_or(AppendResetReason::None as u32),

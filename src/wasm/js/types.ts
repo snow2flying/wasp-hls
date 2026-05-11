@@ -37,7 +37,6 @@ export type AppendResetReason =
   | "buffer-flush";
 
 export interface AppendContinuityInfo {
-  start: number;
   duration: number | undefined;
   baseDecodeTimeStart: number;
   resetReason: AppendResetReason;

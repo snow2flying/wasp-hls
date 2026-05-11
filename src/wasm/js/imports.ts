@@ -176,8 +176,8 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
       __js_func__append_buffer(
         sourceBufferId: number,
         resourceId: number,
+        // XXX TODO: timescale for both start and duration? Could be merged with `hasTimingInformation`
         hasTimingInformation: number,
-        segmentStart: number,
         segmentDuration: number,
         baseDecodeTimeStart: number,
         resetReason: number,
@@ -195,9 +195,8 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
             resourceId,
             hasTimingInformation !== 0
               ? {
-                  start: segmentStart,
-                  duration: segmentDuration,
                   baseDecodeTimeStart,
+                  duration: segmentDuration,
                   resetReason: parseAppendResetReason(resetReason),
                 }
               : undefined,
