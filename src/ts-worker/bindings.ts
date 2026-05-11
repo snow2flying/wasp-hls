@@ -53,10 +53,9 @@ import {
 } from "./globals.ts";
 import type { RequestId, ResourceId, TimerId } from "./globals.ts";
 import {
-  getDurationFromTrun,
   getIsoBmffCodecs,
-  getMDHDTimescale,
-  getTrackFragmentDecodeTime,
+  getMDHDTimescales,
+  getSegmentTimeInformation,
 } from "./isobmff-utils.js";
 import postMessageToMain from "./postMessage.js";
 import { getTransmuxedType, createTransmuxer } from "./transmux.js";
@@ -789,7 +788,7 @@ export function addSourceBuffer(
       }
       const sourceBufferId = nextSourceBufferId;
       sourceBuffers.push({
-        lastInitTimescale: undefined,
+        lastInitTimescaleByTrackId: undefined,
         id: sourceBufferId,
         transmuxer: mimeType === typ ? null : createTransmuxer(),
         sourceBuffer: null,
@@ -837,7 +836,7 @@ export function addSourceBuffer(
       const sourceBufferId = nextSourceBufferId;
       const queuedSourceBuffer = new QueuedSourceBuffer(sourceBuffer);
       sourceBuffers.push({
-        lastInitTimescale: undefined,
+        lastInitTimescaleByTrackId: undefined,
         id: sourceBufferId,
         sourceBuffer: queuedSourceBuffer,
         transmuxer: mimeType === typ ? null : createTransmuxer(),
@@ -946,17 +945,19 @@ export function appendBuffer(
   }
 
   // TODO Check if mp4 first and if init segment?
-  let timescale = getMDHDTimescale(segment);
-  if (timescale !== undefined) {
-    sourceBufferObj.lastInitTimescale = timescale;
-  } else {
-    timescale = sourceBufferObj.lastInitTimescale;
+  const initTimescaleByTrackId = getMDHDTimescales(segment);
+  if (initTimescaleByTrackId !== undefined) {
+    sourceBufferObj.lastInitTimescaleByTrackId = initTimescaleByTrackId;
   }
 
   const timeInfo =
-    timescale === undefined
+    sourceBufferObj.lastInitTimescaleByTrackId === undefined
       ? null
-      : getTimeInformationFromMp4(segment, timescale);
+      : getTimeInformationFromMp4(
+          segment,
+          sourceBufferObj.lastInitTimescaleByTrackId,
+        );
+
   console.warn(
     "!!!!!! TIMEINFO FROM MP4",
     "\n",
@@ -964,6 +965,7 @@ export function appendBuffer(
     "\n",
     JSON.stringify(timeInfo),
   );
+
   const transferableSegment = new Uint8Array(segment);
   try {
     if (sourceBufferObj.sourceBuffer !== null) {
@@ -1349,23 +1351,14 @@ export function freeResource(resourceId: ResourceId): boolean {
 
 /**
  * @param {Uint8Array} segment
- * @param {number} initTimescale
+ * @param {Map<number, number>} initTimescaleByTrackId
  * @returns {Object|null}
  */
 function getTimeInformationFromMp4(
   segment: Uint8Array,
-  initTimescale: number,
+  initTimescaleByTrackId: Map<number, number>,
 ): { time: number; duration: number | undefined } | null {
-  const baseDecodeTime = getTrackFragmentDecodeTime(segment);
-  if (baseDecodeTime === undefined) {
-    return null;
-  }
-  const trunDuration = getDurationFromTrun(segment);
-  return {
-    time: baseDecodeTime / initTimescale,
-    duration:
-      trunDuration === undefined ? undefined : trunDuration / initTimescale,
-  };
+  return getSegmentTimeInformation(segment, initTimescaleByTrackId);
 }
 
 /**

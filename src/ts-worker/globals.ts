@@ -111,7 +111,7 @@ export interface RequestObject {
 export interface SourceBufferInstanceInfo<HasMseInWorker extends boolean> {
   id: SourceBufferId;
   mediaType: MediaType;
-  lastInitTimescale: number | undefined;
+  lastInitTimescaleByTrackId: Map<number, number> | undefined;
   sourceBuffer: HasMseInWorker extends true ? QueuedSourceBuffer : null;
   transmuxer: null | Transmuxer;
 }
