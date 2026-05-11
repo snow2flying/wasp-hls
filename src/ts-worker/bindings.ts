@@ -886,7 +886,7 @@ export function addSourceBuffer(
 export function appendBuffer(
   sourceBufferId: SourceBufferId,
   resourceId: ResourceId,
-  segmentHints?: SegmentHints,
+  segmentHints: SegmentHints,
 ): AppendBufferResult {
   let segment = jsMemoryResources.get(resourceId);
   const mediaSourceObj = getMediaSourceObj();
@@ -929,15 +929,12 @@ export function appendBuffer(
       const transmuxedData = sourceBufferObj.transmuxer.transmuxSegment(
         segment,
         {
-          reset: segmentHints?.resetTransmuxerState === true,
-          baseMediaDecodeTime:
-            segmentHints === undefined
-              ? undefined
-              : {
-                  hi: segmentHints.baseDecodeTimeStartHi,
-                  lo: segmentHints.baseDecodeTimeStartLo,
-                  timescale: segmentHints.baseDecodeTimeStartTimescale,
-                },
+          reset: segmentHints.resetTransmuxerState,
+          baseMediaDecodeTime: {
+            hi: segmentHints.baseDecodeTimeStartHi,
+            lo: segmentHints.baseDecodeTimeStartLo,
+            timescale: segmentHints.baseDecodeTimeStartTimescale,
+          },
         },
       );
       if (transmuxedData !== null) {

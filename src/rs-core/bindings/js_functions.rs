@@ -78,7 +78,6 @@ unsafe extern "C" {
         source_buffer_id: SourceBufferId,
         segment_id: ResourceId,
 
-        has_timing_information: u32,
         base_decode_time_start_hi: u32,
         base_decode_time_start_lo: u32,
         base_decode_time_start_timescale: u32,
@@ -531,7 +530,7 @@ pub fn jsInspectSegment(
 pub fn jsAppendBuffer(
     source_buffer_id: SourceBufferId,
     segment_id: ResourceId,
-    segment_hints: Option<&SegmentHints>,
+    segment_hints: &SegmentHints,
 ) -> Result<Option<ParsedSegmentInfo>, (SegmentParsingErrorCode, Option<String>)> {
     let mut has_start = 0;
     let mut start_value_hi = 0;
@@ -548,19 +547,10 @@ pub fn jsAppendBuffer(
         __js_func__append_buffer(
             source_buffer_id,
             segment_id,
-            bool_to_raw(segment_hints.is_some()),
-            segment_hints
-                .map(|t| t.base_decode_time_start().value_hi())
-                .unwrap_or(0),
-            segment_hints
-                .map(|t| t.base_decode_time_start().value_lo())
-                .unwrap_or(0),
-            segment_hints
-                .map(|t| t.base_decode_time_start().timescale())
-                .unwrap_or(0),
-            segment_hints
-                .map(|t| t.reset_transmuxer_state() as u32)
-                .unwrap_or(0u32),
+            segment_hints.base_decode_time_start().value_hi(),
+            segment_hints.base_decode_time_start().value_lo(),
+            segment_hints.base_decode_time_start().timescale(),
+            segment_hints.reset_transmuxer_state() as u32,
             &mut has_start,
             &mut start_value_hi,
             &mut start_value_lo,
@@ -1031,7 +1021,7 @@ impl ParsedSegmentInfo {
 
 /// Precise timestamp value, expressed in a given timescale to both allow encoding it as an integer
 /// and to prevent rounding errors.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct TimescaledValue {
     /// High 4 bytes of that value. This weird format is due to how JS can't safely fully encode
     /// u64 values

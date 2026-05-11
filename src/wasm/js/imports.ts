@@ -177,7 +177,6 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         // params
         sourceBufferId: number,
         resourceId: number,
-        hasTimingInformation: number,
         baseDecodeTimeStartHi: number,
         baseDecodeTimeStartLo: number,
         baseDecodeTimeStartTimescale: number,
@@ -197,18 +196,12 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         errDescLenOut: number,
       ): number {
         return writeAppendBufferResult(
-          bindings.appendBuffer(
-            sourceBufferId,
-            resourceId,
-            hasTimingInformation !== 0
-              ? {
-                  baseDecodeTimeStartHi,
-                  baseDecodeTimeStartLo,
-                  baseDecodeTimeStartTimescale,
-                  resetTransmuxerState: reset_transmuxer_state !== 0,
-                }
-              : undefined,
-          ),
+          bindings.appendBuffer(sourceBufferId, resourceId, {
+            baseDecodeTimeStartHi,
+            baseDecodeTimeStartLo,
+            baseDecodeTimeStartTimescale,
+            resetTransmuxerState: reset_transmuxer_state !== 0,
+          }),
 
           hasStartOut,
           startValueHiOut,

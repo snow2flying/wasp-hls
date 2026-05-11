@@ -230,13 +230,6 @@ impl SegmentInventory {
         self.inventory = vec![];
     }
 
-    /// Returns `true` if a validated buffered chunk currently covers `position`.
-    pub(super) fn contains_position(&self, position: f64) -> bool {
-        self.inventory.iter().any(|seg| {
-            seg.validated && seg.last_buffered_start <= position && position < seg.last_buffered_end
-        })
-    }
-
     /// Once a segment push operation has finished, call this method with the
     /// current `TimeRanges` object from the corresponding MSE `SourceBuffer`
     /// and the `id` of the segment that had been announced before the push.

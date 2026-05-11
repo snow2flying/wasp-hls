@@ -119,9 +119,6 @@ impl SourceBuffer {
         &mut self,
         segment_data: JsMemoryBlob,
     ) -> Result<AppendBufferResponse, PushSegmentError> {
-        if self.was_used && !self.reset_transmuxer_on_next_segment {
-            self.reset_transmuxer_on_next_segment = true;
-        }
         self.was_used = true;
         self.queue
             .push_back(SourceBufferQueueElement::PushInit(segment_data.id()));
@@ -129,7 +126,11 @@ impl SourceBuffer {
             "Buffer {} ({}): Pushing initialization segment",
             self.id, self.typ
         ));
-        match jsAppendBuffer(self.id, segment_data.id(), None) {
+        match jsAppendBuffer(
+            self.id,
+            segment_data.id(),
+            &SegmentHints::new(TimescaledValue::default(), true),
+        ) {
             Err(err) => Err(PushSegmentError::from_js_append_buffer_error(
                 self.media_type,
                 err,
@@ -159,14 +160,18 @@ impl SourceBuffer {
         self.was_used = true;
         let segment_data = data.segment_data.id();
         let segment_time_info = data.time_info().clone();
-        let buffer_state_data = self.build_segment_hints(&segment_time_info);
+        let segment_hints = build_segment_hints(
+            &segment_time_info,
+            self.last_segment_end_time,
+            self.reset_transmuxer_on_next_segment,
+        );
         self.reset_transmuxer_on_next_segment = false;
 
         let id = data.id;
         Logger::debug(&format!("Buffer {} ({}): Pushing", self.id, self.typ));
         self.queue
             .push_back(SourceBufferQueueElement::PushMedia { data, id });
-        let parsed = match jsAppendBuffer(self.id, segment_data, Some(&buffer_state_data)) {
+        let parsed = match jsAppendBuffer(self.id, segment_data, &segment_hints) {
             Err(err) => {
                 return Err(PushSegmentError::from_js_append_buffer_error(
                     self.media_type,
@@ -190,10 +195,6 @@ impl SourceBuffer {
     ///
     /// * `end` - End time, in seconds, of the range of time which should be removed from the
     ///   `SourceBuffer`.
-    ///
-    /// * `state_update` - Supplementary context on why that removal operation happens. This is
-    ///   necessary because transmuxing is stateful, supplementary context is thus necessary to
-    ///   handle that maintained state properly.
     pub(super) fn remove_buffer(&mut self, start: f64, end: f64) {
         self.was_used = true;
         self.queue
@@ -208,9 +209,9 @@ impl SourceBuffer {
     /// Marks the next pushed media segment as the beginning of a new segment
     /// sequence.
     ///
-    /// This should be called when the next segment may not be safely processed
-    /// using state carried from previously pushed segments, such as after a
-    /// rendition/media switch or an HLS discontinuity.
+    /// This should be called when on rendition/media switch or on an HLS discontinuity,
+    /// to indicate that potential state maintained by buffers until now can be safely
+    /// reset.
     ///
     /// This does not remove buffered media and does not itself push an init
     /// segment. It only affects how the next media segment is processed.
@@ -285,33 +286,6 @@ impl SourceBuffer {
             _ => {}
         }
         queue_elt
-    }
-
-    fn build_segment_hints(&mut self, segment_time_info: &SegmentTimeInfo) -> SegmentHints {
-        const TIMESCALE: u32 = 90_000;
-        const CONTIGUITY_TOLERANCE_TICKS: u64 = TIMESCALE as u64 / 4;
-
-        let playlist_start = TimescaledValue::from_u64(
-            (segment_time_info.start() * TIMESCALE as f64).round() as u64,
-            TIMESCALE,
-        );
-
-        let is_close_to_last_end = self
-            .last_segment_end_time
-            .map(|last_end| {
-                playlist_start.value().abs_diff(last_end.value()) <= CONTIGUITY_TOLERANCE_TICKS
-            })
-            .unwrap_or(false);
-
-        let start_dts = if self.reset_transmuxer_on_next_segment {
-            playlist_start
-        } else if is_close_to_last_end {
-            self.last_segment_end_time.unwrap()
-        } else {
-            playlist_start
-        };
-
-        SegmentHints::new(start_dts, self.reset_transmuxer_on_next_segment)
     }
 }
 
@@ -587,4 +561,31 @@ impl SegmentHints {
     pub(crate) fn reset_transmuxer_state(&self) -> bool {
         self.reset_transmuxer_state
     }
+}
+
+fn build_segment_hints(
+    segment_time_info: &SegmentTimeInfo,
+    last_segment_end: Option<TimescaledValue>,
+    reset_transmuxer: bool,
+) -> SegmentHints {
+    const TIMESCALE: u32 = 90_000;
+    const CONTIGUITY_TOLERANCE_TICKS: u64 = TIMESCALE as u64 / 4;
+
+    let playlist_start = TimescaledValue::from_u64(
+        (segment_time_info.start() * TIMESCALE as f64).round() as u64,
+        TIMESCALE,
+    );
+
+    let start_dts = match last_segment_end {
+        // TODO: We should just be able to determine with confidence what is and is not a
+        // discontinuity here, to not rely on that weird huge trick.
+        Some(last_end)
+            if playlist_start.value().abs_diff(last_end.value()) <= CONTIGUITY_TOLERANCE_TICKS =>
+        {
+            last_end
+        }
+        _ => playlist_start,
+    };
+
+    SegmentHints::new(start_dts, reset_transmuxer)
 }

@@ -360,6 +360,9 @@ impl MediaElementReference {
             None => Err(PushSegmentError::NoSourceBuffer(media_type)),
 
             Some(sb) => {
+                // TODO: we might also want to update the inventory with our more
+                // precise timings
+
                 let metadata_start = metadata.start();
                 let response = sb.push_media_segment(metadata)?;
                 if let Some(media_start) = response.media_start() {
@@ -447,13 +450,6 @@ impl MediaElementReference {
         match media_type {
             MediaType::Audio => self.audio_inventory.inventory(),
             MediaType::Video => self.video_inventory.inventory(),
-        }
-    }
-
-    pub(crate) fn has_buffered_data_at(&self, media_type: MediaType, position: f64) -> bool {
-        match media_type {
-            MediaType::Audio => self.audio_inventory.contains_position(position),
-            MediaType::Video => self.video_inventory.contains_position(position),
         }
     }
 
