@@ -5,7 +5,6 @@ import {
   generateSampleTable as generateAudioSampleTable,
   concatenateFrameData,
 } from "./audio-frame-utils.ts";
-import { audioTsToVideoTs } from "./clock-utils.ts";
 import { createMdat, createMoof } from "./mp4-utils.ts";
 import {
   calculateTrackBaseMediaDecodeTime,
@@ -73,11 +72,13 @@ export class Mp4AudioSegmentGenerator {
       this._trackInfo,
       earliestAllowedDts,
     );
+    const { canonicalBaseMediaDecodeTime, trackBaseMediaDecodeTime } =
+      calculateTrackBaseMediaDecodeTime(
+        this._trackInfo,
+        keepOriginalTimestamps,
+      );
 
-    this._trackInfo.baseMediaDecodeTime = calculateTrackBaseMediaDecodeTime(
-      this._trackInfo,
-      keepOriginalTimestamps,
-    );
+    this._trackInfo.baseMediaDecodeTime = trackBaseMediaDecodeTime;
 
     if (videoBaseMediaDecodeTime !== undefined) {
       // amount of audio filled but the value is in video clock rather than audio clock
@@ -107,17 +108,14 @@ export class Mp4AudioSegmentGenerator {
     boxes.set(moof);
     boxes.set(mdat, moof.byteLength);
 
-    const continuityStart = audioTsToVideoTs(
-      this._trackInfo.baseMediaDecodeTime,
-      this._trackInfo.samplerate,
-    );
-    const duration = (this._trackInfo.samples ?? []).reduce(
-      (acc: number, sample: { duration: number }) => acc + sample.duration,
-      0,
-    );
+    const continuityStart = canonicalBaseMediaDecodeTime;
+    const lastFrame = frames[frames.length - 1];
     const continuityEnd =
-      continuityStart +
-      audioTsToVideoTs(duration, this._trackInfo.samplerate);
+      lastFrame === undefined
+        ? continuityStart
+        : lastFrame.dts +
+          ((lastFrame.sampleCount ?? 1024) * 90000) /
+            this._trackInfo.samplerate;
 
     clearDtsInfo(this._trackInfo);
 

@@ -352,19 +352,7 @@ export default class Transmuxer {
         videoBaseMediaDecodeTime,
       });
       if (audioSegmentData !== null) {
-        continuityTiming =
-          continuityTiming === undefined
-            ? audioSegmentData.timingInfo
-            : {
-                start: Math.min(
-                  continuityTiming.start,
-                  audioSegmentData.timingInfo.start,
-                ),
-                end: Math.max(
-                  continuityTiming.end,
-                  audioSegmentData.timingInfo.end,
-                ),
-              };
+        continuityTiming ??= audioSegmentData.timingInfo;
         pipeline.mp4SegmentConstructor.pushSegment(audioSegmentData);
       }
     }

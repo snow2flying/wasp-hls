@@ -229,10 +229,11 @@ export default class Mp4VideoSegmentGenerator {
     // Concatenate the video data and construct the mdat
     const mdat = createMdat(concatenateNalData(gops));
 
-    this._trackInfo.baseMediaDecodeTime = calculateTrackBaseMediaDecodeTime(
+    const { trackBaseMediaDecodeTime } = calculateTrackBaseMediaDecodeTime(
       this._trackInfo,
       this._keepOriginalTimestamps,
     );
+    this._trackInfo.baseMediaDecodeTime = trackBaseMediaDecodeTime;
 
     // save all the nals in the last GOP into the gop cache
     this._gopCache.unshift({
