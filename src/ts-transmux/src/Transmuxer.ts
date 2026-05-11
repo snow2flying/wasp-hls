@@ -54,6 +54,7 @@ export interface SegmentTimingInfo {
 export interface TransmuxedSegmentTimingInfo {
   start: number;
   end: number;
+  timescale: number;
 }
 
 export type TransmuxResetReason =

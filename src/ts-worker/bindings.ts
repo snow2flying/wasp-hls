@@ -936,7 +936,10 @@ export function appendBuffer(
         continuityEnd =
           transmuxedData.timingInfo === undefined
             ? undefined
-            : splitTimeValue(transmuxedData.timingInfo.end, 90000);
+            : splitTimeValue(
+                transmuxedData.timingInfo.end,
+                transmuxedData.timingInfo.timescale,
+              );
       } else {
         return AppendBufferResult.error(
           SegmentParsingErrorCode.TransmuxerError,

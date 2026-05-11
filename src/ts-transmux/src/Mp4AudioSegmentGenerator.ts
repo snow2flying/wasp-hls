@@ -19,6 +19,7 @@ export interface Mp4AudioSegmentData {
   timingInfo: {
     start: number;
     end: number;
+    timescale: number;
   };
 }
 
@@ -72,13 +73,10 @@ export class Mp4AudioSegmentGenerator {
       this._trackInfo,
       earliestAllowedDts,
     );
-    const { canonicalBaseMediaDecodeTime, trackBaseMediaDecodeTime } =
-      calculateTrackBaseMediaDecodeTime(
-        this._trackInfo,
-        keepOriginalTimestamps,
-      );
-
-    this._trackInfo.baseMediaDecodeTime = trackBaseMediaDecodeTime;
+    this._trackInfo.baseMediaDecodeTime = calculateTrackBaseMediaDecodeTime(
+      this._trackInfo,
+      keepOriginalTimestamps,
+    );
 
     if (videoBaseMediaDecodeTime !== undefined) {
       // amount of audio filled but the value is in video clock rather than audio clock
@@ -108,14 +106,12 @@ export class Mp4AudioSegmentGenerator {
     boxes.set(moof);
     boxes.set(mdat, moof.byteLength);
 
-    const continuityStart = canonicalBaseMediaDecodeTime;
-    const lastFrame = frames[frames.length - 1];
-    const continuityEnd =
-      lastFrame === undefined
-        ? continuityStart
-        : lastFrame.dts +
-          ((lastFrame.sampleCount ?? 1024) * 90000) /
-            this._trackInfo.samplerate;
+    const continuityStart = this._trackInfo.baseMediaDecodeTime;
+    const duration = (this._trackInfo.samples ?? []).reduce(
+      (acc: number, sample: { duration: number }) => acc + sample.duration,
+      0,
+    );
+    const continuityEnd = continuityStart + duration;
 
     clearDtsInfo(this._trackInfo);
 
@@ -125,6 +121,7 @@ export class Mp4AudioSegmentGenerator {
       timingInfo: {
         start: continuityStart,
         end: continuityEnd,
+        timescale: this._trackInfo.samplerate,
       },
     };
   }

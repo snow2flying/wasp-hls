@@ -21,6 +21,7 @@ export interface Mp4VideoSegmentData {
   timingInfo: {
     start: number;
     end: number;
+    timescale: number;
   };
 }
 
@@ -229,11 +230,10 @@ export default class Mp4VideoSegmentGenerator {
     // Concatenate the video data and construct the mdat
     const mdat = createMdat(concatenateNalData(gops));
 
-    const { trackBaseMediaDecodeTime } = calculateTrackBaseMediaDecodeTime(
+    this._trackInfo.baseMediaDecodeTime = calculateTrackBaseMediaDecodeTime(
       this._trackInfo,
       this._keepOriginalTimestamps,
     );
-    this._trackInfo.baseMediaDecodeTime = trackBaseMediaDecodeTime;
 
     // save all the nals in the last GOP into the gop cache
     this._gopCache.unshift({
@@ -272,6 +272,7 @@ export default class Mp4VideoSegmentGenerator {
       timingInfo: {
         start: trackInfo.baseMediaDecodeTime,
         end: trackInfo.baseMediaDecodeTime + duration,
+        timescale: 90000,
       },
     };
   }

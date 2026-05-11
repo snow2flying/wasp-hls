@@ -100,13 +100,7 @@ function calculateTrackBaseMediaDecodeTime<
     };
     samplerate?: number;
   },
->(
-  trackInfo: T,
-  keepOriginalTimestamps: boolean,
-): {
-  canonicalBaseMediaDecodeTime: number;
-  trackBaseMediaDecodeTime: number;
-} {
+>(trackInfo: T, keepOriginalTimestamps: boolean): number {
   let minSegmentDts = trackInfo.minSegmentDts;
 
   // Optionally adjust the time so the first segment starts at zero.
@@ -130,21 +124,17 @@ function calculateTrackBaseMediaDecodeTime<
   }
 
   // baseMediaDecodeTime must not become negative
-  const canonicalBaseMediaDecodeTime = Math.max(0, baseMediaDecodeTime);
-  let trackBaseMediaDecodeTime = canonicalBaseMediaDecodeTime;
+  baseMediaDecodeTime = Math.max(0, baseMediaDecodeTime);
 
   if (trackInfo.type === "audio") {
     // Audio has a different clock equal to the sampling_rate so we need to
     // scale the PTS values into the clock rate of the track
     const scale = (trackInfo.samplerate as number) / ONE_SECOND_IN_TS;
-    trackBaseMediaDecodeTime *= scale;
-    trackBaseMediaDecodeTime = Math.floor(trackBaseMediaDecodeTime);
+    baseMediaDecodeTime *= scale;
+    baseMediaDecodeTime = Math.floor(baseMediaDecodeTime);
   }
 
-  return {
-    canonicalBaseMediaDecodeTime,
-    trackBaseMediaDecodeTime,
-  };
+  return baseMediaDecodeTime;
 }
 
 export { clearDtsInfo, calculateTrackBaseMediaDecodeTime, collectDtsInfo };
