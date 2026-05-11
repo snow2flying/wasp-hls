@@ -51,6 +51,11 @@ export interface SegmentTimingInfo {
   duration?: number;
 }
 
+export interface TransmuxedSegmentTimingInfo {
+  start: number;
+  end: number;
+}
+
 export type TransmuxResetReason =
   | "none"
   | "seek"
@@ -61,8 +66,9 @@ export type TransmuxResetReason =
   | "buffer-flush";
 
 export interface TransmuxContinuityInfo {
-  baseDecodeTimeStart: number;
-  duration: number | undefined;
+  baseDecodeTimeStartHi: number;
+  baseDecodeTimeStartLo: number;
+  baseDecodeTimeStartTimescale: number;
   resetReason: TransmuxResetReason;
 }
 
@@ -70,6 +76,11 @@ export interface TransmuxSegmentOptions {
   timing?: SegmentTimingInfo;
   reset?: boolean;
   continuity?: TransmuxContinuityInfo;
+}
+
+export interface TransmuxedSegmentData {
+  data: Uint8Array;
+  timingInfo: TransmuxedSegmentTimingInfo | undefined;
 }
 
 export default class Transmuxer {
@@ -94,7 +105,7 @@ export default class Transmuxer {
   public transmuxSegment(
     data: Uint8Array,
     options?: TransmuxSegmentOptions,
-  ): Uint8Array | null {
+  ): TransmuxedSegmentData | null {
     if (options?.reset === true) {
       this.reset();
     }
@@ -128,7 +139,7 @@ export default class Transmuxer {
     this._lastSegmentTiming = null;
   }
 
-  public pushTsSegment(input: Uint8Array): Uint8Array | null {
+  public pushTsSegment(input: Uint8Array): TransmuxedSegmentData | null {
     let pipeline = this._currentPipeline;
     if (pipeline === null || pipeline.name !== "ts") {
       pipeline = this._setupTsPipeline();
@@ -179,13 +190,13 @@ export default class Transmuxer {
     }
   }
 
-  public pushAacSegment(input: Uint8Array): Uint8Array | null {
+  public pushAacSegment(input: Uint8Array): TransmuxedSegmentData | null {
     let pipeline = this._currentPipeline;
     if (pipeline === null || pipeline.name !== "aac") {
       pipeline = this._setupAacPipeline();
     }
 
-    const onSegmentParsed = (): Uint8Array | null => {
+    const onSegmentParsed = (): TransmuxedSegmentData | null => {
       if (pipeline === null || pipeline.name !== "aac") {
         return null;
       }
@@ -301,19 +312,21 @@ export default class Transmuxer {
   /**
    * Generate ISOBMFF boxes and coalesce them into one big file from
    * everything parsed until now.
-   * @returns {Uint8Array|null}
+   * @returns {TransmuxedSegmentData|null}
    */
-  private _buildSegment(): Uint8Array | null {
+  private _buildSegment(): TransmuxedSegmentData | null {
     const pipeline = this._currentPipeline;
     let videoBaseMediaDecodeTime: number | undefined;
     let earliestAllowedDts = 0;
+    let continuityTiming: TransmuxedSegmentTimingInfo | undefined;
 
     if (pipeline?.name === "ts" && pipeline.mp4VideoSegmentGenerator !== null) {
       const videoSegmentData =
         pipeline.mp4VideoSegmentGenerator.generateBoxes();
       if (videoSegmentData !== null) {
-        const { trackInfo } = videoSegmentData;
+        const { trackInfo, timingInfo } = videoSegmentData;
         videoBaseMediaDecodeTime = trackInfo.baseMediaDecodeTime;
+        continuityTiming = timingInfo;
         if (this._options.keepOriginalTimestamps !== true) {
           const { timelineStartInfo } = trackInfo;
           if (this._audioTrack !== null) {
@@ -339,6 +352,19 @@ export default class Transmuxer {
         videoBaseMediaDecodeTime,
       });
       if (audioSegmentData !== null) {
+        continuityTiming =
+          continuityTiming === undefined
+            ? audioSegmentData.timingInfo
+            : {
+                start: Math.min(
+                  continuityTiming.start,
+                  audioSegmentData.timingInfo.start,
+                ),
+                end: Math.max(
+                  continuityTiming.end,
+                  audioSegmentData.timingInfo.end,
+                ),
+              };
         pipeline.mp4SegmentConstructor.pushSegment(audioSegmentData);
       }
     }
@@ -363,7 +389,10 @@ export default class Transmuxer {
       if (segmentInfo.data !== null) {
         transmuxedSegment.set(segmentInfo.data, initSegmentLength);
       }
-      return transmuxedSegment;
+      return {
+        data: transmuxedSegment,
+        timingInfo: continuityTiming,
+      };
     }
     return null;
   }
@@ -442,13 +471,10 @@ export default class Transmuxer {
   ): void {
     let timing = legacyTiming;
     if (continuity !== undefined) {
-      timing =
-        continuity.duration === undefined
-          ? { start: continuity.baseDecodeTimeStart }
-          : {
-              start: continuity.baseDecodeTimeStart,
-              duration: continuity.duration,
-            };
+      timing = {
+        start:
+          getContinuousBaseDecodeTimeInVideoTs(continuity) / ONE_SECOND_IN_TS,
+      };
     }
     if (timing === undefined) {
       this._currentSegmentTiming = null;
@@ -496,10 +522,7 @@ export default class Transmuxer {
   private _getBaseMediaDecodeTimeForContinuity(
     continuity: TransmuxContinuityInfo,
   ): number {
-    return Math.max(
-      0,
-      Math.round(continuity.baseDecodeTimeStart * ONE_SECOND_IN_TS),
-    );
+    return getContinuousBaseDecodeTimeInVideoTs(continuity);
   }
 
   private _resetTrackTimelineStart(track: any, baseMediaDecodeTime: number) {
@@ -513,4 +536,18 @@ export default class Transmuxer {
       dts: undefined,
     };
   }
+}
+
+function getContinuousBaseDecodeTimeInVideoTs(
+  continuity: TransmuxContinuityInfo,
+): number {
+  const value =
+    continuity.baseDecodeTimeStartHi * 0x100000000 +
+    continuity.baseDecodeTimeStartLo;
+  return Math.max(
+    0,
+    Math.round(
+      (value * ONE_SECOND_IN_TS) / continuity.baseDecodeTimeStartTimescale,
+    ),
+  );
 }

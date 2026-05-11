@@ -25,6 +25,13 @@ import type {
 export interface AppendBufferValue {
   start: number | undefined;
   duration: number | undefined;
+  continuityEnd:
+    | {
+        valueHi: number;
+        valueLo: number;
+        timescale: number;
+      }
+    | undefined;
 }
 
 export type AppendResetReason =
@@ -37,8 +44,9 @@ export type AppendResetReason =
   | "buffer-flush";
 
 export interface AppendContinuityInfo {
-  duration: number | undefined;
-  baseDecodeTimeStart: number;
+  baseDecodeTimeStartHi: number;
+  baseDecodeTimeStartLo: number;
+  baseDecodeTimeStartTimescale: number;
   resetReason: AppendResetReason;
 }
 

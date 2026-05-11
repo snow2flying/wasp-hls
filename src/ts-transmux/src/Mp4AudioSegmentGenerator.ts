@@ -5,6 +5,7 @@ import {
   generateSampleTable as generateAudioSampleTable,
   concatenateFrameData,
 } from "./audio-frame-utils.ts";
+import { audioTsToVideoTs } from "./clock-utils.ts";
 import { createMdat, createMoof } from "./mp4-utils.ts";
 import {
   calculateTrackBaseMediaDecodeTime,
@@ -16,6 +17,10 @@ import type { TrackInfo } from "./types.ts";
 export interface Mp4AudioSegmentData {
   trackInfo: TrackInfo;
   boxes: Uint8Array;
+  timingInfo: {
+    start: number;
+    end: number;
+  };
 }
 
 /**
@@ -102,9 +107,28 @@ export class Mp4AudioSegmentGenerator {
     boxes.set(moof);
     boxes.set(mdat, moof.byteLength);
 
+    const continuityStart = audioTsToVideoTs(
+      this._trackInfo.baseMediaDecodeTime,
+      this._trackInfo.samplerate,
+    );
+    const duration = (this._trackInfo.samples ?? []).reduce(
+      (acc: number, sample: { duration: number }) => acc + sample.duration,
+      0,
+    );
+    const continuityEnd =
+      continuityStart +
+      audioTsToVideoTs(duration, this._trackInfo.samplerate);
+
     clearDtsInfo(this._trackInfo);
 
-    return { trackInfo: this._trackInfo, boxes };
+    return {
+      trackInfo: this._trackInfo,
+      boxes,
+      timingInfo: {
+        start: continuityStart,
+        end: continuityEnd,
+      },
+    };
   }
 
   public cancel(): void {

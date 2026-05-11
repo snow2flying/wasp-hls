@@ -18,6 +18,10 @@ import type { TrackInfo } from "./types.ts";
 export interface Mp4VideoSegmentData {
   trackInfo: TrackInfo;
   boxes: Uint8Array;
+  timingInfo: {
+    start: number;
+    end: number;
+  };
 }
 
 /**
@@ -255,9 +259,20 @@ export default class Mp4VideoSegmentGenerator {
     boxes.set(moof);
     boxes.set(mdat, moof.byteLength);
 
+    const duration = (this._trackInfo.samples ?? []).reduce(
+      (acc: number, sample: { duration: number }) => acc + sample.duration,
+      0,
+    );
     const trackInfo = { ...this._trackInfo };
     this.resetStream_();
-    return { trackInfo, boxes };
+    return {
+      trackInfo,
+      boxes,
+      timingInfo: {
+        start: trackInfo.baseMediaDecodeTime,
+        end: trackInfo.baseMediaDecodeTime + duration,
+      },
+    };
   }
 
   public cancel(): void {

@@ -912,6 +912,13 @@ export function appendBuffer(
   }
 
   const sourceBufferObj = mediaSourceObj.sourceBuffers[sourceBufferObjIdx];
+  let continuityEnd:
+    | {
+        valueHi: number;
+        valueLo: number;
+        timescale: number;
+      }
+    | undefined;
   if (sourceBufferObj.transmuxer !== null) {
     try {
       const transmuxOptions =
@@ -925,7 +932,11 @@ export function appendBuffer(
         transmuxOptions,
       );
       if (transmuxedData !== null) {
-        segment = transmuxedData;
+        segment = transmuxedData.data;
+        continuityEnd =
+          transmuxedData.timingInfo === undefined
+            ? undefined
+            : splitTimeValue(transmuxedData.timingInfo.end, 90000);
       } else {
         return AppendBufferResult.error(
           SegmentParsingErrorCode.TransmuxerError,
@@ -957,14 +968,6 @@ export function appendBuffer(
           segment,
           sourceBufferObj.lastInitTimescaleByTrackId,
         );
-
-  console.warn(
-    "!!!!!! TIMEINFO FROM MP4",
-    "\n",
-    JSON.stringify(continuityInfo),
-    "\n",
-    JSON.stringify(timeInfo),
-  );
 
   const transferableSegment = new Uint8Array(segment);
   try {
@@ -1038,7 +1041,11 @@ export function appendBuffer(
   } catch (_err) {
     return AppendBufferResult.error(SegmentParsingErrorCode.UnknownError);
   }
-  return AppendBufferResult.success(timeInfo?.time, timeInfo?.duration);
+  return AppendBufferResult.success(
+    timeInfo?.time,
+    timeInfo?.duration,
+    continuityEnd,
+  );
 }
 
 /**
@@ -1098,7 +1105,7 @@ function inspectProbeSegment(
   if (transmuxedSegment === null) {
     return undefined;
   }
-  const transmuxedCodecs = getIsoBmffCodecs(transmuxedSegment);
+  const transmuxedCodecs = getIsoBmffCodecs(transmuxedSegment.data);
   if (transmuxedCodecs.length === 0) {
     return undefined;
   }
@@ -1359,6 +1366,19 @@ function getTimeInformationFromMp4(
   initTimescaleByTrackId: Map<number, number>,
 ): { time: number; duration: number | undefined } | null {
   return getSegmentTimeInformation(segment, initTimescaleByTrackId);
+}
+
+function splitTimeValue(
+  value: number,
+  timescale: number,
+): { valueHi: number; valueLo: number; timescale: number } {
+  const valueHi = Math.floor(value / 0x100000000);
+  const valueLo = value >>> 0;
+  return {
+    valueHi,
+    valueLo,
+    timescale,
+  };
 }
 
 /**

@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use crate::bindings::{
     jsAddSourceBuffer, jsAppendBuffer, jsFlush, jsRemoveBuffer, AddSourceBufferErrorCode,
     MediaType, ParsedSegmentInfo, ResourceId, SegmentParsingErrorCode, SourceBufferId,
+    TimescaledTimeValue,
 };
 use crate::dispatcher::JsMemoryBlob;
 use crate::parser::SegmentTimeInfo;
@@ -44,9 +45,11 @@ pub(super) struct SourceBuffer {
     /// taken on buffer updates.
     needs_reflush: bool,
 
-    /// End playlist time of the last media segment known to have been appended successfully, as
-    /// reconstructed from the remuxed fMP4 timing.
-    last_segment_end_time: Option<f64>,
+    /// End timing anchor of the last media segment known to have been appended successfully.
+    ///
+    /// When available, this exact timescaled value is used as the continuity anchor for the next
+    /// transmuxed append.
+    last_segment_end_time: Option<TimescaledTimeValue>,
 
     /// Explicit reason why the next media append should reseed transmux state.
     /// XXX TODO: Bitset instead? We don't want new updates to totally replace old ones
@@ -171,9 +174,7 @@ impl SourceBuffer {
         };
 
         // Use the parsed segment end as a good basis for the next decode time
-        self.last_segment_end_time = parsed
-            .as_ref()
-            .and_then(|x| x.start().and_then(|s| x.duration().map(|d| s + d)));
+        self.last_segment_end_time = parsed.as_ref().and_then(|x| x.continuity_end().cloned());
         Ok(AppendBufferResponse { parsed })
     }
 
@@ -296,12 +297,19 @@ impl SourceBuffer {
 
         let segment_start = if state_update == BufferStateUpdate::None {
             // assume contiguous-ness
-            self.last_segment_end_time
-                .unwrap_or_else(|| segment_time_info.start())
+            self.last_segment_end_time.clone().unwrap_or_else(|| {
+                TimescaledTimeValue::from_u64(
+                    (segment_time_info.start() * 90000.).round() as u64,
+                    90000,
+                )
+            })
         } else {
-            segment_time_info.start()
+            TimescaledTimeValue::from_u64(
+                (segment_time_info.start() * 90000.).round() as u64,
+                90000,
+            )
         };
-        BufferStateData::new(segment_start, segment_time_info.duration(), state_update)
+        BufferStateData::new(segment_start, state_update)
     }
 }
 
@@ -571,9 +579,7 @@ pub(crate) enum BufferStateUpdate {
 #[derive(Clone, Debug)]
 pub(crate) struct BufferStateData {
     /// Exact time anchor to use when computing the next base decode time.
-    base_decode_time_start: f64,
-    /// Duration of that segment
-    duration: f64,
+    base_decode_time_start: TimescaledTimeValue,
     /// Update(s) in the buffer state that may impact segment transmuxing.
     /// XXX TODO: bitset?
     /// XXX TODO: Can't we just handle everything rust-side? And just give a more
@@ -584,23 +590,17 @@ pub(crate) struct BufferStateData {
 impl BufferStateData {
     /// Create a new `BufferStateData`
     pub(crate) fn new(
-        base_decode_time_start: f64,
-        duration: f64,
+        base_decode_time_start: TimescaledTimeValue,
         state_update: BufferStateUpdate,
     ) -> Self {
         Self {
             base_decode_time_start,
-            duration,
             state_update,
         }
     }
 
-    pub(crate) fn base_decode_time_start(&self) -> f64 {
-        self.base_decode_time_start
-    }
-
-    pub(crate) fn duration(&self) -> f64 {
-        self.duration
+    pub(crate) fn base_decode_time_start(&self) -> &TimescaledTimeValue {
+        &self.base_decode_time_start
     }
 
     pub(crate) fn state_update(&self) -> BufferStateUpdate {

@@ -51,11 +51,17 @@ export class AppendBufferResult extends SimpleResult<
   public static success(
     start?: number | null,
     duration?: number | null,
+    continuityEnd?: {
+      valueHi: number;
+      valueLo: number;
+      timescale: number;
+    } | null,
   ): AppendBufferResult {
     return new AppendBufferResult(
       {
         start: start ?? undefined,
         duration: duration ?? undefined,
+        continuityEnd: continuityEnd ?? undefined,
       },
       undefined,
       undefined,

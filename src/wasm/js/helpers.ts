@@ -28,6 +28,13 @@ export function writeAppendBufferResult(
     {
       start: number | undefined;
       duration: number | undefined;
+      continuityEnd:
+        | {
+            valueHi: number;
+            valueLo: number;
+            timescale: number;
+          }
+        | undefined;
     },
     number
   >,
@@ -35,6 +42,10 @@ export function writeAppendBufferResult(
   startOut: number,
   hasDurationOut: number,
   durationOut: number,
+  hasContinuityEndOut: number,
+  continuityEndValueHiOut: number,
+  continuityEndValueLoOut: number,
+  continuityEndTimescaleOut: number,
   errCodeOut: number,
   errDescPtrOut: number,
   errDescLenOut: number,
@@ -49,6 +60,14 @@ export function writeAppendBufferResult(
   getFloat64Memory()[startOut >>> 3] = parsed?.start ?? 0;
   getUint32Memory()[hasDurationOut >>> 2] = parsed?.duration == null ? 0 : 1;
   getFloat64Memory()[durationOut >>> 3] = parsed?.duration ?? 0;
+  getUint32Memory()[hasContinuityEndOut >>> 2] =
+    parsed?.continuityEnd == null ? 0 : 1;
+  getUint32Memory()[continuityEndValueHiOut >>> 2] =
+    parsed?.continuityEnd?.valueHi ?? 0;
+  getUint32Memory()[continuityEndValueLoOut >>> 2] =
+    parsed?.continuityEnd?.valueLo ?? 0;
+  getUint32Memory()[continuityEndTimescaleOut >>> 2] =
+    parsed?.continuityEnd?.timescale ?? 0;
   return 1;
 }
 
