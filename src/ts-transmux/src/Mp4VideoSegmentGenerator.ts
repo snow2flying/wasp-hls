@@ -15,12 +15,19 @@ import {
 } from "./track-utils.ts";
 import type { TrackInfo } from "./types.ts";
 
+/** Product of the `MP4VideoSegmentGenerator` */
 export interface Mp4VideoSegmentData {
+  /** Extracted information about the current video track. */
   trackInfo: TrackInfo;
+  /** Constructed video-related ISOBMFF boxes for that segment. */
   boxes: Uint8Array;
+  /** Timing metadata included in that segment. */
   timingInfo: {
+    /** Start time, in timescale. */
     start: number;
+    /** End time, in timescale. */
     end: number;
+    /** The timescale used for start and end. */
     timescale: number;
   };
 }

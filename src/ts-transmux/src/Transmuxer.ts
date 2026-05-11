@@ -2,9 +2,8 @@ import { isLikelyAacData } from "./aac-utils.ts";
 import AdtsPacketParser from "./AdtsPacketParser.ts";
 import type { ITimescaledU64 } from "./clock-utils.ts";
 import {
-  getContinuousBaseDecodeTimeInVideoTs,
+  getTimescaledValueToVideoTimescale,
   ONE_SECOND_IN_TS,
-  timescaledU64ToSeconds,
 } from "./clock-utils.ts";
 import type { ElementaryPacket } from "./ElementaryPacketParser.ts";
 import ElementaryPacketParser from "./ElementaryPacketParser.ts";
@@ -44,6 +43,7 @@ interface TsPipelineElements {
   transportStreamSplitter: TransportStreamSplitter;
 }
 
+/** Contrustor options for `Transmuxer`. */
 export interface TransmuxerOptions {
   baseMediaDecodeTime?: number;
   keepOriginalTimestamps?: boolean;
@@ -51,14 +51,13 @@ export interface TransmuxerOptions {
   alignGopsAtEnd?: boolean;
 }
 
-export interface SegmentTimingInfo {
-  start: number;
-  duration?: number;
-}
-
+/** Extracted timing information from a segment. */
 export interface TransmuxedSegmentTimingInfo {
+  /** Its start time, in timescale. */
   start: number;
+  /** Its end time, in timescale. */
   end: number;
+  /** Timescale used for `start` and `end`. */
   timescale: number;
 }
 
@@ -70,8 +69,15 @@ export interface TransmuxSegmentOptions {
   baseMediaDecodeTime?: ITimescaledU64;
 }
 
+/** Output from the transmuxer. */
 export interface TransmuxedSegmentData {
+  /** The transmuxed fmp4, in the flesh. */
   data: Uint8Array;
+  /**
+   * Precise timing information on it, about its start and end:
+   * - If segment is muxed audio + video, this corresponds to the video track.
+   * - If segment is only audio or only video, this corresponds to that track.
+   */
   timingInfo: TransmuxedSegmentTimingInfo | undefined;
 }
 
@@ -81,8 +87,7 @@ export default class Transmuxer {
   private _audioTrack: any;
   private _baseMediaDecodeTime: number;
   private _currentPipeline: AacPipelineElements | TsPipelineElements | null;
-  private _currentSegmentTiming: ITimescaledU64 | null;
-  private _lastSegmentEnd: ITimescaledU64 | null;
+  private _pendingSegmentBaseDts: ITimescaledU64 | null;
 
   constructor(options?: TransmuxerOptions | undefined) {
     this._options = options ?? {};
@@ -90,15 +95,17 @@ export default class Transmuxer {
     this._currentPipeline = null;
     this._videoTrack = null;
     this._audioTrack = null;
-    this._currentSegmentTiming = null;
-    this._lastSegmentEnd = null;
+    this._pendingSegmentBaseDts = null;
   }
 
   public transmuxSegment(
     data: Uint8Array,
     options: TransmuxSegmentOptions = {},
   ): TransmuxedSegmentData | null {
-    this._prepareSegment(options);
+    if (options?.reset === true) {
+      this.reset();
+    }
+    this._prepareSegmentTimeline(options.baseMediaDecodeTime);
     const isAac = isLikelyAacData(data);
     if (isAac && this._currentPipeline?.name !== "aac") {
       this._setupAacPipeline();
@@ -124,8 +131,7 @@ export default class Transmuxer {
     this._currentPipeline = null;
     this._videoTrack = null;
     this._audioTrack = null;
-    this._currentSegmentTiming = null;
-    this._lastSegmentTiming = null;
+    this._pendingSegmentBaseDts = null;
   }
 
   public pushTsSegment(input: Uint8Array): TransmuxedSegmentData | null {
@@ -179,9 +185,7 @@ export default class Transmuxer {
     }
   }
 
-  public pushAacSegment(
-    input: Uint8Array,
-  ): { data: Uint8Array; start: ITimescaledU64; end: ITimescaledU64 } | null {
+  public pushAacSegment(input: Uint8Array): TransmuxedSegmentData | null {
     let pipeline = this._currentPipeline;
     if (pipeline === null || pipeline.name !== "aac") {
       pipeline = this._setupAacPipeline();
@@ -350,8 +354,7 @@ export default class Transmuxer {
 
     if (pipeline?.mp4SegmentConstructor !== undefined) {
       const segmentInfo = pipeline.mp4SegmentConstructor.finishSegment();
-      this._lastSegmentTiming = this._currentSegmentTiming;
-      this._currentSegmentTiming = null;
+      this._pendingSegmentBaseDts = null;
       if (segmentInfo === null) {
         return null;
       }
@@ -444,36 +447,24 @@ export default class Transmuxer {
     }
   }
 
-  private _prepareSegment(options: TransmuxSegmentOptions): void {
-    if (options?.reset === true) {
-      this.reset();
-    }
-    if (!options.baseMediaDecodeTime) {
+  private _prepareSegmentTimeline(
+    baseMediaDecodeTime: ITimescaledU64 | undefined,
+  ): void {
+    if (baseMediaDecodeTime === undefined) {
       return;
     }
-    const { baseMediaDecodeTime } = options;
-    if (
-      shouldResetForSegmentStart(
-        this._currentSegmentTiming,
-        this._lastSegmentEnd,
-        baseMediaDecodeTime,
-      )
-    ) {
-      this.reset();
-    }
-
-    this._currentSegmentTiming = baseMediaDecodeTime;
+    this._pendingSegmentBaseDts = baseMediaDecodeTime;
 
     // XXX TODO: Maybe ineficient to play with timescales like this?
-    const baseMediaDecodeTimeVideoTs = getContinuousBaseDecodeTimeInVideoTs(
-      options.baseMediaDecodeTime,
-    );
+    //           Shouldn't we rely on the sample rate with audio?
+    const baseMediaDecodeTimeVideoTs =
+      getTimescaledValueToVideoTimescale(baseMediaDecodeTime);
     this._resetTrackTimelineStart(this._videoTrack, baseMediaDecodeTimeVideoTs);
     this._resetTrackTimelineStart(this._audioTrack, baseMediaDecodeTimeVideoTs);
   }
 
   private _getCurrentBaseMediaDecodeTime(): number {
-    const currentStart = this._currentSegmentTiming?.start;
+    const currentStart = this._pendingSegmentBaseDts?.start;
     if (currentStart === undefined) {
       return this._baseMediaDecodeTime;
     }
@@ -491,25 +482,4 @@ export default class Transmuxer {
       dts: undefined,
     };
   }
-}
-
-function shouldResetForSegmentStart(
-  previousStart: ITimescaledU64 | null,
-  previousEnd: ITimescaledU64 | null,
-  nextStart: ITimescaledU64,
-): boolean {
-  if (previousStart === null) {
-    return false;
-  }
-  const nextStartSec = timescaledU64ToSeconds(nextStart);
-  const previousStartSec = timescaledU64ToSeconds(previousStart);
-  if (nextStartSec + 0.001 < previousStartSec) {
-    return true;
-  }
-
-  if (previousEnd !== null) {
-    const previousEndSec = timescaledU64ToSeconds(previousEnd);
-    return Math.abs(nextStartSec - previousEndSec) > 0.25;
-  }
-  return false;
 }

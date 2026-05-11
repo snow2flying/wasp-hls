@@ -13,12 +13,19 @@ import {
 } from "./track-utils.ts";
 import type { TrackInfo } from "./types.ts";
 
+/** Product of the `MP4AudioSegmentGenerator` */
 export interface Mp4AudioSegmentData {
+  /** Extracted information about the current audio track. */
   trackInfo: TrackInfo;
+  /** Constructed audio-related ISOBMFF boxes for that segment. */
   boxes: Uint8Array;
+  /** Timing metadata included in that segment. */
   timingInfo: {
+    /** Start time, in timescale. */
     start: number;
+    /** End time, in timescale. */
     end: number;
+    /** The timescale used for start and end. */
     timescale: number;
   };
 }
@@ -73,6 +80,7 @@ export class Mp4AudioSegmentGenerator {
       this._trackInfo,
       earliestAllowedDts,
     );
+
     this._trackInfo.baseMediaDecodeTime = calculateTrackBaseMediaDecodeTime(
       this._trackInfo,
       keepOriginalTimestamps,

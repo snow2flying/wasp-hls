@@ -35,6 +35,12 @@ export interface ITimescaledU64 {
   timescale: number;
 }
 
+/**
+ * Translate the given timescale unit to seconds, avoiding potential for
+ * overflows as much as possible.
+ * @param t - The timescaled data.
+ * @returns - correspondance in seconds.
+ */
 export function timescaledU64ToSeconds(t: ITimescaledU64): number {
   const BASE = 0x10000; // 2^16
   if (t.timescale === 0) {
@@ -66,11 +72,17 @@ export function timescaledU64ToSeconds(t: ITimescaledU64): number {
   return q + rem / t.timescale;
 }
 
-export function getContinuousBaseDecodeTimeInVideoTs(
-  baseDecodeTime: ITimescaledU64,
+/**
+ * Convert/normalize the given timescale value to the timescale we're relying on here for
+ * video.
+ * @param baseTime - The timescaled value to convert.
+ * @returns - The value converted in the right timescale.
+ */
+export function getTimescaledValueToVideoTimescale(
+  baseTime: ITimescaledU64,
 ): number {
   const BASE = 0x10000; // 2^16
-  const { hi, lo, timescale } = baseDecodeTime;
+  const { hi, lo, timescale } = baseTime;
   if (timescale === 0) {
     throw new Error("Invalid timescale");
   }
