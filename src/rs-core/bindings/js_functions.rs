@@ -82,7 +82,7 @@ unsafe extern "C" {
         segment_start: f64,
         has_segment_duration: u32,
         segment_duration: f64,
-        contiguous: u32,
+        base_decode_time_start: f64,
         reset_reason: u32,
         has_start_out: *mut u32,
         start_out: *mut f64,
@@ -542,7 +542,9 @@ pub fn jsAppendBuffer(
             continuity_info.map(|t| t.start()).unwrap_or(0.),
             bool_to_raw(continuity_info.is_some()),
             continuity_info.map(|t| t.duration()).unwrap_or(0.),
-            bool_to_raw(continuity_info.is_some_and(|t| t.contiguous())),
+            continuity_info
+                .map(|t| t.base_decode_time_start())
+                .unwrap_or(0.),
             continuity_info
                 .map(|t| t.reset_reason() as u32)
                 .unwrap_or(AppendResetReason::None as u32),

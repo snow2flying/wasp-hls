@@ -181,7 +181,7 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         segmentStart: number,
         hasSegmentDuration: number,
         segmentDuration: number,
-        contiguous: number,
+        baseDecodeTimeStart: number,
         resetReason: number,
         hasStartOut: number,
         startOut: number,
@@ -201,7 +201,7 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
                   start: segmentStart,
                   duration:
                     hasSegmentDuration !== 0 ? segmentDuration : undefined,
-                  contiguous: contiguous !== 0,
+                  baseDecodeTimeStart,
                   resetReason: parseAppendResetReason(resetReason),
                 }
               : undefined,

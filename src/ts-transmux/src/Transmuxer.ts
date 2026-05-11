@@ -63,9 +63,8 @@ export type TransmuxResetReason =
 export interface TransmuxContinuityInfo {
   start: number;
   duration: number | undefined;
-  contiguous: boolean;
+  baseDecodeTimeStart: number;
   resetReason: TransmuxResetReason;
-  bufferedEnd: number | undefined;
 }
 
 export interface TransmuxSegmentOptions {
@@ -495,10 +494,10 @@ export default class Transmuxer {
   private _getBaseMediaDecodeTimeForContinuity(
     continuity: TransmuxContinuityInfo,
   ): number {
-    if (continuity.contiguous && continuity.bufferedEnd !== undefined) {
-      return Math.max(0, Math.round(continuity.bufferedEnd * ONE_SECOND_IN_TS));
-    }
-    return Math.max(0, Math.round(continuity.start * ONE_SECOND_IN_TS));
+    return Math.max(
+      0,
+      Math.round(continuity.baseDecodeTimeStart * ONE_SECOND_IN_TS),
+    );
   }
 
   private _resetTrackTimelineStart(track: any, baseMediaDecodeTime: number) {

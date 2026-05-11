@@ -230,6 +230,16 @@ impl SegmentInventory {
         self.inventory = vec![];
     }
 
+    /// Returns the buffered end of the validated segment that most plausibly precedes an append
+    /// starting at `start`, if one is known with enough confidence.
+    pub(super) fn contiguous_anchor(&self, start: f64, epsilon: f64) -> Option<f64> {
+        self.inventory
+            .iter()
+            .rev()
+            .find(|seg| seg.validated && (seg.last_buffered_end - start).abs() <= epsilon)
+            .map(|seg| seg.last_buffered_end)
+    }
+
     /// Once a segment push operation has finished, call this method with the
     /// current `TimeRanges` object from the corresponding MSE `SourceBuffer`
     /// and the `id` of the segment that had been announced before the push.

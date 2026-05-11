@@ -39,7 +39,7 @@ export type AppendResetReason =
 export interface AppendContinuityInfo {
   start: number;
   duration: number | undefined;
-  contiguous: boolean;
+  baseDecodeTimeStart: number;
   resetReason: AppendResetReason;
 }
 

@@ -790,7 +790,6 @@ export function addSourceBuffer(
       const sourceBufferId = nextSourceBufferId;
       sourceBuffers.push({
         lastInitTimescale: undefined,
-        lastBufferedEnd: undefined,
         id: sourceBufferId,
         transmuxer: mimeType === typ ? null : createTransmuxer(),
         sourceBuffer: null,
@@ -839,7 +838,6 @@ export function addSourceBuffer(
       const queuedSourceBuffer = new QueuedSourceBuffer(sourceBuffer);
       sourceBuffers.push({
         lastInitTimescale: undefined,
-        lastBufferedEnd: undefined,
         id: sourceBufferId,
         sourceBuffer: queuedSourceBuffer,
         transmuxer: mimeType === typ ? null : createTransmuxer(),
@@ -923,12 +921,7 @@ export function appendBuffer(
         continuityInfo === undefined
           ? undefined
           : {
-              continuity: {
-                ...continuityInfo,
-                // XXX TODO: What if seeking back? Here `lastBufferedEnd` could be
-                // about a further segment that's not the last one
-                bufferedEnd: sourceBufferObj.lastBufferedEnd,
-              },
+              continuity: continuityInfo,
             };
       const transmuxedData = sourceBufferObj.transmuxer.transmuxSegment(
         segment,
@@ -975,8 +968,6 @@ export function appendBuffer(
         .then(() => {
           try {
             const timeRange = sourceBufferObj.sourceBuffer.getBufferedRanges();
-            sourceBufferObj.lastBufferedEnd =
-              getBufferedEndFromTimeRanges(timeRange);
             const buffered = new JsTimeRanges(
               timeRangesToFloat64Array(timeRange),
             );
@@ -1131,12 +1122,6 @@ function inferMediaTypeFromCodecs(codecs: string[]): MediaType {
 
 function isAudioCodec(codec: string): boolean {
   return /^(mp4a|ac-3|ec-3|ac-4|opus|flac|alac)\b/i.test(codec);
-}
-
-function getBufferedEndFromTimeRanges(
-  timeRange: TimeRanges,
-): number | undefined {
-  return timeRange.length > 0 ? timeRange.end(timeRange.length - 1) : undefined;
 }
 
 function isLikelyAacProbeSegment(data: Uint8Array): boolean {

@@ -11,7 +11,9 @@ use crate::Logger;
 pub(crate) use source_buffers::{PushSegmentError, RemoveDataError};
 
 pub(crate) use self::segment_inventory::{BufferedChunk, SegmentQualityContext};
-pub(crate) use source_buffers::{AppendContinuityInfo, AppendResetReason, MediaSegmentPushData};
+pub(crate) use source_buffers::{
+    AppendContinuityInfo, AppendResetReason, MediaSegmentPushData, ResetReasonUpdate,
+};
 
 mod segment_inventory;
 mod source_buffers;
@@ -357,6 +359,14 @@ impl MediaElementReference {
         metadata: MediaSegmentPushData,
     ) -> Result<(), PushSegmentError> {
         let has_media_offset = self.media_offset.is_some();
+        let base_decode_time_start = match media_type {
+            MediaType::Audio => self
+                .audio_inventory
+                .contiguous_anchor(metadata.start(), 0.25),
+            MediaType::Video => self
+                .video_inventory
+                .contiguous_anchor(metadata.start(), 0.25),
+        };
         match self.buffer_mut_for(media_type) {
             None => Err(PushSegmentError::NoSourceBuffer(media_type)),
 
@@ -364,7 +374,8 @@ impl MediaElementReference {
                 let metadata_start = metadata.start();
                 let do_time_parsing = !has_media_offset
                     && (media_type == MediaType::Audio || media_type == MediaType::Video);
-                let response = sb.push_media_segment(metadata, do_time_parsing)?;
+                let response =
+                    sb.push_media_segment(metadata, do_time_parsing, base_decode_time_start)?;
                 if let Some(media_start) = response.media_start() {
                     let media_offset = media_start - metadata_start;
                     Logger::info(&format!(
@@ -394,12 +405,26 @@ impl MediaElementReference {
         media_type: MediaType,
         start: f64,
         end: f64,
-        reset_reason: Option<AppendResetReason>,
+        reset_reason_update: ResetReasonUpdate,
     ) -> Result<(), RemoveDataError> {
         match self.buffer_mut_for(media_type) {
             None => Err(RemoveDataError::NoSourceBuffer(media_type)),
             Some(sb) => {
-                sb.remove_buffer(start, end, reset_reason);
+                sb.remove_buffer(start, end, reset_reason_update);
+                Ok(())
+            }
+        }
+    }
+
+    pub(crate) fn set_pending_append_reset_reason(
+        &mut self,
+        media_type: MediaType,
+        reason: AppendResetReason,
+    ) -> Result<(), RemoveDataError> {
+        match self.buffer_mut_for(media_type) {
+            None => Err(RemoveDataError::NoSourceBuffer(media_type)),
+            Some(sb) => {
+                sb.set_pending_reset_reason(reason);
                 Ok(())
             }
         }

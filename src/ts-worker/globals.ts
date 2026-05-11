@@ -112,7 +112,6 @@ export interface SourceBufferInstanceInfo<HasMseInWorker extends boolean> {
   id: SourceBufferId;
   mediaType: MediaType;
   lastInitTimescale: number | undefined;
-  lastBufferedEnd: number | undefined;
   sourceBuffer: HasMseInWorker extends true ? QueuedSourceBuffer : null;
   transmuxer: null | Transmuxer;
 }

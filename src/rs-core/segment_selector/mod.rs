@@ -11,6 +11,7 @@ use crate::{
 /// each keeping a state keeping track of which segment has already been loaded (or as written
 /// here, "validated"), which did not need to be loaded and other state helping it toward
 /// communicating which segment it thinks should be loaded next.
+#[derive(Clone, Debug)]
 pub(crate) struct NextSegmentSelectors {
     /// Segment-selection logic for the audio media type
     audio: NextSegmentSelector,
@@ -121,6 +122,7 @@ impl NextSegmentSelectors {
     }
 }
 
+#[derive(Clone, Debug)]
 pub(crate) struct NextSegmentSelector {
     /// Interface allowing to keep track of which audio and video segments we need to load next.
     segment_cursor: SegmentCursor,

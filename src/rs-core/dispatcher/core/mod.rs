@@ -14,7 +14,7 @@ use crate::{
         OtherErrorCode, PushedSegmentErrorCode, RequestId, SourceBufferId, TimerId,
     },
     dispatcher::segment_request_contexts::PendingSegmentRequest,
-    media_element::{AppendResetReason, SegmentQualityContext},
+    media_element::{AppendResetReason, ResetReasonUpdate, SegmentQualityContext},
     parser::{SegmentTimeInfo, TopLevelPlaylist, TopLevelPlaylistParsingError},
     playlist_store::{
         LockVariantResponse, MediaPlaylistPermanentId, PlaylistStore, ProbeSegmentMetadata,
@@ -28,6 +28,36 @@ use crate::{
 };
 
 mod startup;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct NeededSegmentKey {
+    init_id: Option<f64>,
+    media_sequence: Option<u32>,
+    media_start: Option<f64>,
+    media_end: Option<f64>,
+}
+
+impl Dispatcher {
+    fn needed_segment_key_for(
+        &self,
+        selectors: &mut crate::segment_selector::NextSegmentSelectors,
+        media_type: MediaType,
+    ) -> Option<NeededSegmentKey> {
+        let pl_store = self.playlist_store.as_ref()?;
+        let (segment_list, context) = pl_store.curr_media_playlist_segment_info(media_type)?;
+        let needed = selectors.get_mut(media_type).most_needed_segment(
+            segment_list,
+            &context,
+            self.media_element_ref.inventory(media_type),
+        );
+        Some(NeededSegmentKey {
+            init_id: needed.init_segment().map(|i| i.id()),
+            media_sequence: needed.media_segment().map(|s| s.sequence()),
+            media_start: needed.media_segment().map(|s| s.start()),
+            media_end: needed.media_segment().map(|s| s.end()),
+        })
+    }
+}
 
 impl Dispatcher {
     /// Completely stop playback of the current content if one and free all its associated
@@ -378,9 +408,18 @@ impl Dispatcher {
                             mt, min_pos, max_pos
                         ));
                         if let (Ok(_), Ok(_)) = (
-                            self.media_element_ref.remove_data(mt, 0., min_pos, None),
-                            self.media_element_ref
-                                .remove_data(mt, max_pos, f64::MAX, None),
+                            self.media_element_ref.remove_data(
+                                mt,
+                                0.,
+                                min_pos,
+                                ResetReasonUpdate::NoChange,
+                            ),
+                            self.media_element_ref.remove_data(
+                                mt,
+                                max_pos,
+                                f64::MAX,
+                                ResetReasonUpdate::NoChange,
+                            ),
                         ) {
                             self.segment_selectors
                                 .restart_from_position(wanted_pos - 0.2);
@@ -712,21 +751,37 @@ impl Dispatcher {
     /// Actions to perform once a seek has been performed on the media element.
     fn on_seek(&mut self) {
         let wanted_pos = self.media_element_ref.wanted_position();
+        let mut previous_selectors = self.segment_selectors.clone();
+        let previous_needed = [MediaType::Audio, MediaType::Video]
+            .map(|mt| (mt, self.needed_segment_key_for(&mut previous_selectors, mt)));
         self.segment_selectors
             .restart_from_position(wanted_pos - 0.2);
 
-        // Signal AppendReset + clean the forward buffer to avoid unnecessary
-        // drifts between already-loaded segments and future loaded ones.
-        // XXX TODO: Only if the list of wanted segments actually change for
-        //           each buffer? This makes every tiny seek lead to a
-        //           rebuffering, so not ideal.
+        let mut next_selectors = self.segment_selectors.clone();
+        let next_needed = [MediaType::Audio, MediaType::Video]
+            .map(|mt| (mt, self.needed_segment_key_for(&mut next_selectors, mt)));
         for media_type in [MediaType::Audio, MediaType::Video] {
-            let _ = self.media_element_ref.remove_data(
-                media_type,
-                wanted_pos,
-                f64::INFINITY,
-                Some(AppendResetReason::Seek),
-            );
+            let _ = self
+                .media_element_ref
+                .set_pending_append_reset_reason(media_type, AppendResetReason::Seek);
+            let previous = previous_needed
+                .iter()
+                .find(|(mt, _)| *mt == media_type)
+                .map(|(_, key)| *key)
+                .unwrap_or(None);
+            let next = next_needed
+                .iter()
+                .find(|(mt, _)| *mt == media_type)
+                .map(|(_, key)| *key)
+                .unwrap_or(None);
+            if previous != next {
+                let _ = self.media_element_ref.remove_data(
+                    media_type,
+                    wanted_pos,
+                    f64::INFINITY,
+                    ResetReasonUpdate::NoChange,
+                );
+            }
         }
 
         self.requester.lock_segment_requests();
