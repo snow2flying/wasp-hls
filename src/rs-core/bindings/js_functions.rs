@@ -1022,6 +1022,31 @@ impl ParsedSegmentInfo {
     }
 }
 
+/// Precise timestamp value represented as an integer and its associated timescale.
+#[derive(Clone, Copy, Debug)]
+pub struct TimescaledTimestamp {
+    value: u64,
+    timescale: u32,
+}
+
+impl TimescaledTimestamp {
+    pub(crate) fn new(value: u64, timescale: u32) -> Self {
+        Self { value, timescale }
+    }
+
+    pub(crate) fn value(self) -> u64 {
+        self.value
+    }
+
+    pub(crate) fn timescale(self) -> u32 {
+        self.timescale
+    }
+
+    pub(crate) fn to_f64_seconds(self) -> f64 {
+        self.value as f64 / self.timescale as f64
+    }
+}
+
 /// Result of a segment inspection (e.g. when calling `jsInspectSegment`)
 pub struct InspectedSegmentMetadata {
     /// The container-level mime-type inferred from the segment's metadata itself.

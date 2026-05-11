@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use crate::bindings::{
     jsAddSourceBuffer, jsAppendBuffer, jsFlush, jsRemoveBuffer, AddSourceBufferErrorCode,
     MediaType, ParsedSegmentInfo, ResourceId, SegmentParsingErrorCode, SourceBufferId,
+    TimescaledTimestamp,
 };
 use crate::dispatcher::JsMemoryBlob;
 use crate::parser::SegmentTimeInfo;
@@ -48,7 +49,7 @@ pub(super) struct SourceBuffer {
     ///
     /// When available, this exact timescaled value is used as the continuity anchor for the next
     /// transmuxed append.
-    last_segment_end_time: Option<u64>,
+    last_segment_end_time: Option<TimescaledTimestamp>,
 
     /// Some state may be maintained by the potential lower-level transmuxer we'll feed data too.
     /// That state makes sense as we're pushing contiguous segments but does not make sense to be
@@ -181,7 +182,10 @@ impl SourceBuffer {
         };
 
         // Use the parsed segment end as a good basis for the next decode time
-        self.last_segment_end_time = parsed.as_ref().and_then(|x| x.end());
+        self.last_segment_end_time = parsed.as_ref().and_then(|x| {
+            x.end()
+                .map(|value| TimescaledTimestamp::new(value, x.timescale()))
+        });
         Ok(AppendBufferResponse { parsed })
     }
 
@@ -572,7 +576,7 @@ impl SegmentHints {
 
 fn build_segment_hints(
     segment_time_info: &SegmentTimeInfo,
-    last_segment_end: Option<u64>,
+    last_segment_end: Option<TimescaledTimestamp>,
     reset_transmuxer: bool,
 ) -> SegmentHints {
     const TIMESCALE: u32 = 90_000;
@@ -583,11 +587,32 @@ fn build_segment_hints(
     let start_dts = match last_segment_end {
         // TODO: We should just be able to determine with confidence what is and is not a
         // discontinuity here, to not rely on that weird huge trick.
-        Some(last_end) if playlist_start.abs_diff(last_end) <= CONTIGUITY_TOLERANCE_TICKS => {
-            last_end
+        Some(last_end) => {
+            let last_end_in_video_ts = ((last_end.value() as f64 * TIMESCALE as f64)
+                / last_end.timescale() as f64)
+                .round() as u64;
+            if playlist_start.abs_diff(last_end_in_video_ts) <= CONTIGUITY_TOLERANCE_TICKS {
+                last_end.value()
+            } else {
+                playlist_start
+            }
         }
-        _ => playlist_start,
+        None => playlist_start,
     };
 
-    SegmentHints::new(start_dts, TIMESCALE, reset_transmuxer)
+    let start_dts_timescale = match last_segment_end {
+        Some(last_end) => {
+            let last_end_in_video_ts = ((last_end.value() as f64 * TIMESCALE as f64)
+                / last_end.timescale() as f64)
+                .round() as u64;
+            if playlist_start.abs_diff(last_end_in_video_ts) <= CONTIGUITY_TOLERANCE_TICKS {
+                last_end.timescale()
+            } else {
+                TIMESCALE
+            }
+        }
+        None => TIMESCALE,
+    };
+
+    SegmentHints::new(start_dts, start_dts_timescale, reset_transmuxer)
 }
