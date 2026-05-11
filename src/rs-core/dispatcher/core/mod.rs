@@ -29,6 +29,7 @@ use crate::{
 
 mod startup;
 
+// XXX TODO: That's shit
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct NeededSegmentKey {
     init_id: Option<f64>,
@@ -1048,7 +1049,16 @@ impl Dispatcher {
             .media_element_ref
             .announce_incoming_media_segment(media_type, data, time_info, context);
 
+        // Check next segment BEFORE actually pushing, as the pushing operation could take in the
+        // tens of ms or even in the hundreds depending on segment size and platform performance.
+        //
+        // We still announce the incoming segment first to ensure the `MediaElementReference`'s
+        // inventory is up-to-date.
         self.check_best_variant();
+        self.segment_selectors
+            .get_mut(media_type)
+            .validate_media_until(segment_end);
+        self.check_segments_to_request();
 
         match self
             .media_element_ref
@@ -1061,10 +1071,6 @@ impl Dispatcher {
                 self.stop_current_content();
             }
             Ok(()) => {
-                self.segment_selectors
-                    .get_mut(media_type)
-                    .validate_media_until(segment_end);
-                self.check_segments_to_request();
                 if utils::was_last_segment(self.playlist_store.as_ref(), media_type, segment_start)
                 {
                     Logger::info(&format!(
