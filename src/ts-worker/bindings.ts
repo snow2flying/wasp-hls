@@ -1612,7 +1612,6 @@ export function isTypeSupported(
   mediaType: MediaType,
   codec: string,
 ): boolean | undefined {
-  const mimeTypes = [];
   let mimeTypePrefix: string;
   switch (mediaType) {
     case MediaType.Audio:
@@ -1625,24 +1624,19 @@ export function isTypeSupported(
       logger.error("Unknown MediaType");
       return false;
   }
-  if (playerInstance.canDemuxMpeg2Ts() === true) {
-    mimeTypes.push(`${mimeTypePrefix}mp2t;codecs=\"${codec}\"`);
-  }
-  mimeTypes.push(`${mimeTypePrefix}mp4;codecs=\"${codec}\"`);
+  const mimeType = `${mimeTypePrefix}mp4;codecs=\"${codec}\"`;
 
   // TODO keep somewhere which one is supported to be able to know if
   // transmuxing is necessary or not
   if (playerInstance.hasMseInWorker() === true) {
-    return mimeTypes.some((mimeType) => MediaSource.isTypeSupported(mimeType));
+    return MediaSource.isTypeSupported(mimeType);
   }
-  const cached = mimeTypes
-    .map((mimeType) => cachedCodecsSupport.get(mimeType))
-    .filter((isSupported) => isSupported !== undefined);
-  if (cached.length > 0) {
-    return cached.some((isSupported) => isSupported);
+  const cached = cachedCodecsSupport.get(mimeType);
+  if (cached !== undefined) {
+    return cached;
   }
 
-  mimeTypes.forEach((mimeType) => codecsToAskForSupport.add(mimeType));
+  codecsToAskForSupport.add(mimeType);
   if (isCurrentlyWaitingToAskSupport) {
     return undefined;
   }

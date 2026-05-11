@@ -832,13 +832,6 @@ export interface InitializationMainMessage {
      * `false` otherwise.
      */
     hasMseInWorker: boolean;
-    /**
-     * If `true`, mpeg2 transport stream can be used a segment container on the
-     * current environment.
-     *
-     * If `false`, they have to be transmuxed first.
-     */
-    canDemuxMpeg2Ts: boolean;
     /** Url to the WASM part of the WaspHlsPlayer */
     wasmUrl: string;
     /** The initial logger level to set. */

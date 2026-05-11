@@ -19,6 +19,9 @@ export function shouldTransmux(typ: string) {
   if (!canTransmux(typ)) {
     return false;
   }
+  if (isMpegTsType(typ)) {
+    return true;
+  }
   if (typeof MediaSource === "undefined") {
     return cachedCodecsSupport.get(typ) !== true;
   }

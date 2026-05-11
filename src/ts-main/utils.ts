@@ -5,37 +5,6 @@ import postMessageToWorker from "./postMessageToWorker.ts";
 import type { ContentMetadata } from "./types.ts";
 
 /**
- * Default mime-type used for checking support of mpeg2-ts media.
- */
-const DEFAULT_MPEG2_TS_TYPE = 'video/mp2t;codecs="avc1.4D401F"';
-
-/**
- * If `true`, we're on the Firefox web browser.
- */
-const isFirefox = navigator.userAgent.toLowerCase().indexOf("firefox") !== -1;
-
-/**
- * Returns `true` if the current environment can support mpeg2-ts contents.
- * @returns {boolean}
- */
-export function canDemuxMpeg2Ts(): boolean {
-  if (isFirefox) {
-    // Very sadly, Firefox seems to pollute te console with a warning when
-    // testing unsupported mime-types this way.
-    //
-    // As a library, we don't like having side-effect in the console because it
-    // may annoy applications' developers.
-    // Because of this, it is penalized, no MPEG-TS for you, nah! This should
-    // be the case in most (all?) cases anyways.
-    return false;
-  }
-  return (
-    typeof MediaSource === "function" &&
-    MediaSource.isTypeSupported(DEFAULT_MPEG2_TS_TYPE)
-  );
-}
-
-/**
  * Transforms received Error, in an unknown format, into an object with an
  * optional `name` string (if found on the Error) and a `message` string who is
  * either set to the Error's message or to `defaultMsg` if no such message was

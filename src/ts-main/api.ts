@@ -28,7 +28,6 @@ import postMessageToWorker from "./postMessageToWorker.ts";
 import type { ContentMetadata } from "./types.ts";
 import { PlayerState } from "./types.ts";
 import {
-  canDemuxMpeg2Ts,
   potentiallyRelativeUrlToAbsoluteUrl,
   requestStopForContent,
   waitForLoad,
@@ -1007,7 +1006,6 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
           typeof MediaSource === "function" &&
           /* eslint-disable-next-line */
           (MediaSource as any).canConstructInDedicatedWorker === true,
-        canDemuxMpeg2Ts: canDemuxMpeg2Ts(),
         wasmUrl: potentiallyRelativeUrlToAbsoluteUrl(opts.wasmUrl),
         initialBandwidth: opts.initialBandwidth ?? 0,
         logLevel: logger.getLevel(),

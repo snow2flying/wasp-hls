@@ -73,11 +73,9 @@ export default function MessageReceiver() {
         }
         logger.setLevel(data.value.logLevel);
         wasInitializedCalled = true;
-        const { wasmUrl, hasMseInWorker, canDemuxMpeg2Ts, initialBandwidth } =
-          data.value;
+        const { wasmUrl, hasMseInWorker, initialBandwidth } = data.value;
         initializationProm = initialize(wasmUrl, data.value.initialConfig, {
           hasMseInWorker,
-          canDemuxMpeg2Ts,
           initialBandwidth,
         })
           .then(() => {

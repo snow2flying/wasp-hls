@@ -10,7 +10,6 @@ import { Dispatcher, type InitOutput, type MediaType } from "../wasm/index.js";
 
 export interface WorkerInitializationOptions {
   hasMseInWorker: boolean;
-  canDemuxMpeg2Ts: boolean;
   /**
    * An initial bandwidth estimate which will be relied on initially, in bits
    * per second.
@@ -28,10 +27,6 @@ class PlayerInstance {
     return this._instanceInfo?.hasMseInWorker;
   }
 
-  public canDemuxMpeg2Ts(): boolean | undefined {
-    return this._instanceInfo?.canDemuxMpeg2Ts;
-  }
-
   public start(
     wasm: InitOutput,
     config: WaspHlsPlayerConfig,
@@ -44,7 +39,6 @@ class PlayerInstance {
       dispatcher,
       content: null,
       hasMseInWorker: opts.hasMseInWorker,
-      canDemuxMpeg2Ts: opts.canDemuxMpeg2Ts,
     };
   }
 
@@ -240,5 +234,4 @@ interface WorkerInfo {
   dispatcher: Dispatcher;
   content: ContentInfo | null;
   hasMseInWorker: boolean;
-  canDemuxMpeg2Ts: boolean;
 }
