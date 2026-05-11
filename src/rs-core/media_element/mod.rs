@@ -356,28 +356,12 @@ impl MediaElementReference {
         media_type: MediaType,
         metadata: MediaSegmentPushData,
     ) -> Result<(), PushSegmentError> {
-        let (inferred_segment_start, has_validated_buffered_content) = match media_type {
-            MediaType::Audio => (
-                self.audio_inventory
-                    .contiguous_anchor(metadata.start(), 0.25),
-                self.audio_inventory.has_validated_segments(),
-            ),
-            MediaType::Video => (
-                self.video_inventory
-                    .contiguous_anchor(metadata.start(), 0.25),
-                self.video_inventory.has_validated_segments(),
-            ),
-        };
         match self.buffer_mut_for(media_type) {
             None => Err(PushSegmentError::NoSourceBuffer(media_type)),
 
             Some(sb) => {
                 let metadata_start = metadata.start();
-                let response = sb.push_media_segment(
-                    metadata,
-                    inferred_segment_start,
-                    has_validated_buffered_content,
-                )?;
+                let response = sb.push_media_segment(metadata)?;
                 if let Some(media_start) = response.media_start() {
                     let media_offset = media_start - metadata_start;
                     Logger::info(&format!(

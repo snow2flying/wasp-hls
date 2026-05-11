@@ -149,20 +149,17 @@ impl SourceBuffer {
     pub(super) fn push_media_segment(
         &mut self,
         data: MediaSegmentPushData,
-        base_decode_time_start: Option<f64>,
-        has_validated_buffered_content: bool,
     ) -> Result<AppendBufferResponse, PushSegmentError> {
         self.last_segment_pushed = false;
         self.was_used = true;
         let segment_data = data.segment_data.id();
         let segment_time_info = data.time_info().clone();
-        let continuity_info = self.compute_append_continuity_info(
-            &segment_time_info,
-            base_decode_time_start,
-            has_validated_buffered_content,
-        );
+        let buffer_state_data = self.buffer_state_data_for_segment(&segment_time_info);
         let id = data.id;
-        let parsed = match jsAppendBuffer(self.id, segment_data, Some(&continuity_info)) {
+        Logger::debug(&format!("Buffer {} ({}): Pushing", self.id, self.typ));
+        self.queue
+            .push_back(SourceBufferQueueElement::PushMedia { data, id });
+        let parsed = match jsAppendBuffer(self.id, segment_data, Some(&buffer_state_data)) {
             Err(err) => {
                 return Err(PushSegmentError::from_js_append_buffer_error(
                     self.media_type,
@@ -171,12 +168,11 @@ impl SourceBuffer {
             }
             Ok(parsed) => parsed,
         };
+
+        // Use the parsed segment end as a good basis for the next decode time
         self.last_segment_end_time = parsed
             .as_ref()
             .and_then(|x| x.start().and_then(|s| x.duration().map(|d| s + d)));
-        self.queue
-            .push_back(SourceBufferQueueElement::PushMedia { data, id });
-        Logger::debug(&format!("Buffer {} ({}): Pushing", self.id, self.typ));
         Ok(AppendBufferResponse { parsed })
     }
 
@@ -285,34 +281,25 @@ impl SourceBuffer {
         queue_elt
     }
 
-    fn compute_append_continuity_info(
+    fn buffer_state_data_for_segment(
         &mut self,
         segment_time_info: &SegmentTimeInfo,
-        segment_start: Option<f64>,
-        has_validated_buffered_content: bool,
     ) -> BufferStateData {
         let reset_reason = if self.pending_reset_reason != BufferStateUpdate::None {
             let reason = self.pending_reset_reason;
             self.pending_reset_reason = BufferStateUpdate::None;
             reason
-        } else if has_validated_buffered_content && segment_start.is_none() {
-            BufferStateUpdate::PlaylistDiscontinuity
         } else {
             BufferStateUpdate::None
         };
+
         let segment_start = if reset_reason == BufferStateUpdate::None {
             // If no ResetReason, assume contiguous-ness
             self.last_segment_end_time
-                .or(segment_start)
                 .unwrap_or_else(|| segment_time_info.start())
         } else {
-            segment_start.unwrap_or_else(|| segment_time_info.start())
+            segment_time_info.start()
         };
-        Logger::debug(&format!(
-            "!!!!!!! TIMEINF2 {} {}",
-            segment_time_info.start(),
-            segment_time_info.duration()
-        ));
         BufferStateData::new(segment_start, segment_time_info.duration(), reset_reason)
     }
 }
