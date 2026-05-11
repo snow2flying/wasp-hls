@@ -25,7 +25,7 @@ import {
   unwrapResult,
   writeAppendBufferResult,
 } from "./helpers.js";
-import type { HostBindings } from "./types.js";
+import type { AppendContinuityInfo, HostBindings } from "./types.js";
 
 export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
   return {
@@ -177,6 +177,12 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         sourceBufferId: number,
         resourceId: number,
         parseTimeInformation: number,
+        hasContinuityInfo: number,
+        segmentStart: number,
+        hasSegmentDuration: number,
+        segmentDuration: number,
+        contiguous: number,
+        resetReason: number,
         hasStartOut: number,
         startOut: number,
         hasDurationOut: number,
@@ -190,6 +196,15 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
             sourceBufferId,
             resourceId,
             parseTimeInformation !== 0,
+            hasContinuityInfo !== 0
+              ? {
+                  start: segmentStart,
+                  duration:
+                    hasSegmentDuration !== 0 ? segmentDuration : undefined,
+                  contiguous: contiguous !== 0,
+                  resetReason: parseAppendResetReason(resetReason),
+                }
+              : undefined,
           ),
           hasStartOut,
           startOut,
@@ -452,4 +467,26 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
       },
     },
   };
+}
+
+function parseAppendResetReason(
+  rawValue: number,
+): AppendContinuityInfo["resetReason"] {
+  switch (rawValue) {
+    case 1:
+      return "seek";
+    case 2:
+      return "playlist-discontinuity";
+    case 3:
+      return "variant-switch";
+    case 4:
+      return "audio-track-switch";
+    case 5:
+      return "init-segment-change";
+    case 6:
+      return "buffer-flush";
+    case 0:
+    default:
+      return "none";
+  }
 }

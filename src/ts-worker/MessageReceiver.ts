@@ -167,6 +167,15 @@ export default function MessageReceiver() {
         ) {
           return;
         }
+        const sourceBufferInfo = contentInfo.mediaSourceObj.sourceBuffers.find(
+          ({ id }) => id === data.value.sourceBufferId,
+        );
+        if (sourceBufferInfo !== undefined) {
+          sourceBufferInfo.lastBufferedEnd =
+            data.value.buffered.length >= 2
+              ? data.value.buffered[data.value.buffered.length - 1]
+              : undefined;
+        }
         const buffered = new JsTimeRanges(data.value.buffered);
         dispatcher.on_source_buffer_update(data.value.sourceBufferId, buffered);
         break;

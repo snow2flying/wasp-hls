@@ -43,7 +43,15 @@ pub(super) struct SourceBuffer {
     /// buffer, so special considerations, such as calling the `jsFlush` function might need to be
     /// taken on buffer updates.
     needs_reflush: bool,
+
+    /// Time information on the last media segment scheduled on that buffer.
+    last_media_segment_time_info: Option<SegmentTimeInfo>,
+
+    /// Explicit reason why the next media append should reseed transmux state.
+    pending_reset_reason: Option<AppendResetReason>,
 }
+
+const CONTIGUITY_EPSILON_SECONDS: f64 = 0.25;
 
 impl SourceBuffer {
     /// Create a new `SourceBuffer` for the given `MediaType` and the mime-type indicated by `typ`.
@@ -67,6 +75,8 @@ impl SourceBuffer {
                 needs_reflush: false,
                 last_segment_pushed: false,
                 media_type,
+                last_media_segment_time_info: None,
+                pending_reset_reason: None,
             }),
             Err(err) => Err(AddSourceBufferError::from_js_add_source_buffer_error(
                 err, &typ,
@@ -105,6 +115,9 @@ impl SourceBuffer {
         &mut self,
         segment_data: JsMemoryBlob,
     ) -> Result<AppendBufferResponse, PushSegmentError> {
+        if self.was_used && self.pending_reset_reason.is_none() {
+            self.pending_reset_reason = Some(AppendResetReason::InitSegmentChange);
+        }
         self.was_used = true;
         self.queue
             .push_back(SourceBufferQueueElement::PushInit(segment_data.id()));
@@ -112,7 +125,7 @@ impl SourceBuffer {
             "Buffer {} ({}): Pushing initialization segment",
             self.id, self.typ
         ));
-        match jsAppendBuffer(self.id, segment_data.id(), false) {
+        match jsAppendBuffer(self.id, segment_data.id(), false, None) {
             Err(err) => Err(PushSegmentError::from_js_append_buffer_error(
                 self.media_type,
                 err,
@@ -142,16 +155,26 @@ impl SourceBuffer {
         self.last_segment_pushed = false;
         self.was_used = true;
         let segment_data = data.segment_data.id();
+        let segment_time_info = data.time_info().clone();
+        let continuity_info = self.compute_append_continuity_info(&segment_time_info);
         let id = data.id;
         self.queue
             .push_back(SourceBufferQueueElement::PushMedia((data, id)));
         Logger::debug(&format!("Buffer {} ({}): Pushing", self.id, self.typ));
-        match jsAppendBuffer(self.id, segment_data, parse_time_info) {
+        match jsAppendBuffer(
+            self.id,
+            segment_data,
+            parse_time_info,
+            Some(&continuity_info),
+        ) {
             Err(err) => Err(PushSegmentError::from_js_append_buffer_error(
                 self.media_type,
                 err,
             )),
-            Ok(x) => Ok(AppendBufferResponse { parsed: x }),
+            Ok(x) => {
+                self.last_media_segment_time_info = Some(segment_time_info);
+                Ok(AppendBufferResponse { parsed: x })
+            }
         }
     }
 
@@ -164,8 +187,26 @@ impl SourceBuffer {
     ///
     /// * `end` - End time, in seconds, of the range of time which should be removed from the
     ///   `SourceBuffer`.
-    pub(super) fn remove_buffer(&mut self, start: f64, end: f64) {
+    ///
+    /// * `reset_reason` - Supplementary context on why that removal operation happens. This is
+    ///   necessary because transmuxing is stateful, supplementary context is thus necessary to
+    ///   handle that maintained state properly.
+    pub(super) fn remove_buffer(
+        &mut self,
+        start: f64,
+        end: f64,
+        // XXX TODO: Is the semantic diff between `Some(AppendResetReason::None)` and `None` wanted?
+        // `None` leaves pending_reset_reason untouched (a previously queued reason survives), while
+        // `Some(AppendResetReason::None)` would overwrite it with `None`, silently discarding a
+        // pending reset.
+        // That second case never actually happens in the current callsites - callers either pass a
+        // real reason or `None`. To check what is wanted but something's fishy.
+        reset_reason: Option<AppendResetReason>,
+    ) {
         self.was_used = true;
+        if let Some(reason) = reset_reason {
+            self.pending_reset_reason = Some(reason);
+        }
         self.queue
             .push_back(SourceBufferQueueElement::Remove { start, end });
         Logger::debug(&format!(
@@ -179,8 +220,9 @@ impl SourceBuffer {
     ///
     /// There's special considerations too take care of here as we'll remove data corresponding to
     /// the current position. As such a seek will have to be performed once the remove is done
-    pub(super) fn flush_buffer(&mut self) {
+    pub(super) fn flush_buffer(&mut self, reset_reason: AppendResetReason) {
         self.was_used = true;
+        self.pending_reset_reason = Some(reset_reason);
         self.queue.push_back(SourceBufferQueueElement::Emptying);
         Logger::debug(&format!("Buffer {} ({}): emptying", self.id, self.typ));
         let _ = jsRemoveBuffer(self.id, 0., f64::INFINITY);
@@ -241,6 +283,29 @@ impl SourceBuffer {
             _ => {}
         }
         queue_elt
+    }
+
+    fn compute_append_continuity_info(
+        &mut self,
+        segment_time_info: &SegmentTimeInfo,
+    ) -> AppendContinuityInfo {
+        let reset_reason = self.pending_reset_reason.take().unwrap_or_else(|| {
+            match self.last_media_segment_time_info.as_ref() {
+                None => AppendResetReason::None,
+                Some(previous) if is_contiguous(previous, segment_time_info) => {
+                    AppendResetReason::None
+                }
+                Some(_) => AppendResetReason::PlaylistDiscontinuity,
+            }
+        });
+        let contiguous =
+            reset_reason == AppendResetReason::None && self.last_media_segment_time_info.is_some();
+        AppendContinuityInfo::new(
+            segment_time_info.start(),
+            segment_time_info.duration(),
+            contiguous,
+            reset_reason,
+        )
     }
 }
 
@@ -475,4 +540,85 @@ impl PushSegmentError {
 pub(crate) enum RemoveDataError {
     #[error("No SourceBuffer created for {0}")]
     NoSourceBuffer(MediaType),
+}
+
+/// Actual SourceBuffers may first need that data to be transmuxed to fmp4.
+///
+/// In that case, the transmuxing operation maintains state to determine pushed
+/// segment timestamp, and we have thus context to signal to indicate how that
+/// state might have changed since the last pushed segment.
+///
+/// This is what `AppendResetReason` is for, it communicates what happened since
+/// the last segment push so that state can be properly updated on the
+/// transmuxing side.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub(crate) enum AppendResetReason {
+    /// No need to reset the transmuxer's state
+    None = 0,
+    /// A seek has been performed
+    Seek = 1,
+    /// A discontinuity between the previous segment and the future pushed one was found
+    PlaylistDiscontinuity = 2,
+    /// We just switched variants
+    VariantSwitch = 3,
+    /// We just switched the audio track
+    AudioTrackSwitch = 4,
+    /// The init segment just changed
+    InitSegmentChange = 5,
+    /// We want to "flush" buffers (reconstruct them)
+    BufferFlush = 6,
+}
+
+/// Context about the continuity context of a pushed segment with a previously-pushed one.
+#[derive(Clone, Debug)]
+pub(crate) struct AppendContinuityInfo {
+    /// Start of that segment
+    start: f64,
+    /// Duration of that segment
+    duration: f64,
+    /// If `true` it is contiguous with the previous segment
+    ///
+    /// XXX TODO: Maybe this should be rs-core only? We could compute precise start and duration
+    /// boundaries, give a potential "reset reason", and that's it?
+    contiguous: bool,
+    reset_reason: AppendResetReason,
+}
+
+impl AppendContinuityInfo {
+    /// Create a new `AppendContinuityInfo`
+    pub(crate) fn new(
+        start: f64,
+        duration: f64,
+        contiguous: bool,
+        reset_reason: AppendResetReason,
+    ) -> Self {
+        Self {
+            start,
+            duration,
+            contiguous,
+            reset_reason,
+        }
+    }
+
+    pub(crate) fn start(&self) -> f64 {
+        self.start
+    }
+
+    pub(crate) fn duration(&self) -> f64 {
+        self.duration
+    }
+
+    pub(crate) fn contiguous(&self) -> bool {
+        self.contiguous
+    }
+
+    pub(crate) fn reset_reason(&self) -> AppendResetReason {
+        self.reset_reason
+    }
+}
+
+fn is_contiguous(previous: &SegmentTimeInfo, next: &SegmentTimeInfo) -> bool {
+    let expected_start = previous.end();
+    (next.start() - expected_start).abs() <= CONTIGUITY_EPSILON_SECONDS
 }

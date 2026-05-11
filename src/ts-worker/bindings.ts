@@ -32,6 +32,7 @@ import {
   SegmentParsingErrorCode,
 } from "../wasm/index.js";
 import type {
+  AppendContinuityInfo,
   HostBindings,
   InspectSegmentValue,
   MediaPlaylistParsingErrorCode,
@@ -789,6 +790,7 @@ export function addSourceBuffer(
       const sourceBufferId = nextSourceBufferId;
       sourceBuffers.push({
         lastInitTimescale: undefined,
+        lastBufferedEnd: undefined,
         id: sourceBufferId,
         transmuxer: mimeType === typ ? null : createTransmuxer(),
         sourceBuffer: null,
@@ -837,6 +839,7 @@ export function addSourceBuffer(
       const queuedSourceBuffer = new QueuedSourceBuffer(sourceBuffer);
       sourceBuffers.push({
         lastInitTimescale: undefined,
+        lastBufferedEnd: undefined,
         id: sourceBufferId,
         sourceBuffer: queuedSourceBuffer,
         transmuxer: mimeType === typ ? null : createTransmuxer(),
@@ -884,6 +887,7 @@ export function appendBuffer(
   sourceBufferId: SourceBufferId,
   resourceId: ResourceId,
   parseTimeInformation?: boolean,
+  continuityInfo?: AppendContinuityInfo,
 ): AppendBufferResult {
   let segment = jsMemoryResources.get(resourceId);
   const mediaSourceObj = getMediaSourceObj();
@@ -905,7 +909,7 @@ export function appendBuffer(
   const sourceBufferObjIdx = mediaSourceObj.sourceBuffers.findIndex(
     ({ id }) => id === sourceBufferId,
   );
-  if (sourceBufferObjIdx < -1) {
+  if (sourceBufferObjIdx < 0) {
     return AppendBufferResult.error(
       SegmentParsingErrorCode.NoSourceBuffer,
       "Segment preparation error: No SourceBuffer with the given `SourceBufferId`",
@@ -915,8 +919,21 @@ export function appendBuffer(
   const sourceBufferObj = mediaSourceObj.sourceBuffers[sourceBufferObjIdx];
   if (sourceBufferObj.transmuxer !== null) {
     try {
-      const transmuxedData =
-        sourceBufferObj.transmuxer.transmuxSegment(segment);
+      const transmuxOptions =
+        continuityInfo === undefined
+          ? undefined
+          : {
+              continuity: {
+                ...continuityInfo,
+                // XXX TODO: What if seeking back? Here `lastBufferedEnd` could be
+                // about a further segment that's not the last one
+                bufferedEnd: sourceBufferObj.lastBufferedEnd,
+              },
+            };
+      const transmuxedData = sourceBufferObj.transmuxer.transmuxSegment(
+        segment,
+        transmuxOptions,
+      );
       if (transmuxedData !== null) {
         segment = transmuxedData;
       } else {
@@ -958,6 +975,8 @@ export function appendBuffer(
         .then(() => {
           try {
             const timeRange = sourceBufferObj.sourceBuffer.getBufferedRanges();
+            sourceBufferObj.lastBufferedEnd =
+              getBufferedEndFromTimeRanges(timeRange);
             const buffered = new JsTimeRanges(
               timeRangesToFloat64Array(timeRange),
             );
@@ -1112,6 +1131,12 @@ function inferMediaTypeFromCodecs(codecs: string[]): MediaType {
 
 function isAudioCodec(codec: string): boolean {
   return /^(mp4a|ac-3|ec-3|ac-4|opus|flac|alac)\b/i.test(codec);
+}
+
+function getBufferedEndFromTimeRanges(
+  timeRange: TimeRanges,
+): number | undefined {
+  return timeRange.length > 0 ? timeRange.end(timeRange.length - 1) : undefined;
 }
 
 function isLikelyAacProbeSegment(data: Uint8Array): boolean {

@@ -14,7 +14,7 @@ use crate::{
         OtherErrorCode, PushedSegmentErrorCode, RequestId, SourceBufferId, TimerId,
     },
     dispatcher::segment_request_contexts::PendingSegmentRequest,
-    media_element::SegmentQualityContext,
+    media_element::{AppendResetReason, SegmentQualityContext},
     parser::{SegmentTimeInfo, TopLevelPlaylist, TopLevelPlaylistParsingError},
     playlist_store::{
         LockVariantResponse, MediaPlaylistPermanentId, PlaylistStore, ProbeSegmentMetadata,
@@ -144,9 +144,11 @@ impl Dispatcher {
     pub(super) fn set_audio_track_core(&mut self, track_id: Option<u32>) {
         if let Some(ref mut pl_store) = self.playlist_store {
             match pl_store.set_audio_track(track_id) {
-                SetAudioTrackResponse::AudioMediaUpdate => {
-                    self.handle_media_playlist_update(&[MediaType::Audio], true, true)
-                }
+                SetAudioTrackResponse::AudioMediaUpdate => self.handle_media_playlist_update(
+                    &[MediaType::Audio],
+                    true,
+                    Some(AppendResetReason::AudioTrackSwitch),
+                ),
                 SetAudioTrackResponse::VariantUpdate {
                     updates,
                     unlocked_variant,
@@ -376,8 +378,9 @@ impl Dispatcher {
                             mt, min_pos, max_pos
                         ));
                         if let (Ok(_), Ok(_)) = (
-                            self.media_element_ref.remove_data(mt, 0., min_pos),
-                            self.media_element_ref.remove_data(mt, max_pos, f64::MAX),
+                            self.media_element_ref.remove_data(mt, 0., min_pos, None),
+                            self.media_element_ref
+                                .remove_data(mt, max_pos, f64::MAX, None),
                         ) {
                             self.segment_selectors
                                 .restart_from_position(wanted_pos - 0.2);
@@ -712,6 +715,20 @@ impl Dispatcher {
         self.segment_selectors
             .restart_from_position(wanted_pos - 0.2);
 
+        // Signal AppendReset + clean the forward buffer to avoid unnecessary
+        // drifts between already-loaded segments and future loaded ones.
+        // XXX TODO: Only if the list of wanted segments actually change for
+        //           each buffer? This makes every tiny seek lead to a
+        //           rebuffering, so not ideal.
+        for media_type in [MediaType::Audio, MediaType::Video] {
+            let _ = self.media_element_ref.remove_data(
+                media_type,
+                wanted_pos,
+                f64::INFINITY,
+                Some(AppendResetReason::Seek),
+            );
+        }
+
         self.requester.lock_segment_requests();
         self.requester.update_base_position(Some(wanted_pos));
         self.check_requested_segments_still_needed();
@@ -828,7 +845,17 @@ impl Dispatcher {
                 return;
             }
         };
-        self.handle_media_playlist_update(&changed_media_types, flush || has_worsened, flush);
+
+        let flush_reason = if flush {
+            Some(AppendResetReason::VariantSwitch)
+        } else {
+            None
+        };
+        self.handle_media_playlist_update(
+            &changed_media_types,
+            flush || has_worsened,
+            flush_reason,
+        );
         if let Some(pl_store) = self.playlist_store.as_mut() {
             jsAnnounceVariantUpdate(pl_store.curr_variant().map(|v| v.id()));
         }
@@ -840,7 +867,7 @@ impl Dispatcher {
         &mut self,
         changed_media_types: &[MediaType],
         abort_prev: bool,
-        flush: bool,
+        flush: Option<AppendResetReason>,
     ) {
         if self.playlist_store.is_none() {
             return;
@@ -852,8 +879,8 @@ impl Dispatcher {
             if abort_prev {
                 self.abort_segment_requests_with_type(mt);
             }
-            if flush {
-                if let Err(e) = self.media_element_ref.flush(mt) {
+            if let Some(reset_reason) = flush {
+                if let Err(e) = self.media_element_ref.flush(mt, reset_reason) {
                     Logger::warn(&format!(
                         "Could not remove data from the previous {mt} buffer: {}",
                         e

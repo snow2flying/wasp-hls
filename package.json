@@ -39,7 +39,8 @@
     "list": "node scripts/list-npm-scripts.mjs",
     "scripts": "node scripts/list-npm-scripts.mjs",
     "serve": "node scripts/tasks/index.mjs serve",
-    "start": "node scripts/tasks/index.mjs start"
+    "start": "node scripts/tasks/index.mjs start",
+    "test:transmux": "node --test tests/transmux-timeline-anchor.test.mjs"
   },
   "scripts-list": {
     "Build": {

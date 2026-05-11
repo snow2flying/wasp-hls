@@ -1,5 +1,6 @@
 import { isLikelyAacData } from "./aac-utils.ts";
 import AdtsPacketParser from "./AdtsPacketParser.ts";
+import { ONE_SECOND_IN_TS } from "./clock-utils.ts";
 import type { ElementaryPacket } from "./ElementaryPacketParser.ts";
 import ElementaryPacketParser from "./ElementaryPacketParser.ts";
 import FullMp4SegmentConstructor from "./FullMp4SegmentConstructor.ts";
@@ -9,6 +10,7 @@ import Mp4VideoSegmentGenerator from "./Mp4VideoSegmentGenerator.ts";
 import { readNextAdtsOrId3 } from "./read-aac.ts";
 import TimedMetadataParser from "./TimedMetadataParser.ts";
 import TimestampRolloverHandler from "./TimestampRolloverHandler.ts";
+import { clearDtsInfo } from "./track-utils.ts";
 import TransportPacketParser from "./TransportPacketParser.ts";
 import TransportStreamSplitter from "./TransportStreamSplitter.ts";
 
@@ -44,12 +46,42 @@ export interface TransmuxerOptions {
   alignGopsAtEnd?: boolean;
 }
 
+export interface SegmentTimingInfo {
+  start: number;
+  duration?: number;
+}
+
+export type TransmuxResetReason =
+  | "none"
+  | "seek"
+  | "playlist-discontinuity"
+  | "variant-switch"
+  | "audio-track-switch"
+  | "init-segment-change"
+  | "buffer-flush";
+
+export interface TransmuxContinuityInfo {
+  start: number;
+  duration: number | undefined;
+  contiguous: boolean;
+  resetReason: TransmuxResetReason;
+  bufferedEnd: number | undefined;
+}
+
+export interface TransmuxSegmentOptions {
+  timing?: SegmentTimingInfo;
+  reset?: boolean;
+  continuity?: TransmuxContinuityInfo;
+}
+
 export default class Transmuxer {
   private _options: TransmuxerOptions;
   private _videoTrack: any;
   private _audioTrack: any;
   private _baseMediaDecodeTime: number;
   private _currentPipeline: AacPipelineElements | TsPipelineElements | null;
+  private _currentSegmentTiming: SegmentTimingInfo | null;
+  private _lastSegmentTiming: SegmentTimingInfo | null;
 
   constructor(options?: TransmuxerOptions | undefined) {
     this._options = options ?? {};
@@ -57,9 +89,18 @@ export default class Transmuxer {
     this._currentPipeline = null;
     this._videoTrack = null;
     this._audioTrack = null;
+    this._currentSegmentTiming = null;
+    this._lastSegmentTiming = null;
   }
 
-  public transmuxSegment(data: Uint8Array): Uint8Array | null {
+  public transmuxSegment(
+    data: Uint8Array,
+    options?: TransmuxSegmentOptions,
+  ): Uint8Array | null {
+    if (options?.reset === true) {
+      this.reset();
+    }
+    this._prepareForSegment(options?.continuity, options?.timing);
     const isAac = isLikelyAacData(data);
     if (isAac && this._currentPipeline?.name !== "aac") {
       this._setupAacPipeline();
@@ -71,6 +112,22 @@ export default class Transmuxer {
     } else {
       return this.pushTsSegment(data);
     }
+  }
+
+  public reset(): void {
+    if (this._currentPipeline?.name === "ts") {
+      this._currentPipeline.mp4VideoSegmentGenerator?.cancel();
+      this._currentPipeline.mp4AudioSegmentGenerator?.cancel();
+      this._currentPipeline.mp4SegmentConstructor.cancel();
+    } else if (this._currentPipeline?.name === "aac") {
+      this._currentPipeline.mp4AudioSegmentGenerator?.cancel();
+      this._currentPipeline.mp4SegmentConstructor.cancel();
+    }
+    this._currentPipeline = null;
+    this._videoTrack = null;
+    this._audioTrack = null;
+    this._currentSegmentTiming = null;
+    this._lastSegmentTiming = null;
   }
 
   public pushTsSegment(input: Uint8Array): Uint8Array | null {
@@ -171,7 +228,7 @@ export default class Transmuxer {
         if (pipeline.mp4AudioSegmentGenerator === null) {
           this._audioTrack = this._audioTrack ?? {
             timelineStartInfo: {
-              baseMediaDecodeTime: this._baseMediaDecodeTime,
+              baseMediaDecodeTime: this._getCurrentBaseMediaDecodeTime(),
             },
             codec: "adts",
             type: "audio",
@@ -290,6 +347,8 @@ export default class Transmuxer {
 
     if (pipeline?.mp4SegmentConstructor !== undefined) {
       const segmentInfo = pipeline.mp4SegmentConstructor.finishSegment();
+      this._lastSegmentTiming = this._currentSegmentTiming;
+      this._currentSegmentTiming = null;
       if (segmentInfo === null) {
         return null;
       }
@@ -346,14 +405,14 @@ export default class Transmuxer {
         if (this._videoTrack === null && ePckt.tracks[i].type === "video") {
           this._videoTrack = ePckt.tracks[i];
           this._videoTrack.timelineStartInfo.baseMediaDecodeTime =
-            this._baseMediaDecodeTime;
+            this._getCurrentBaseMediaDecodeTime();
         } else if (
           this._audioTrack === null &&
           ePckt.tracks[i].type === "audio"
         ) {
           this._audioTrack = ePckt.tracks[i];
           this._audioTrack.timelineStartInfo.baseMediaDecodeTime =
-            this._baseMediaDecodeTime;
+            this._getCurrentBaseMediaDecodeTime();
         }
       }
 
@@ -377,5 +436,80 @@ export default class Transmuxer {
         );
       }
     }
+  }
+
+  private _prepareForSegment(
+    continuity: TransmuxContinuityInfo | undefined,
+    legacyTiming: SegmentTimingInfo | undefined,
+  ): void {
+    let timing = legacyTiming;
+    if (continuity !== undefined) {
+      timing =
+        continuity.duration === undefined
+          ? { start: continuity.start }
+          : { start: continuity.start, duration: continuity.duration };
+    }
+    if (timing === undefined) {
+      this._currentSegmentTiming = null;
+      return;
+    }
+    if (continuity !== undefined) {
+      if (continuity.resetReason !== "none") {
+        this.reset();
+      }
+    } else if (this._shouldResetForSegmentTiming(timing)) {
+      this.reset();
+    }
+    this._currentSegmentTiming = timing;
+    const baseMediaDecodeTime =
+      continuity !== undefined
+        ? this._getBaseMediaDecodeTimeForContinuity(continuity)
+        : this._getCurrentBaseMediaDecodeTime();
+    this._resetTrackTimelineStart(this._videoTrack, baseMediaDecodeTime);
+    this._resetTrackTimelineStart(this._audioTrack, baseMediaDecodeTime);
+  }
+
+  private _shouldResetForSegmentTiming(timing: SegmentTimingInfo): boolean {
+    const previous = this._lastSegmentTiming;
+    if (previous === null) {
+      return false;
+    }
+    if (timing.start + 0.001 < previous.start) {
+      return true;
+    }
+    if (previous.duration !== undefined) {
+      const expectedStart = previous.start + previous.duration;
+      return Math.abs(timing.start - expectedStart) > 0.25;
+    }
+    return false;
+  }
+
+  private _getCurrentBaseMediaDecodeTime(): number {
+    const currentStart = this._currentSegmentTiming?.start;
+    if (currentStart === undefined) {
+      return this._baseMediaDecodeTime;
+    }
+    return Math.max(0, Math.round(currentStart * ONE_SECOND_IN_TS));
+  }
+
+  private _getBaseMediaDecodeTimeForContinuity(
+    continuity: TransmuxContinuityInfo,
+  ): number {
+    if (continuity.contiguous && continuity.bufferedEnd !== undefined) {
+      return Math.max(0, Math.round(continuity.bufferedEnd * ONE_SECOND_IN_TS));
+    }
+    return Math.max(0, Math.round(continuity.start * ONE_SECOND_IN_TS));
+  }
+
+  private _resetTrackTimelineStart(track: any, baseMediaDecodeTime: number) {
+    if (track === null) {
+      return;
+    }
+    clearDtsInfo(track);
+    track.timelineStartInfo = {
+      baseMediaDecodeTime,
+      pts: undefined,
+      dts: undefined,
+    };
   }
 }

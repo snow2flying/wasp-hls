@@ -27,6 +27,22 @@ export interface AppendBufferValue {
   duration: number | undefined;
 }
 
+export type AppendResetReason =
+  | "none"
+  | "seek"
+  | "playlist-discontinuity"
+  | "variant-switch"
+  | "audio-track-switch"
+  | "init-segment-change"
+  | "buffer-flush";
+
+export interface AppendContinuityInfo {
+  start: number;
+  duration: number | undefined;
+  contiguous: boolean;
+  resetReason: AppendResetReason;
+}
+
 export interface InspectSegmentValue {
   codec: string;
   mimeType: string;
@@ -68,6 +84,7 @@ export interface HostBindings {
     sourceBufferId: number,
     resourceId: number,
     parseTimeInformation: boolean,
+    continuityInfo?: AppendContinuityInfo,
   ): HostResult<AppendBufferValue, SegmentParsingErrorCode>;
   removeBuffer(
     sourceBufferId: number,

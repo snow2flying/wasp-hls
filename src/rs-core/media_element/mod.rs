@@ -11,7 +11,7 @@ use crate::Logger;
 pub(crate) use source_buffers::{PushSegmentError, RemoveDataError};
 
 pub(crate) use self::segment_inventory::{BufferedChunk, SegmentQualityContext};
-pub(crate) use source_buffers::MediaSegmentPushData;
+pub(crate) use source_buffers::{AppendContinuityInfo, AppendResetReason, MediaSegmentPushData};
 
 mod segment_inventory;
 mod source_buffers;
@@ -394,11 +394,12 @@ impl MediaElementReference {
         media_type: MediaType,
         start: f64,
         end: f64,
+        reset_reason: Option<AppendResetReason>,
     ) -> Result<(), RemoveDataError> {
         match self.buffer_mut_for(media_type) {
             None => Err(RemoveDataError::NoSourceBuffer(media_type)),
             Some(sb) => {
-                sb.remove_buffer(start, end);
+                sb.remove_buffer(start, end, reset_reason);
                 Ok(())
             }
         }
@@ -412,11 +413,15 @@ impl MediaElementReference {
     /// You should have created a SourceBuffer of the corresponding type with
     /// `create_source_buffer` before calling this method. If you did not this method will return a
     /// `NoSourceBuffer` error.
-    pub(crate) fn flush(&mut self, media_type: MediaType) -> Result<(), RemoveDataError> {
+    pub(crate) fn flush(
+        &mut self,
+        media_type: MediaType,
+        reset_reason: AppendResetReason,
+    ) -> Result<(), RemoveDataError> {
         match self.buffer_mut_for(media_type) {
             None => Err(RemoveDataError::NoSourceBuffer(media_type)),
             Some(sb) => {
-                sb.flush_buffer();
+                sb.flush_buffer(reset_reason);
                 Ok(())
             }
         }
