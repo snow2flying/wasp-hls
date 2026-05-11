@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use crate::bindings::{
     jsAddSourceBuffer, jsAppendBuffer, jsFlush, jsRemoveBuffer, AddSourceBufferErrorCode,
     MediaType, ParsedSegmentInfo, ResourceId, SegmentParsingErrorCode, SourceBufferId,
-    TimescaledTimeValue,
+    TimescaledValue,
 };
 use crate::dispatcher::JsMemoryBlob;
 use crate::parser::SegmentTimeInfo;
@@ -49,11 +49,12 @@ pub(super) struct SourceBuffer {
     ///
     /// When available, this exact timescaled value is used as the continuity anchor for the next
     /// transmuxed append.
-    last_segment_end_time: Option<TimescaledTimeValue>,
+    last_segment_end_time: Option<TimescaledValue>,
 
-    /// Explicit reason why the next media append should reseed transmux state.
-    /// XXX TODO: Bitset instead? We don't want new updates to totally replace old ones
-    pending_buffer_state_update: BufferStateUpdate,
+    /// Some state may be maintained by the potential lower-level transmuxer we'll feed data too.
+    /// That state makes sense as we're pushing contiguous segments but does not make sense to be
+    /// maintained once either a track switch or a new init segment is pushed.
+    reset_transmuxer_on_next_segment: bool,
 }
 
 impl SourceBuffer {
@@ -79,7 +80,7 @@ impl SourceBuffer {
                 last_segment_pushed: false,
                 media_type,
                 last_segment_end_time: None,
-                pending_buffer_state_update: BufferStateUpdate::None,
+                reset_transmuxer_on_next_segment: false,
             }),
             Err(err) => Err(AddSourceBufferError::from_js_add_source_buffer_error(
                 err, &typ,
@@ -118,8 +119,8 @@ impl SourceBuffer {
         &mut self,
         segment_data: JsMemoryBlob,
     ) -> Result<AppendBufferResponse, PushSegmentError> {
-        if self.was_used && self.pending_buffer_state_update == BufferStateUpdate::None {
-            self.pending_buffer_state_update = BufferStateUpdate::InitSegmentChange;
+        if self.was_used && !self.reset_transmuxer_on_next_segment {
+            self.reset_transmuxer_on_next_segment = true;
         }
         self.was_used = true;
         self.queue
@@ -158,7 +159,9 @@ impl SourceBuffer {
         self.was_used = true;
         let segment_data = data.segment_data.id();
         let segment_time_info = data.time_info().clone();
-        let buffer_state_data = self.buffer_state_data_for_segment(&segment_time_info);
+        let buffer_state_data = self.build_segment_hints(&segment_time_info);
+        self.reset_transmuxer_on_next_segment = false;
+
         let id = data.id;
         Logger::debug(&format!("Buffer {} ({}): Pushing", self.id, self.typ));
         self.queue
@@ -191,16 +194,8 @@ impl SourceBuffer {
     /// * `state_update` - Supplementary context on why that removal operation happens. This is
     ///   necessary because transmuxing is stateful, supplementary context is thus necessary to
     ///   handle that maintained state properly.
-    pub(super) fn remove_buffer(
-        &mut self,
-        start: f64,
-        end: f64,
-        state_update: Option<BufferStateUpdate>,
-    ) {
+    pub(super) fn remove_buffer(&mut self, start: f64, end: f64) {
         self.was_used = true;
-        if let Some(upd) = state_update {
-            self.pending_buffer_state_update = upd;
-        }
         self.queue
             .push_back(SourceBufferQueueElement::Remove { start, end });
         Logger::debug(&format!(
@@ -210,20 +205,29 @@ impl SourceBuffer {
         let _ = jsRemoveBuffer(self.id, start, end);
     }
 
+    /// Marks the next pushed media segment as the beginning of a new segment
+    /// sequence.
+    ///
+    /// This should be called when the next segment may not be safely processed
+    /// using state carried from previously pushed segments, such as after a
+    /// rendition/media switch or an HLS discontinuity.
+    ///
+    /// This does not remove buffered media and does not itself push an init
+    /// segment. It only affects how the next media segment is processed.
+    pub(crate) fn begin_new_segment_sequence(&mut self) {
+        self.reset_transmuxer_on_next_segment = true;
+    }
+
     /// Empty media data from this `SourceBuffer`.
     ///
     /// There's special considerations too take care of here as we'll remove data corresponding to
     /// the current position. As such a seek will have to be performed once the remove is done
-    pub(super) fn flush_buffer(&mut self, state_update: BufferStateUpdate) {
+    pub(super) fn flush_buffer(&mut self) {
         self.was_used = true;
-        self.pending_buffer_state_update = state_update;
+        self.reset_transmuxer_on_next_segment = true;
         self.queue.push_back(SourceBufferQueueElement::Emptying);
         Logger::debug(&format!("Buffer {} ({}): emptying", self.id, self.typ));
         let _ = jsRemoveBuffer(self.id, 0., f64::INFINITY);
-    }
-
-    pub(super) fn set_pending_buffer_state_update(&mut self, state_update: BufferStateUpdate) {
-        self.pending_buffer_state_update = state_update;
     }
 
     /// SourceBuffers maintain a queue of planned operations such as push and remove to media
@@ -283,33 +287,31 @@ impl SourceBuffer {
         queue_elt
     }
 
-    fn buffer_state_data_for_segment(
-        &mut self,
-        segment_time_info: &SegmentTimeInfo,
-    ) -> BufferStateData {
-        let state_update = if self.pending_buffer_state_update != BufferStateUpdate::None {
-            let state_update = self.pending_buffer_state_update;
-            self.pending_buffer_state_update = BufferStateUpdate::None;
-            state_update
+    fn build_segment_hints(&mut self, segment_time_info: &SegmentTimeInfo) -> SegmentHints {
+        const TIMESCALE: u32 = 90_000;
+        const CONTIGUITY_TOLERANCE_TICKS: u64 = TIMESCALE as u64 / 4;
+
+        let playlist_start = TimescaledValue::from_u64(
+            (segment_time_info.start() * TIMESCALE as f64).round() as u64,
+            TIMESCALE,
+        );
+
+        let is_close_to_last_end = self
+            .last_segment_end_time
+            .map(|last_end| {
+                playlist_start.value().abs_diff(last_end.value()) <= CONTIGUITY_TOLERANCE_TICKS
+            })
+            .unwrap_or(false);
+
+        let start_dts = if self.reset_transmuxer_on_next_segment {
+            playlist_start
+        } else if is_close_to_last_end {
+            self.last_segment_end_time.unwrap()
         } else {
-            BufferStateUpdate::None
+            playlist_start
         };
 
-        let segment_start = if state_update == BufferStateUpdate::None {
-            // assume contiguous-ness
-            self.last_segment_end_time.unwrap_or_else(|| {
-                TimescaledTimeValue::from_u64(
-                    (segment_time_info.start() * 90000.).round() as u64,
-                    90000,
-                )
-            })
-        } else {
-            TimescaledTimeValue::from_u64(
-                (segment_time_info.start() * 90000.).round() as u64,
-                90000,
-            )
-        };
-        BufferStateData::new(segment_start, state_update)
+        SegmentHints::new(start_dts, self.reset_transmuxer_on_next_segment)
     }
 }
 
@@ -550,64 +552,39 @@ pub(crate) enum RemoveDataError {
     NoSourceBuffer(MediaType),
 }
 
-/// Actual SourceBuffers may first need that data to be transmuxed to fmp4.
-///
-/// In that case, the transmuxing operation maintains state to determine pushed
-/// segment timestamp, and we have thus context to signal to indicate how that
-/// state might have changed since the last pushed segment.
-///
-/// This is what `BufferStateUpdate` is for, it communicates what happened since
-/// the last segment push so that state can be properly updated on the
-/// transmuxing side.
-/// XXX TODO: bitset?
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u32)]
-pub(crate) enum BufferStateUpdate {
-    /// No need to update the transmuxer's state.
-    None = 0,
-    /// A seek has been performed
-    Seek = 1,
-    /// A discontinuity between the previous segment and the future pushed one was found
-    PlaylistDiscontinuity = 2,
-    /// We just switched variants
-    VariantSwitch = 3,
-    /// We just switched the audio track
-    AudioTrackSwitch = 4,
-    /// The init segment just changed
-    InitSegmentChange = 5,
-    /// We want to "flush" buffers (reconstruct them)
-    BufferFlush = 6,
-}
-
 /// Context about the continuity context of a pushed segment with a previously-pushed one.
 #[derive(Clone, Debug)]
-pub(crate) struct BufferStateData {
-    /// Exact time anchor to use when computing the next base decode time.
-    base_decode_time_start: TimescaledTimeValue,
-    /// Update(s) in the buffer state that may impact segment transmuxing.
-    /// XXX TODO: bitset?
-    /// XXX TODO: Can't we just handle everything rust-side? And just give a more
-    /// explicit hint here?
-    state_update: BufferStateUpdate,
+pub(crate) struct SegmentHints {
+    /// Exact DTS anchor to use when computing the next base decode time.
+    base_decode_time_start: TimescaledValue,
+    /// Whether transmuxer state should be discarded before processing this segment.
+    ///
+    /// This is intended for hard discontinuities such as rendition switches,
+    /// codec/config changes, explicit discontinuity tags, or parser invalidation.
+    ///
+    /// This does NOT indicate whether the segment is timestamp-contiguous with
+    /// the previous one. Timestamp continuity is determined solely through
+    /// `base_decode_time_start`.
+    reset_transmuxer_state: bool,
 }
 
-impl BufferStateData {
-    /// Create a new `BufferStateData`
+impl SegmentHints {
+    /// Create a new `SegmentHints`
     pub(crate) fn new(
-        base_decode_time_start: TimescaledTimeValue,
-        state_update: BufferStateUpdate,
+        base_decode_time_start: TimescaledValue,
+        reset_transmuxer_state: bool,
     ) -> Self {
         Self {
             base_decode_time_start,
-            state_update,
+            reset_transmuxer_state,
         }
     }
 
-    pub(crate) fn base_decode_time_start(&self) -> &TimescaledTimeValue {
+    pub(crate) fn base_decode_time_start(&self) -> &TimescaledValue {
         &self.base_decode_time_start
     }
 
-    pub(crate) fn state_update(&self) -> BufferStateUpdate {
-        self.state_update
+    pub(crate) fn reset_transmuxer_state(&self) -> bool {
+        self.reset_transmuxer_state
     }
 }

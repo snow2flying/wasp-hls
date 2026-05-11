@@ -11,7 +11,7 @@ use crate::Logger;
 pub(crate) use source_buffers::{PushSegmentError, RemoveDataError};
 
 pub(crate) use self::segment_inventory::{BufferedChunk, SegmentQualityContext};
-pub(crate) use source_buffers::{BufferStateData, BufferStateUpdate, MediaSegmentPushData};
+pub(crate) use source_buffers::{MediaSegmentPushData, SegmentHints};
 
 mod segment_inventory;
 mod source_buffers;
@@ -391,26 +391,11 @@ impl MediaElementReference {
         media_type: MediaType,
         start: f64,
         end: f64,
-        state_change: Option<BufferStateUpdate>,
     ) -> Result<(), RemoveDataError> {
         match self.buffer_mut_for(media_type) {
             None => Err(RemoveDataError::NoSourceBuffer(media_type)),
             Some(sb) => {
-                sb.remove_buffer(start, end, state_change);
-                Ok(())
-            }
-        }
-    }
-
-    pub(crate) fn notify_buffer_state_update(
-        &mut self,
-        media_type: MediaType,
-        state_update: BufferStateUpdate,
-    ) -> Result<(), RemoveDataError> {
-        match self.buffer_mut_for(media_type) {
-            None => Err(RemoveDataError::NoSourceBuffer(media_type)),
-            Some(sb) => {
-                sb.set_pending_buffer_state_update(state_update);
+                sb.remove_buffer(start, end);
                 Ok(())
             }
         }
@@ -424,17 +409,28 @@ impl MediaElementReference {
     /// You should have created a SourceBuffer of the corresponding type with
     /// `create_source_buffer` before calling this method. If you did not this method will return a
     /// `NoSourceBuffer` error.
-    pub(crate) fn flush(
-        &mut self,
-        media_type: MediaType,
-        state_update: BufferStateUpdate,
-    ) -> Result<(), RemoveDataError> {
+    pub(crate) fn flush(&mut self, media_type: MediaType) -> Result<(), RemoveDataError> {
         match self.buffer_mut_for(media_type) {
             None => Err(RemoveDataError::NoSourceBuffer(media_type)),
             Some(sb) => {
-                sb.flush_buffer(state_update);
+                sb.flush_buffer();
                 Ok(())
             }
+        }
+    }
+
+    /// Marks the next pushed media segment of the given media type as the beginning of a
+    /// new segment sequence for the associated buffer.
+    ///
+    /// This should be called when the next segment may not be safely processed
+    /// using state carried from previously pushed segments, such as after a
+    /// rendition/media switch or an HLS discontinuity.
+    ///
+    /// This does not remove buffered media and does not itself push an init
+    /// segment. It only affects how the next media segment is processed.
+    pub(crate) fn begin_new_segment_sequence(&mut self, media_type: MediaType) {
+        if let Some(sb) = self.buffer_mut_for(media_type) {
+            sb.begin_new_segment_sequence();
         }
     }
 

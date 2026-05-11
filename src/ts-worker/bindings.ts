@@ -32,7 +32,7 @@ import {
   SegmentParsingErrorCode,
 } from "../wasm/index.js";
 import type {
-  AppendContinuityInfo,
+  SegmentHints,
   HostBindings,
   InspectSegmentValue,
   ISafeU64,
@@ -876,14 +876,17 @@ export function addSourceBuffer(
 }
 
 /**
- * @param {number} sourceBufferId
- * @param {number} resourceId
+ * @param sourceBufferId - The identifier for the SourceBuffer on which the
+ * segment should be pushed.
+ * @param resourceId - The identifier of the segment to push.
+ * @param segmentHints - Potential supplementary context on the segment to
+ * push, such as its base decode time.
  * @returns {Object}
  */
 export function appendBuffer(
   sourceBufferId: SourceBufferId,
   resourceId: ResourceId,
-  continuityInfo?: AppendContinuityInfo,
+  segmentHints?: SegmentHints,
 ): AppendBufferResult {
   let segment = jsMemoryResources.get(resourceId);
   const mediaSourceObj = getMediaSourceObj();
@@ -923,15 +926,19 @@ export function appendBuffer(
   const sourceBufferObj = mediaSourceObj.sourceBuffers[sourceBufferObjIdx];
   if (sourceBufferObj.transmuxer !== null) {
     try {
-      const transmuxOptions =
-        continuityInfo === undefined
-          ? undefined
-          : {
-              continuity: continuityInfo,
-            };
       const transmuxedData = sourceBufferObj.transmuxer.transmuxSegment(
         segment,
-        transmuxOptions,
+        {
+          reset: segmentHints?.resetTransmuxerState === true,
+          baseMediaDecodeTime:
+            segmentHints === undefined
+              ? undefined
+              : {
+                  hi: segmentHints.baseDecodeTimeStartHi,
+                  lo: segmentHints.baseDecodeTimeStartLo,
+                  timescale: segmentHints.baseDecodeTimeStartTimescale,
+                },
+        },
       );
       if (transmuxedData !== null) {
         segment = transmuxedData.data;

@@ -1,6 +1,11 @@
 import { isLikelyAacData } from "./aac-utils.ts";
 import AdtsPacketParser from "./AdtsPacketParser.ts";
-import { ONE_SECOND_IN_TS } from "./clock-utils.ts";
+import type { ITimescaledU64 } from "./clock-utils.ts";
+import {
+  getContinuousBaseDecodeTimeInVideoTs,
+  ONE_SECOND_IN_TS,
+  timescaledU64ToSeconds,
+} from "./clock-utils.ts";
 import type { ElementaryPacket } from "./ElementaryPacketParser.ts";
 import ElementaryPacketParser from "./ElementaryPacketParser.ts";
 import FullMp4SegmentConstructor from "./FullMp4SegmentConstructor.ts";
@@ -57,26 +62,12 @@ export interface TransmuxedSegmentTimingInfo {
   timescale: number;
 }
 
-export type TransmuxResetReason =
-  | "none"
-  | "seek"
-  | "playlist-discontinuity"
-  | "variant-switch"
-  | "audio-track-switch"
-  | "init-segment-change"
-  | "buffer-flush";
-
-export interface TransmuxContinuityInfo {
-  baseDecodeTimeStartHi: number;
-  baseDecodeTimeStartLo: number;
-  baseDecodeTimeStartTimescale: number;
-  resetReason: TransmuxResetReason;
-}
-
+/** Context given to the transmuxer when transmuxing a segment. */
 export interface TransmuxSegmentOptions {
-  timing?: SegmentTimingInfo;
+  /** If `true`, this segment is non-contiguous with the previous one. */
   reset?: boolean;
-  continuity?: TransmuxContinuityInfo;
+  /** The segment's base DTS, if known. */
+  baseMediaDecodeTime?: ITimescaledU64;
 }
 
 export interface TransmuxedSegmentData {
@@ -90,8 +81,8 @@ export default class Transmuxer {
   private _audioTrack: any;
   private _baseMediaDecodeTime: number;
   private _currentPipeline: AacPipelineElements | TsPipelineElements | null;
-  private _currentSegmentTiming: SegmentTimingInfo | null;
-  private _lastSegmentTiming: SegmentTimingInfo | null;
+  private _currentSegmentTiming: ITimescaledU64 | null;
+  private _lastSegmentEnd: ITimescaledU64 | null;
 
   constructor(options?: TransmuxerOptions | undefined) {
     this._options = options ?? {};
@@ -100,17 +91,14 @@ export default class Transmuxer {
     this._videoTrack = null;
     this._audioTrack = null;
     this._currentSegmentTiming = null;
-    this._lastSegmentTiming = null;
+    this._lastSegmentEnd = null;
   }
 
   public transmuxSegment(
     data: Uint8Array,
-    options?: TransmuxSegmentOptions,
+    options: TransmuxSegmentOptions = {},
   ): TransmuxedSegmentData | null {
-    if (options?.reset === true) {
-      this.reset();
-    }
-    this._prepareForSegment(options?.continuity, options?.timing);
+    this._prepareSegment(options);
     const isAac = isLikelyAacData(data);
     if (isAac && this._currentPipeline?.name !== "aac") {
       this._setupAacPipeline();
@@ -191,7 +179,9 @@ export default class Transmuxer {
     }
   }
 
-  public pushAacSegment(input: Uint8Array): TransmuxedSegmentData | null {
+  public pushAacSegment(
+    input: Uint8Array,
+  ): { data: Uint8Array; start: ITimescaledU64; end: ITimescaledU64 } | null {
     let pipeline = this._currentPipeline;
     if (pipeline === null || pipeline.name !== "aac") {
       pipeline = this._setupAacPipeline();
@@ -454,50 +444,32 @@ export default class Transmuxer {
     }
   }
 
-  private _prepareForSegment(
-    continuity: TransmuxContinuityInfo | undefined,
-    legacyTiming: SegmentTimingInfo | undefined,
-  ): void {
-    let timing = legacyTiming;
-    if (continuity !== undefined) {
-      timing = {
-        start:
-          getContinuousBaseDecodeTimeInVideoTs(continuity) / ONE_SECOND_IN_TS,
-      };
-    }
-    if (timing === undefined) {
-      this._currentSegmentTiming = null;
-      return;
-    }
-    if (continuity !== undefined) {
-      if (continuity.resetReason !== "none") {
-        this.reset();
-      }
-    } else if (this._shouldResetForSegmentTiming(timing)) {
+  private _prepareSegment(options: TransmuxSegmentOptions): void {
+    if (options?.reset === true) {
       this.reset();
     }
-    this._currentSegmentTiming = timing;
-    const baseMediaDecodeTime =
-      continuity !== undefined
-        ? this._getBaseMediaDecodeTimeForContinuity(continuity)
-        : this._getCurrentBaseMediaDecodeTime();
-    this._resetTrackTimelineStart(this._videoTrack, baseMediaDecodeTime);
-    this._resetTrackTimelineStart(this._audioTrack, baseMediaDecodeTime);
-  }
+    if (!options.baseMediaDecodeTime) {
+      return;
+    }
+    const { baseMediaDecodeTime } = options;
+    if (
+      shouldResetForSegmentStart(
+        this._currentSegmentTiming,
+        this._lastSegmentEnd,
+        baseMediaDecodeTime,
+      )
+    ) {
+      this.reset();
+    }
 
-  private _shouldResetForSegmentTiming(timing: SegmentTimingInfo): boolean {
-    const previous = this._lastSegmentTiming;
-    if (previous === null) {
-      return false;
-    }
-    if (timing.start + 0.001 < previous.start) {
-      return true;
-    }
-    if (previous.duration !== undefined) {
-      const expectedStart = previous.start + previous.duration;
-      return Math.abs(timing.start - expectedStart) > 0.25;
-    }
-    return false;
+    this._currentSegmentTiming = baseMediaDecodeTime;
+
+    // XXX TODO: Maybe ineficient to play with timescales like this?
+    const baseMediaDecodeTimeVideoTs = getContinuousBaseDecodeTimeInVideoTs(
+      options.baseMediaDecodeTime,
+    );
+    this._resetTrackTimelineStart(this._videoTrack, baseMediaDecodeTimeVideoTs);
+    this._resetTrackTimelineStart(this._audioTrack, baseMediaDecodeTimeVideoTs);
   }
 
   private _getCurrentBaseMediaDecodeTime(): number {
@@ -506,12 +478,6 @@ export default class Transmuxer {
       return this._baseMediaDecodeTime;
     }
     return Math.max(0, Math.round(currentStart * ONE_SECOND_IN_TS));
-  }
-
-  private _getBaseMediaDecodeTimeForContinuity(
-    continuity: TransmuxContinuityInfo,
-  ): number {
-    return getContinuousBaseDecodeTimeInVideoTs(continuity);
   }
 
   private _resetTrackTimelineStart(track: any, baseMediaDecodeTime: number) {
@@ -527,16 +493,23 @@ export default class Transmuxer {
   }
 }
 
-function getContinuousBaseDecodeTimeInVideoTs(
-  continuity: TransmuxContinuityInfo,
-): number {
-  const value =
-    continuity.baseDecodeTimeStartHi * 0x100000000 +
-    continuity.baseDecodeTimeStartLo;
-  return Math.max(
-    0,
-    Math.round(
-      (value * ONE_SECOND_IN_TS) / continuity.baseDecodeTimeStartTimescale,
-    ),
-  );
+function shouldResetForSegmentStart(
+  previousStart: ITimescaledU64 | null,
+  previousEnd: ITimescaledU64 | null,
+  nextStart: ITimescaledU64,
+): boolean {
+  if (previousStart === null) {
+    return false;
+  }
+  const nextStartSec = timescaledU64ToSeconds(nextStart);
+  const previousStartSec = timescaledU64ToSeconds(previousStart);
+  if (nextStartSec + 0.001 < previousStartSec) {
+    return true;
+  }
+
+  if (previousEnd !== null) {
+    const previousEndSec = timescaledU64ToSeconds(previousEnd);
+    return Math.abs(nextStartSec - previousEndSec) > 0.25;
+  }
+  return false;
 }

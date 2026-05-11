@@ -25,7 +25,7 @@ import {
   unwrapResult,
   writeAppendBufferResult,
 } from "./helpers.js";
-import type { AppendContinuityInfo, HostBindings } from "./types.js";
+import type { HostBindings } from "./types.js";
 
 export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
   return {
@@ -181,7 +181,7 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         baseDecodeTimeStartHi: number,
         baseDecodeTimeStartLo: number,
         baseDecodeTimeStartTimescale: number,
-        resetReason: number,
+        reset_transmuxer_state: number,
 
         // Return value
         hasStartOut: number,
@@ -205,7 +205,7 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
                   baseDecodeTimeStartHi,
                   baseDecodeTimeStartLo,
                   baseDecodeTimeStartTimescale,
-                  resetReason: parseAppendResetReason(resetReason),
+                  resetTransmuxerState: reset_transmuxer_state !== 0,
                 }
               : undefined,
           ),
@@ -474,26 +474,4 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
       },
     },
   };
-}
-
-function parseAppendResetReason(
-  rawValue: number,
-): AppendContinuityInfo["resetReason"] {
-  switch (rawValue) {
-    case 1:
-      return "seek";
-    case 2:
-      return "playlist-discontinuity";
-    case 3:
-      return "variant-switch";
-    case 4:
-      return "audio-track-switch";
-    case 5:
-      return "init-segment-change";
-    case 6:
-      return "buffer-flush";
-    case 0:
-    default:
-      return "none";
-  }
 }

@@ -8,7 +8,7 @@ use super::{
     SegmentParsingErrorCode, SourceBufferCreationErrorCode, TimerReason,
 };
 use crate::{
-    media_element::{BufferStateData, BufferStateUpdate, PushSegmentError},
+    media_element::{PushSegmentError, SegmentHints},
     parser::{
         MediaPlaylistParsingError, MediaPlaylistUpdateError, MultivariantPlaylistParsingError,
     },
@@ -82,7 +82,7 @@ unsafe extern "C" {
         base_decode_time_start_hi: u32,
         base_decode_time_start_lo: u32,
         base_decode_time_start_timescale: u32,
-        reset_reason: u32,
+        reset_transmuxer_state: u32,
 
         has_start_out: *mut u32,
         start_value_hi_out: *mut u32,
@@ -531,7 +531,7 @@ pub fn jsInspectSegment(
 pub fn jsAppendBuffer(
     source_buffer_id: SourceBufferId,
     segment_id: ResourceId,
-    buffer_state_data: Option<&BufferStateData>,
+    segment_hints: Option<&SegmentHints>,
 ) -> Result<Option<ParsedSegmentInfo>, (SegmentParsingErrorCode, Option<String>)> {
     let mut has_start = 0;
     let mut start_value_hi = 0;
@@ -548,19 +548,19 @@ pub fn jsAppendBuffer(
         __js_func__append_buffer(
             source_buffer_id,
             segment_id,
-            bool_to_raw(buffer_state_data.is_some()),
-            buffer_state_data
+            bool_to_raw(segment_hints.is_some()),
+            segment_hints
                 .map(|t| t.base_decode_time_start().value_hi())
                 .unwrap_or(0),
-            buffer_state_data
+            segment_hints
                 .map(|t| t.base_decode_time_start().value_lo())
                 .unwrap_or(0),
-            buffer_state_data
+            segment_hints
                 .map(|t| t.base_decode_time_start().timescale())
                 .unwrap_or(0),
-            buffer_state_data
-                .map(|t| t.state_update() as u32)
-                .unwrap_or(BufferStateUpdate::None as u32),
+            segment_hints
+                .map(|t| t.reset_transmuxer_state() as u32)
+                .unwrap_or(0u32),
             &mut has_start,
             &mut start_value_hi,
             &mut start_value_lo,
@@ -578,7 +578,7 @@ pub fn jsAppendBuffer(
     }
     Ok(Some(ParsedSegmentInfo {
         start: if has_start != 0 {
-            Some(TimescaledTimeValue::new(
+            Some(TimescaledValue::new(
                 start_value_hi,
                 start_value_lo,
                 timescale,
@@ -587,11 +587,7 @@ pub fn jsAppendBuffer(
             None
         },
         end: if has_end != 0 {
-            Some(TimescaledTimeValue::new(
-                end_value_hi,
-                end_value_lo,
-                timescale,
-            ))
+            Some(TimescaledValue::new(end_value_hi, end_value_lo, timescale))
         } else {
             None
         },
@@ -1013,28 +1009,42 @@ impl From<MediaPlaylistParsingError> for MediaPlaylistParsingErrorCode {
     }
 }
 
+/// Return value of the `jsAppendBuffer` call, corresponding to the obtained
+/// data after both potentially transmuxing and inspecting a media segment.
 pub struct ParsedSegmentInfo {
-    start: Option<TimescaledTimeValue>,
-    end: Option<TimescaledTimeValue>,
+    /// Its precise start time if known, in the original timescale
+    start: Option<TimescaledValue>,
+    /// Its precise end time if known, in the original timescale
+    end: Option<TimescaledValue>,
 }
 
 impl ParsedSegmentInfo {
-    pub(crate) fn start(&self) -> Option<TimescaledTimeValue> {
+    /// Obtain precise start time with its original timescale
+    pub(crate) fn start(&self) -> Option<TimescaledValue> {
         self.start
     }
-    pub(crate) fn end(&self) -> Option<TimescaledTimeValue> {
+    /// Obtain precise end time with its original timescale
+    pub(crate) fn end(&self) -> Option<TimescaledValue> {
         self.end
     }
 }
 
+/// Precise timestamp value, expressed in a given timescale to both allow encoding it as an integer
+/// and to prevent rounding errors.
 #[derive(Clone, Copy, Debug)]
-pub struct TimescaledTimeValue {
+pub struct TimescaledValue {
+    /// High 4 bytes of that value. This weird format is due to how JS can't safely fully encode
+    /// u64 values
     value_hi: u32,
+    /// Low 4 bytes of that value. This weird format is due to how JS can't safely fully encode
+    /// u64 values
     value_lo: u32,
+    /// Timescale to convert that value to seconds.
     timescale: u32,
 }
 
-impl TimescaledTimeValue {
+impl TimescaledValue {
+    /// Create a new timescaled value from the 3 components: hi, low and timescale
     pub(crate) fn new(value_hi: u32, value_lo: u32, timescale: u32) -> Self {
         Self {
             value_hi,
@@ -1043,6 +1053,7 @@ impl TimescaledTimeValue {
         }
     }
 
+    /// Create a new timescaled value directly from its u64 value and a timescale
     pub(crate) fn from_u64(value: u64, timescale: u32) -> Self {
         Self {
             value_hi: (value >> 32) as u32,
@@ -1051,22 +1062,27 @@ impl TimescaledTimeValue {
         }
     }
 
+    /// Convert that timescaled value to seconds as a float64. May be lossy.
     pub(crate) fn to_f64_seconds(self) -> f64 {
         self.value() as f64 / self.timescale as f64
     }
 
+    /// Obtain the high 4 bytes of that u64 value
     pub(crate) fn value_hi(self) -> u32 {
         self.value_hi
     }
 
+    /// Obtain the low 4 bytes of that u64 value
     pub(crate) fn value_lo(self) -> u32 {
         self.value_lo
     }
 
+    /// Obtain the timescale of that value
     pub(crate) fn timescale(self) -> u32 {
         self.timescale
     }
 
+    /// Obtain the timestamp itself, as u64
     pub(crate) fn value(self) -> u64 {
         ((self.value_hi as u64) << 32) | self.value_lo as u64
     }
