@@ -388,7 +388,11 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
       throw new Error("The Player is not initialized or is disposed.");
     }
     if (this.__contentMetadata__ !== null) {
-      requestStopForContent(this.__contentMetadata__, this.__worker__);
+      requestStopForContent(
+        this.__contentMetadata__,
+        this.videoElement,
+        this.__worker__,
+      );
     }
     const contentId = generateContentId();
     const loadingAborter = new AbortController();
@@ -650,7 +654,11 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
       throw new Error("The Player is not initialized or is disposed.");
     }
     if (this.__contentMetadata__ !== null) {
-      requestStopForContent(this.__contentMetadata__, this.__worker__);
+      requestStopForContent(
+        this.__contentMetadata__,
+        this.videoElement,
+        this.__worker__,
+      );
     }
   }
 
@@ -956,7 +964,11 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
       return;
     }
     if (this.__contentMetadata__ !== null) {
-      requestStopForContent(this.__contentMetadata__, this.__worker__);
+      requestStopForContent(
+        this.__contentMetadata__,
+        this.videoElement,
+        this.__worker__,
+      );
     }
     // NOTE: is this still needed? What about GC once it is set to `null`?
     postMessageToWorker(this.__worker__, {
@@ -1164,7 +1176,13 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
           }
           break;
         case WorkerMessageType.ContentStopped:
-          if (onContentStoppedMessage(data, this.__contentMetadata__)) {
+          if (
+            onContentStoppedMessage(
+              data,
+              this.__contentMetadata__,
+              this.videoElement,
+            )
+          ) {
             this.__contentMetadata__ = null;
             this.trigger("playerStateChange", PlayerState.Stopped);
           }

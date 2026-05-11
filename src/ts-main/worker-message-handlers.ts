@@ -1041,6 +1041,7 @@ export function onVariantLockStatusChangeMessage(
 export function onContentStoppedMessage(
   msg: ContentStoppedWorkerMessage,
   contentMetadata: ContentMetadata | null,
+  mediaElement: HTMLMediaElement,
 ): boolean {
   if (contentMetadata?.contentId !== msg.value.contentId) {
     logger.info("API: Ignoring `content-stopped` due to wrong `contentId`");
@@ -1057,6 +1058,7 @@ export function onContentStoppedMessage(
   }
   contentMetadata.playbackObserver = null;
   contentMetadata.loadingAborter?.abort(new Error("Content Stopped"));
+  mediaElement.playbackRate = 1;
   return true;
 }
 

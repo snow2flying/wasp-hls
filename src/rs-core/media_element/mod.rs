@@ -105,10 +105,12 @@ impl MediaElementReference {
         let _ = jsRemoveMediaSource();
         self.queued_seek = None;
         self.last_observation = None;
+        self.is_rebuffering = false;
         self.media_source_ready_state = Some(MediaSourceReadyState::Closed);
         self.media_offset = None;
         self.video_buffer = None;
         self.audio_buffer = None;
+        self.wanted_speed = 1.;
         self.min_buffer_time = 5.;
         self.audio_inventory.reset();
         self.video_inventory.reset();

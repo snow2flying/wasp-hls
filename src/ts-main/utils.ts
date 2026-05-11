@@ -63,10 +63,12 @@ export function getErrorInformation(
  * indicate to the WebWorker that it should also stop playing the content
  * on its side.
  * @param {Object} metadata
+ * @param {HTMLMediaElement} mediaElement
  * @param {Worker|null} worker
  */
 export function requestStopForContent(
   metadata: ContentMetadata,
+  mediaElement: HTMLMediaElement,
   worker: Worker | null,
 ): void {
   // Preventively free some resource that should not impact the Worker much.
@@ -78,6 +80,7 @@ export function requestStopForContent(
     metadata.loadingAborter.abort();
     metadata.loadingAborter = undefined;
   }
+  mediaElement.playbackRate = 1;
 
   if (worker !== null) {
     postMessageToWorker(worker, {
