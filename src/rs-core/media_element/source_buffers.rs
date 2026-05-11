@@ -49,7 +49,7 @@ pub(super) struct SourceBuffer {
     last_successful_fmp4_end_time: Option<f64>,
 
     /// Explicit reason why the next media append should reseed transmux state.
-    pending_reset_reason: AppendResetReason,
+    pending_reset_reason: BufferStateResetReason,
 }
 
 impl SourceBuffer {
@@ -75,7 +75,7 @@ impl SourceBuffer {
                 last_segment_pushed: false,
                 media_type,
                 last_successful_fmp4_end_time: None,
-                pending_reset_reason: AppendResetReason::None,
+                pending_reset_reason: BufferStateResetReason::None,
             }),
             Err(err) => Err(AddSourceBufferError::from_js_add_source_buffer_error(
                 err, &typ,
@@ -114,8 +114,8 @@ impl SourceBuffer {
         &mut self,
         segment_data: JsMemoryBlob,
     ) -> Result<AppendBufferResponse, PushSegmentError> {
-        if self.was_used && self.pending_reset_reason == AppendResetReason::None {
-            self.pending_reset_reason = AppendResetReason::InitSegmentChange;
+        if self.was_used && self.pending_reset_reason == BufferStateResetReason::None {
+            self.pending_reset_reason = BufferStateResetReason::InitSegmentChange;
         }
         self.was_used = true;
         self.queue
@@ -200,10 +200,10 @@ impl SourceBuffer {
         &mut self,
         start: f64,
         end: f64,
-        reset_reason_update: ResetReasonUpdate,
+        reset_reason_update: Option<BufferStateResetReason>,
     ) {
         self.was_used = true;
-        if let ResetReasonUpdate::Set(reason) = reset_reason_update {
+        if let Some(reason) = reset_reason_update {
             self.pending_reset_reason = reason;
         }
         self.queue
@@ -219,7 +219,7 @@ impl SourceBuffer {
     ///
     /// There's special considerations too take care of here as we'll remove data corresponding to
     /// the current position. As such a seek will have to be performed once the remove is done
-    pub(super) fn flush_buffer(&mut self, reset_reason: AppendResetReason) {
+    pub(super) fn flush_buffer(&mut self, reset_reason: BufferStateResetReason) {
         self.was_used = true;
         self.pending_reset_reason = reset_reason;
         self.queue.push_back(SourceBufferQueueElement::Emptying);
@@ -227,7 +227,7 @@ impl SourceBuffer {
         let _ = jsRemoveBuffer(self.id, 0., f64::INFINITY);
     }
 
-    pub(super) fn set_pending_reset_reason(&mut self, reason: AppendResetReason) {
+    pub(super) fn set_pending_reset_reason(&mut self, reason: BufferStateResetReason) {
         self.pending_reset_reason = reason;
     }
 
@@ -298,16 +298,16 @@ impl SourceBuffer {
         base_decode_time_start: Option<f64>,
         has_validated_buffered_content: bool,
     ) -> AppendContinuityInfo {
-        let reset_reason = if self.pending_reset_reason != AppendResetReason::None {
+        let reset_reason = if self.pending_reset_reason != BufferStateResetReason::None {
             let reason = self.pending_reset_reason;
-            self.pending_reset_reason = AppendResetReason::None;
+            self.pending_reset_reason = BufferStateResetReason::None;
             reason
         } else if has_validated_buffered_content && base_decode_time_start.is_none() {
-            AppendResetReason::PlaylistDiscontinuity
+            BufferStateResetReason::PlaylistDiscontinuity
         } else {
-            AppendResetReason::None
+            BufferStateResetReason::None
         };
-        let base_decode_time_start = if reset_reason == AppendResetReason::None {
+        let base_decode_time_start = if reset_reason == BufferStateResetReason::None {
             // If no ResetReason, assume contiguous-ness
             self.last_successful_fmp4_end_time
                 .or(base_decode_time_start)
@@ -560,23 +560,18 @@ pub(crate) enum RemoveDataError {
     NoSourceBuffer(MediaType),
 }
 
-pub(crate) enum ResetReasonUpdate {
-    NoChange,
-    Set(AppendResetReason),
-}
-
 /// Actual SourceBuffers may first need that data to be transmuxed to fmp4.
 ///
 /// In that case, the transmuxing operation maintains state to determine pushed
 /// segment timestamp, and we have thus context to signal to indicate how that
 /// state might have changed since the last pushed segment.
 ///
-/// This is what `AppendResetReason` is for, it communicates what happened since
+/// This is what `BufferStateResetReason` is for, it communicates what happened since
 /// the last segment push so that state can be properly updated on the
 /// transmuxing side.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
-pub(crate) enum AppendResetReason {
+pub(crate) enum BufferStateResetReason {
     /// No need to reset the transmuxer's state
     None = 0,
     /// A seek has been performed
@@ -600,7 +595,7 @@ pub(crate) struct AppendContinuityInfo {
     base_decode_time_start: f64,
     /// Duration of that segment
     duration: f64,
-    reset_reason: AppendResetReason,
+    reset_reason: BufferStateResetReason,
 }
 
 impl AppendContinuityInfo {
@@ -608,7 +603,7 @@ impl AppendContinuityInfo {
     pub(crate) fn new(
         base_decode_time_start: f64,
         duration: f64,
-        reset_reason: AppendResetReason,
+        reset_reason: BufferStateResetReason,
     ) -> Self {
         Self {
             base_decode_time_start,
@@ -625,7 +620,7 @@ impl AppendContinuityInfo {
         self.duration
     }
 
-    pub(crate) fn reset_reason(&self) -> AppendResetReason {
+    pub(crate) fn reset_reason(&self) -> BufferStateResetReason {
         self.reset_reason
     }
 }

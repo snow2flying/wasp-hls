@@ -12,7 +12,7 @@ pub(crate) use source_buffers::{PushSegmentError, RemoveDataError};
 
 pub(crate) use self::segment_inventory::{BufferedChunk, SegmentQualityContext};
 pub(crate) use source_buffers::{
-    AppendContinuityInfo, AppendResetReason, MediaSegmentPushData, ResetReasonUpdate,
+    AppendContinuityInfo, BufferStateResetReason, MediaSegmentPushData,
 };
 
 mod segment_inventory;
@@ -409,12 +409,12 @@ impl MediaElementReference {
         media_type: MediaType,
         start: f64,
         end: f64,
-        reset_reason_update: ResetReasonUpdate,
+        state_change: Option<BufferStateResetReason>,
     ) -> Result<(), RemoveDataError> {
         match self.buffer_mut_for(media_type) {
             None => Err(RemoveDataError::NoSourceBuffer(media_type)),
             Some(sb) => {
-                sb.remove_buffer(start, end, reset_reason_update);
+                sb.remove_buffer(start, end, state_change);
                 Ok(())
             }
         }
@@ -423,7 +423,7 @@ impl MediaElementReference {
     pub(crate) fn set_pending_append_reset_reason(
         &mut self,
         media_type: MediaType,
-        reason: AppendResetReason,
+        reason: BufferStateResetReason,
     ) -> Result<(), RemoveDataError> {
         match self.buffer_mut_for(media_type) {
             None => Err(RemoveDataError::NoSourceBuffer(media_type)),
@@ -445,7 +445,7 @@ impl MediaElementReference {
     pub(crate) fn flush(
         &mut self,
         media_type: MediaType,
-        reset_reason: AppendResetReason,
+        reset_reason: BufferStateResetReason,
     ) -> Result<(), RemoveDataError> {
         match self.buffer_mut_for(media_type) {
             None => Err(RemoveDataError::NoSourceBuffer(media_type)),

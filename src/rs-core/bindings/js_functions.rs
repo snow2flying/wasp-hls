@@ -8,7 +8,7 @@ use super::{
     SegmentParsingErrorCode, SourceBufferCreationErrorCode, TimerReason,
 };
 use crate::{
-    media_element::{AppendContinuityInfo, AppendResetReason, PushSegmentError},
+    media_element::{AppendContinuityInfo, BufferStateResetReason, PushSegmentError},
     parser::{
         MediaPlaylistParsingError, MediaPlaylistUpdateError, MultivariantPlaylistParsingError,
     },
@@ -543,7 +543,7 @@ pub fn jsAppendBuffer(
             continuity_info.map(|t| t.duration()).unwrap_or(0.),
             continuity_info
                 .map(|t| t.reset_reason() as u32)
-                .unwrap_or(AppendResetReason::None as u32),
+                .unwrap_or(BufferStateResetReason::None as u32),
             &mut has_start,
             &mut start,
             &mut has_duration,

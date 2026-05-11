@@ -14,7 +14,7 @@ use crate::{
         OtherErrorCode, PushedSegmentErrorCode, RequestId, SourceBufferId, TimerId,
     },
     dispatcher::segment_request_contexts::PendingSegmentRequest,
-    media_element::{AppendResetReason, ResetReasonUpdate, SegmentQualityContext},
+    media_element::{BufferStateResetReason, SegmentQualityContext},
     parser::{SegmentTimeInfo, TopLevelPlaylist, TopLevelPlaylistParsingError},
     playlist_store::{
         LockVariantResponse, MediaPlaylistPermanentId, PlaylistStore, ProbeSegmentMetadata,
@@ -178,7 +178,7 @@ impl Dispatcher {
                 SetAudioTrackResponse::AudioMediaUpdate => self.handle_media_playlist_update(
                     &[MediaType::Audio],
                     true,
-                    Some(AppendResetReason::AudioTrackSwitch),
+                    Some(BufferStateResetReason::AudioTrackSwitch),
                 ),
                 SetAudioTrackResponse::VariantUpdate {
                     updates,
@@ -410,18 +410,9 @@ impl Dispatcher {
                             mt, min_pos, max_pos
                         ));
                         if let (Ok(_), Ok(_)) = (
-                            self.media_element_ref.remove_data(
-                                mt,
-                                0.,
-                                min_pos,
-                                ResetReasonUpdate::NoChange,
-                            ),
-                            self.media_element_ref.remove_data(
-                                mt,
-                                max_pos,
-                                f64::MAX,
-                                ResetReasonUpdate::NoChange,
-                            ),
+                            self.media_element_ref.remove_data(mt, 0., min_pos, None),
+                            self.media_element_ref
+                                .remove_data(mt, max_pos, f64::MAX, None),
                         ) {
                             self.segment_selectors
                                 .restart_from_position(wanted_pos - 0.2);
@@ -765,7 +756,7 @@ impl Dispatcher {
         for media_type in [MediaType::Audio, MediaType::Video] {
             let _ = self
                 .media_element_ref
-                .set_pending_append_reset_reason(media_type, AppendResetReason::Seek);
+                .set_pending_append_reset_reason(media_type, BufferStateResetReason::Seek);
             let previous = previous_needed
                 .iter()
                 .find(|(mt, _)| *mt == media_type)
@@ -780,12 +771,9 @@ impl Dispatcher {
                 .media_element_ref
                 .has_buffered_data_at(media_type, wanted_pos);
             if previous != next && !has_buffered_data_at_seek_pos {
-                let _ = self.media_element_ref.remove_data(
-                    media_type,
-                    wanted_pos,
-                    f64::INFINITY,
-                    ResetReasonUpdate::NoChange,
-                );
+                let _ =
+                    self.media_element_ref
+                        .remove_data(media_type, wanted_pos, f64::INFINITY, None);
             }
         }
 
@@ -910,7 +898,7 @@ impl Dispatcher {
         };
 
         let flush_reason = if flush {
-            Some(AppendResetReason::VariantSwitch)
+            Some(BufferStateResetReason::VariantSwitch)
         } else {
             None
         };
@@ -930,7 +918,7 @@ impl Dispatcher {
         &mut self,
         changed_media_types: &[MediaType],
         abort_prev: bool,
-        flush: Option<AppendResetReason>,
+        flush: Option<BufferStateResetReason>,
     ) {
         if self.playlist_store.is_none() {
             return;
