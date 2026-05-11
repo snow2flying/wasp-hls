@@ -83,7 +83,6 @@ export interface HostBindings {
   appendBuffer(
     sourceBufferId: number,
     resourceId: number,
-    parseTimeInformation: boolean,
     continuityInfo?: AppendContinuityInfo,
   ): HostResult<AppendBufferValue, SegmentParsingErrorCode>;
   removeBuffer(

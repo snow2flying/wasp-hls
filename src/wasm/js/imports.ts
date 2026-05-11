@@ -176,10 +176,8 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
       __js_func__append_buffer(
         sourceBufferId: number,
         resourceId: number,
-        parseTimeInformation: number,
-        hasContinuityInfo: number,
+        hasTimingInformation: number,
         segmentStart: number,
-        hasSegmentDuration: number,
         segmentDuration: number,
         baseDecodeTimeStart: number,
         resetReason: number,
@@ -195,12 +193,10 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
           bindings.appendBuffer(
             sourceBufferId,
             resourceId,
-            parseTimeInformation !== 0,
-            hasContinuityInfo !== 0
+            hasTimingInformation !== 0
               ? {
                   start: segmentStart,
-                  duration:
-                    hasSegmentDuration !== 0 ? segmentDuration : undefined,
+                  duration: segmentDuration,
                   baseDecodeTimeStart,
                   resetReason: parseAppendResetReason(resetReason),
                 }

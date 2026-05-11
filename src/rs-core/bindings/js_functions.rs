@@ -77,13 +77,13 @@ unsafe extern "C" {
     fn __js_func__append_buffer(
         source_buffer_id: SourceBufferId,
         segment_id: ResourceId,
-        parse_time_information: u32,
-        has_continuity_info: u32,
+
+        has_timing_information: u32,
         segment_start: f64,
-        has_segment_duration: u32,
         segment_duration: f64,
         base_decode_time_start: f64,
         reset_reason: u32,
+
         has_start_out: *mut u32,
         start_out: *mut f64,
         has_duration_out: *mut u32,
@@ -525,7 +525,6 @@ pub fn jsInspectSegment(
 pub fn jsAppendBuffer(
     source_buffer_id: SourceBufferId,
     segment_id: ResourceId,
-    parse_time_information: bool,
     continuity_info: Option<&AppendContinuityInfo>,
 ) -> Result<Option<ParsedSegmentInfo>, (SegmentParsingErrorCode, Option<String>)> {
     let mut has_start = 0;
@@ -537,10 +536,8 @@ pub fn jsAppendBuffer(
         __js_func__append_buffer(
             source_buffer_id,
             segment_id,
-            bool_to_raw(parse_time_information),
             bool_to_raw(continuity_info.is_some()),
             continuity_info.map(|t| t.start()).unwrap_or(0.),
-            bool_to_raw(continuity_info.is_some()),
             continuity_info.map(|t| t.duration()).unwrap_or(0.),
             continuity_info
                 .map(|t| t.base_decode_time_start())
@@ -560,18 +557,14 @@ pub fn jsAppendBuffer(
     if success == 0 {
         return Err(take_js_error_out(out, SegmentParsingErrorCode::from_raw));
     }
-    if parse_time_information {
-        Ok(Some(ParsedSegmentInfo {
-            start: if has_start != 0 { Some(start) } else { None },
-            duration: if has_duration != 0 {
-                Some(duration)
-            } else {
-                None
-            },
-        }))
-    } else {
-        Ok(None)
-    }
+    Ok(Some(ParsedSegmentInfo {
+        start: if has_start != 0 { Some(start) } else { None },
+        duration: if has_duration != 0 {
+            Some(duration)
+        } else {
+            None
+        },
+    }))
 }
 
 /// Remove media data from the given SourceBuffer.
@@ -990,8 +983,17 @@ impl From<MediaPlaylistParsingError> for MediaPlaylistParsingErrorCode {
 }
 
 pub struct ParsedSegmentInfo {
-    pub start: Option<f64>,
-    pub duration: Option<f64>,
+    start: Option<f64>,
+    duration: Option<f64>,
+}
+
+impl ParsedSegmentInfo {
+    pub(crate) fn start(&self) -> Option<f64> {
+        self.start
+    }
+    pub(crate) fn duration(&self) -> Option<f64> {
+        self.duration
+    }
 }
 
 /// Result of a segment inspection (e.g. when calling `jsInspectSegment`)

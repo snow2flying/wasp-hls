@@ -44,6 +44,10 @@ pub(super) struct SourceBuffer {
     /// taken on buffer updates.
     needs_reflush: bool,
 
+    /// End playlist time of the last media segment known to have been appended successfully, as
+    /// reconstructed from the remuxed fMP4 timing.
+    last_successful_fmp4_end_time: Option<f64>,
+
     /// Explicit reason why the next media append should reseed transmux state.
     pending_reset_reason: AppendResetReason,
 }
@@ -70,6 +74,7 @@ impl SourceBuffer {
                 needs_reflush: false,
                 last_segment_pushed: false,
                 media_type,
+                last_successful_fmp4_end_time: None,
                 pending_reset_reason: AppendResetReason::None,
             }),
             Err(err) => Err(AddSourceBufferError::from_js_add_source_buffer_error(
@@ -119,7 +124,7 @@ impl SourceBuffer {
             "Buffer {} ({}): Pushing initialization segment",
             self.id, self.typ
         ));
-        match jsAppendBuffer(self.id, segment_data.id(), false, None) {
+        match jsAppendBuffer(self.id, segment_data.id(), None) {
             Err(err) => Err(PushSegmentError::from_js_append_buffer_error(
                 self.media_type,
                 err,
@@ -144,7 +149,6 @@ impl SourceBuffer {
     pub(super) fn push_media_segment(
         &mut self,
         data: MediaSegmentPushData,
-        parse_time_info: bool,
         base_decode_time_start: Option<f64>,
         has_validated_buffered_content: bool,
     ) -> Result<AppendBufferResponse, PushSegmentError> {
@@ -158,21 +162,25 @@ impl SourceBuffer {
             has_validated_buffered_content,
         );
         let id = data.id;
-        self.queue
-            .push_back(SourceBufferQueueElement::PushMedia((data, id)));
+        let parsed = match jsAppendBuffer(self.id, segment_data, Some(&continuity_info)) {
+            Err(err) => {
+                return Err(PushSegmentError::from_js_append_buffer_error(
+                    self.media_type,
+                    err,
+                ));
+            }
+            Ok(parsed) => parsed,
+        };
+        let successful_fmp4_end_time = parsed
+            .as_ref()
+            .and_then(|x| x.start().and_then(|s| x.duration().map(|d| s + d)));
+        self.queue.push_back(SourceBufferQueueElement::PushMedia {
+            data,
+            id,
+            successful_fmp4_end_time,
+        });
         Logger::debug(&format!("Buffer {} ({}): Pushing", self.id, self.typ));
-        match jsAppendBuffer(
-            self.id,
-            segment_data,
-            parse_time_info,
-            Some(&continuity_info),
-        ) {
-            Err(err) => Err(PushSegmentError::from_js_append_buffer_error(
-                self.media_type,
-                err,
-            )),
-            Ok(x) => Ok(AppendBufferResponse { parsed: x }),
-        }
+        Ok(AppendBufferResponse { parsed })
     }
 
     /// Remove media data from this `SourceBuffer`, based on a `start` and `end` time in seconds.
@@ -269,7 +277,11 @@ impl SourceBuffer {
                 self.needs_reflush = true;
                 jsFlush();
             }
-            Some(SourceBufferQueueElement::PushMedia { .. }) => {
+            Some(SourceBufferQueueElement::PushMedia {
+                successful_fmp4_end_time,
+                ..
+            }) => {
+                self.last_successful_fmp4_end_time = successful_fmp4_end_time;
                 if self.needs_reflush {
                     self.needs_reflush = false;
                     jsFlush();
@@ -295,10 +307,18 @@ impl SourceBuffer {
         } else {
             AppendResetReason::None
         };
+        let base_decode_time_start = if reset_reason == AppendResetReason::None {
+            // If no ResetReason, assume contiguous-ness
+            self.last_successful_fmp4_end_time
+                .or(base_decode_time_start)
+                .unwrap_or_else(|| segment_time_info.start())
+        } else {
+            base_decode_time_start.unwrap_or_else(|| segment_time_info.start())
+        };
         AppendContinuityInfo::new(
             segment_time_info.start(),
             segment_time_info.duration(),
-            base_decode_time_start.unwrap_or_else(|| segment_time_info.start()),
+            base_decode_time_start,
             reset_reason,
         )
     }
@@ -367,7 +387,7 @@ impl AppendBufferResponse {
     /// If set it is generally closer to the real segment's start time, once pushed to the browser,
     /// than what the Media Playlist told us.
     pub(crate) fn media_start(&self) -> Option<f64> {
-        self.parsed.as_ref().and_then(|p| p.start)
+        self.parsed.as_ref().and_then(|p| p.start())
     }
 
     /// Returns the optionally parsed duration, in seconds, found when parsing the segment's
@@ -376,7 +396,7 @@ impl AppendBufferResponse {
     /// If set it is generally closer to the real segment's duration, once pushed to the browser,
     /// than what the Media Playlist told us.
     pub(crate) fn media_duration(&self) -> Option<f64> {
-        self.parsed.as_ref().and_then(|p| p.duration)
+        self.parsed.as_ref().and_then(|p| p.duration())
     }
 }
 
@@ -388,7 +408,11 @@ pub(crate) enum SourceBufferQueueElement {
     /// A new chunk of media data needs to be pushed.
     /// The `u64` is the corresponding `id` of the given `MediaSegmentPushData` when the
     /// `push_media_segment` method was called.
-    PushMedia((MediaSegmentPushData, u64)),
+    PushMedia {
+        data: MediaSegmentPushData,
+        id: u64,
+        successful_fmp4_end_time: Option<f64>,
+    },
 
     /// Some already-buffered needs to be removed, `start` and `end` giving the
     /// time range of the data to remove, in seconds.

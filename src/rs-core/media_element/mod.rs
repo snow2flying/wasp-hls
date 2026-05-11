@@ -358,7 +358,6 @@ impl MediaElementReference {
         media_type: MediaType,
         metadata: MediaSegmentPushData,
     ) -> Result<(), PushSegmentError> {
-        let has_media_offset = self.media_offset.is_some();
         let (base_decode_time_start, has_validated_buffered_content) = match media_type {
             MediaType::Audio => (
                 self.audio_inventory
@@ -376,11 +375,8 @@ impl MediaElementReference {
 
             Some(sb) => {
                 let metadata_start = metadata.start();
-                let do_time_parsing = !has_media_offset
-                    && (media_type == MediaType::Audio || media_type == MediaType::Video);
                 let response = sb.push_media_segment(
                     metadata,
-                    do_time_parsing,
                     base_decode_time_start,
                     has_validated_buffered_content,
                 )?;
@@ -584,7 +580,7 @@ impl MediaElementReference {
                 } else {
                     sb.cancel_current_operations()
                 };
-                if let Some(SourceBufferQueueElement::PushMedia((_, id))) = queue_elt {
+                if let Some(SourceBufferQueueElement::PushMedia { id, .. }) = queue_elt {
                     if let Some(media_offset) = self.media_offset {
                         self.audio_inventory.reconcile_push_result(
                             id,
@@ -603,7 +599,7 @@ impl MediaElementReference {
                 } else {
                     sb.cancel_current_operations()
                 };
-                if let Some(SourceBufferQueueElement::PushMedia((_, id))) = queue_elt {
+                if let Some(SourceBufferQueueElement::PushMedia { id, .. }) = queue_elt {
                     if let Some(media_offset) = self.media_offset {
                         self.video_inventory.reconcile_push_result(
                             id,

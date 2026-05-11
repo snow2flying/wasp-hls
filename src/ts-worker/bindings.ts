@@ -878,13 +878,11 @@ export function addSourceBuffer(
 /**
  * @param {number} sourceBufferId
  * @param {number} resourceId
- * @param {boolean} parseTimeInformation
  * @returns {Object}
  */
 export function appendBuffer(
   sourceBufferId: SourceBufferId,
   resourceId: ResourceId,
-  parseTimeInformation?: boolean,
   continuityInfo?: AppendContinuityInfo,
 ): AppendBufferResult {
   let segment = jsMemoryResources.get(resourceId);
@@ -955,11 +953,10 @@ export function appendBuffer(
     timescale = sourceBufferObj.lastInitTimescale;
   }
 
-  let timeInfo;
-  if (parseTimeInformation === true && timescale !== undefined) {
-    // TODO Check if mp4 first
-    timeInfo = getTimeInformationFromMp4(segment, timescale);
-  }
+  const timeInfo =
+    timescale === undefined
+      ? null
+      : getTimeInformationFromMp4(segment, timescale);
   const transferableSegment = new Uint8Array(segment);
   try {
     if (sourceBufferObj.sourceBuffer !== null) {
