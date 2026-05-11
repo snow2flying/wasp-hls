@@ -547,9 +547,9 @@ pub fn jsAppendBuffer(
         __js_func__append_buffer(
             source_buffer_id,
             segment_id,
-            segment_hints.base_decode_time_start().value_hi(),
-            segment_hints.base_decode_time_start().value_lo(),
-            segment_hints.base_decode_time_start().timescale(),
+            (segment_hints.base_decode_time_start() >> 32) as u32,
+            segment_hints.base_decode_time_start() as u32,
+            segment_hints.base_decode_time_start_timescale(),
             segment_hints.reset_transmuxer_state() as u32,
             &mut has_start,
             &mut start_value_hi,
@@ -568,19 +568,16 @@ pub fn jsAppendBuffer(
     }
     Ok(Some(ParsedSegmentInfo {
         start: if has_start != 0 {
-            Some(TimescaledValue::new(
-                start_value_hi,
-                start_value_lo,
-                timescale,
-            ))
+            Some(((start_value_hi as u64) << 32) | start_value_lo as u64)
         } else {
             None
         },
         end: if has_end != 0 {
-            Some(TimescaledValue::new(end_value_hi, end_value_lo, timescale))
+            Some(((end_value_hi as u64) << 32) | end_value_lo as u64)
         } else {
             None
         },
+        timescale,
     }))
 }
 
@@ -1003,78 +1000,25 @@ impl From<MediaPlaylistParsingError> for MediaPlaylistParsingErrorCode {
 /// data after both potentially transmuxing and inspecting a media segment.
 pub struct ParsedSegmentInfo {
     /// Its precise start time if known, in the original timescale
-    start: Option<TimescaledValue>,
+    start: Option<u64>,
     /// Its precise end time if known, in the original timescale
-    end: Option<TimescaledValue>,
+    end: Option<u64>,
+    /// Timescale associated to `start` and `end`.
+    timescale: u32,
 }
 
 impl ParsedSegmentInfo {
     /// Obtain precise start time with its original timescale
-    pub(crate) fn start(&self) -> Option<TimescaledValue> {
+    pub(crate) fn start(&self) -> Option<u64> {
         self.start
     }
     /// Obtain precise end time with its original timescale
-    pub(crate) fn end(&self) -> Option<TimescaledValue> {
+    pub(crate) fn end(&self) -> Option<u64> {
         self.end
     }
-}
-
-/// Precise timestamp value, expressed in a given timescale to both allow encoding it as an integer
-/// and to prevent rounding errors.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct TimescaledValue {
-    /// High 4 bytes of that value. This weird format is due to how JS can't safely fully encode
-    /// u64 values
-    value_hi: u32,
-    /// Low 4 bytes of that value. This weird format is due to how JS can't safely fully encode
-    /// u64 values
-    value_lo: u32,
-    /// Timescale to convert that value to seconds.
-    timescale: u32,
-}
-
-impl TimescaledValue {
-    /// Create a new timescaled value from the 3 components: hi, low and timescale
-    pub(crate) fn new(value_hi: u32, value_lo: u32, timescale: u32) -> Self {
-        Self {
-            value_hi,
-            value_lo,
-            timescale,
-        }
-    }
-
-    /// Create a new timescaled value directly from its u64 value and a timescale
-    pub(crate) fn from_u64(value: u64, timescale: u32) -> Self {
-        Self {
-            value_hi: (value >> 32) as u32,
-            value_lo: value as u32,
-            timescale,
-        }
-    }
-
-    /// Convert that timescaled value to seconds as a float64. May be lossy.
-    pub(crate) fn to_f64_seconds(self) -> f64 {
-        self.value() as f64 / self.timescale as f64
-    }
-
-    /// Obtain the high 4 bytes of that u64 value
-    pub(crate) fn value_hi(self) -> u32 {
-        self.value_hi
-    }
-
-    /// Obtain the low 4 bytes of that u64 value
-    pub(crate) fn value_lo(self) -> u32 {
-        self.value_lo
-    }
-
-    /// Obtain the timescale of that value
-    pub(crate) fn timescale(self) -> u32 {
+    /// Obtain the timescale associated to the parsed timing values.
+    pub(crate) fn timescale(&self) -> u32 {
         self.timescale
-    }
-
-    /// Obtain the timestamp itself, as u64
-    pub(crate) fn value(self) -> u64 {
-        ((self.value_hi as u64) << 32) | self.value_lo as u64
     }
 }
 

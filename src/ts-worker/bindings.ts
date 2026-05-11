@@ -931,8 +931,10 @@ export function appendBuffer(
         {
           reset: segmentHints.resetTransmuxerState,
           baseMediaDecodeTime: {
-            hi: segmentHints.baseDecodeTimeStartHi,
-            lo: segmentHints.baseDecodeTimeStartLo,
+            value: combineSafeTimeValue(
+              segmentHints.baseDecodeTimeStartHi,
+              segmentHints.baseDecodeTimeStartLo,
+            ),
             timescale: segmentHints.baseDecodeTimeStartTimescale,
           },
         },
@@ -941,11 +943,7 @@ export function appendBuffer(
         segment = transmuxedData.data;
         if (transmuxedData.timingInfo !== undefined) {
           segmentPreciseTiming = {
-            // XXX TODO: Should already be timescaled
-            start: splitTimeValue(
-              transmuxedData.timingInfo.start *
-                transmuxedData.timingInfo.timescale,
-            ),
+            start: splitTimeValue(transmuxedData.timingInfo.start),
             end: splitTimeValue(transmuxedData.timingInfo.end),
             timescale: transmuxedData.timingInfo.timescale,
           };
@@ -1394,12 +1392,14 @@ function getTimeInformationFromMp4(
 }
 
 function splitTimeValue(value: number): ISafeU64 {
-  // XXX TODO: What? If it's to protect against overflows....
-  // Shouldn't it already have overflowed?
   return {
     hi: Math.floor(value / 0x100000000),
     lo: value >>> 0,
   };
+}
+
+function combineSafeTimeValue(hi: number, lo: number): number {
+  return hi * 0x100000000 + lo;
 }
 
 /**

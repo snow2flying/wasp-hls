@@ -59,20 +59,17 @@ export interface TransmuxedSegmentTimingInfo {
   timescale: number;
 }
 
-/** A timestamp represented alongside its timescale. */
-export interface TimescaledValue {
-  /** Timestamp value in the associated timescale. */
-  value: number;
-  /** Timescale used for that timestamp. */
-  timescale: number;
-}
-
 /** Context given to the transmuxer when transmuxing a segment. */
 export interface TransmuxSegmentOptions {
   /** If `true`, this segment is non-contiguous with the previous one. */
   reset?: boolean;
   /** The segment's base DTS, if known. */
-  baseMediaDecodeTime?: TimescaledValue;
+  baseMediaDecodeTime?: {
+    /** Timestamp value in the associated timescale. */
+    value: number;
+    /** Timescale used for that timestamp. */
+    timescale: number;
+  };
 }
 
 /** Output from the transmuxer. */
@@ -455,7 +452,12 @@ export default class Transmuxer {
   }
 
   private _prepareSegmentTimeline(
-    baseMediaDecodeTime: TimescaledValue | undefined,
+    baseMediaDecodeTime:
+      | {
+          value: number;
+          timescale: number;
+        }
+      | undefined,
   ): void {
     if (baseMediaDecodeTime === undefined) {
       return;

@@ -3,7 +3,6 @@ use std::collections::VecDeque;
 use crate::bindings::{
     jsAddSourceBuffer, jsAppendBuffer, jsFlush, jsRemoveBuffer, AddSourceBufferErrorCode,
     MediaType, ParsedSegmentInfo, ResourceId, SegmentParsingErrorCode, SourceBufferId,
-    TimescaledValue,
 };
 use crate::dispatcher::JsMemoryBlob;
 use crate::parser::SegmentTimeInfo;
@@ -49,7 +48,7 @@ pub(super) struct SourceBuffer {
     ///
     /// When available, this exact timescaled value is used as the continuity anchor for the next
     /// transmuxed append.
-    last_segment_end_time: Option<TimescaledValue>,
+    last_segment_end_time: Option<u64>,
 
     /// Some state may be maintained by the potential lower-level transmuxer we'll feed data too.
     /// That state makes sense as we're pushing contiguous segments but does not make sense to be
@@ -129,7 +128,7 @@ impl SourceBuffer {
         match jsAppendBuffer(
             self.id,
             segment_data.id(),
-            &SegmentHints::new(TimescaledValue::default(), true),
+            &SegmentHints::new(0, 1, true),
         ) {
             Err(err) => Err(PushSegmentError::from_js_append_buffer_error(
                 self.media_type,
@@ -354,7 +353,7 @@ impl AppendBufferResponse {
     pub(crate) fn media_start(&self) -> Option<f64> {
         self.parsed
             .as_ref()
-            .and_then(|p| p.start().map(|x| x.to_f64_seconds()))
+            .and_then(|p| p.start().map(|x| x as f64 / p.timescale() as f64))
     }
 
     /// Returns the optionally parsed end, in seconds, found when parsing the segment's
@@ -365,7 +364,7 @@ impl AppendBufferResponse {
     pub(crate) fn media_end(&self) -> Option<f64> {
         self.parsed
             .as_ref()
-            .and_then(|p| p.end().map(|x| x.to_f64_seconds()))
+            .and_then(|p| p.end().map(|x| x as f64 / p.timescale() as f64))
     }
 }
 
@@ -530,7 +529,9 @@ pub(crate) enum RemoveDataError {
 #[derive(Clone, Debug)]
 pub(crate) struct SegmentHints {
     /// Exact DTS anchor to use when computing the next base decode time.
-    base_decode_time_start: TimescaledValue,
+    base_decode_time_start: u64,
+    /// Timescale associated to `base_decode_time_start`.
+    base_decode_time_start_timescale: u32,
     /// Whether transmuxer state should be discarded before processing this segment.
     ///
     /// This is intended for hard discontinuities such as rendition switches,
@@ -545,17 +546,23 @@ pub(crate) struct SegmentHints {
 impl SegmentHints {
     /// Create a new `SegmentHints`
     pub(crate) fn new(
-        base_decode_time_start: TimescaledValue,
+        base_decode_time_start: u64,
+        base_decode_time_start_timescale: u32,
         reset_transmuxer_state: bool,
     ) -> Self {
         Self {
             base_decode_time_start,
+            base_decode_time_start_timescale,
             reset_transmuxer_state,
         }
     }
 
-    pub(crate) fn base_decode_time_start(&self) -> &TimescaledValue {
-        &self.base_decode_time_start
+    pub(crate) fn base_decode_time_start(&self) -> u64 {
+        self.base_decode_time_start
+    }
+
+    pub(crate) fn base_decode_time_start_timescale(&self) -> u32 {
+        self.base_decode_time_start_timescale
     }
 
     pub(crate) fn reset_transmuxer_state(&self) -> bool {
@@ -565,27 +572,22 @@ impl SegmentHints {
 
 fn build_segment_hints(
     segment_time_info: &SegmentTimeInfo,
-    last_segment_end: Option<TimescaledValue>,
+    last_segment_end: Option<u64>,
     reset_transmuxer: bool,
 ) -> SegmentHints {
     const TIMESCALE: u32 = 90_000;
     const CONTIGUITY_TOLERANCE_TICKS: u64 = TIMESCALE as u64 / 4;
 
-    let playlist_start = TimescaledValue::from_u64(
-        (segment_time_info.start() * TIMESCALE as f64).round() as u64,
-        TIMESCALE,
-    );
+    let playlist_start = (segment_time_info.start() * TIMESCALE as f64).round() as u64;
 
     let start_dts = match last_segment_end {
         // TODO: We should just be able to determine with confidence what is and is not a
         // discontinuity here, to not rely on that weird huge trick.
-        Some(last_end)
-            if playlist_start.value().abs_diff(last_end.value()) <= CONTIGUITY_TOLERANCE_TICKS =>
-        {
+        Some(last_end) if playlist_start.abs_diff(last_end) <= CONTIGUITY_TOLERANCE_TICKS => {
             last_end
         }
         _ => playlist_start,
     };
 
-    SegmentHints::new(start_dts, reset_transmuxer)
+    SegmentHints::new(start_dts, TIMESCALE, reset_transmuxer)
 }
