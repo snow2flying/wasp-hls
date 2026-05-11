@@ -45,23 +45,9 @@ function getDurationFromTrun(buffer: Uint8Array): number | undefined {
   return completeDuration;
 }
 
-/**
- * Get timescale information from the first movie track. Found in init segments.
- * `undefined` if not found or not parsed.
- * @param {Uint8Array} buffer
- * @returns {Number | undefined}
- */
-function getMDHDTimescale(buffer: Uint8Array): number | undefined {
-  const timescales = getMDHDTimescales(buffer);
-  if (timescales === undefined) {
-    return undefined;
-  }
-  return timescales.values().next().value;
-}
-
-function getMDHDTimescales(
+function getInitTrackInfo(
   buffer: Uint8Array,
-): Map<number, number> | undefined {
+): Map<number, { timescale: number; type: "audio" | "video" | "other" }> | undefined {
   const moov = getBoxContent(buffer, 0x6d6f6f76 /* moov */);
   if (moov === null) {
     return undefined;
@@ -72,7 +58,10 @@ function getMDHDTimescales(
     return undefined;
   }
 
-  const timescales = new Map<number, number>();
+  const trackInfo = new Map<
+    number,
+    { timescale: number; type: "audio" | "video" | "other" }
+  >();
   for (const trak of traks) {
     const trackId = getTrackIdFromTRAK(trak);
     const mdia = getBoxContent(trak, 0x6d646961 /* mdia */);
@@ -81,47 +70,123 @@ function getMDHDTimescales(
     }
     const timescale = getTimescaleFromMDIA(mdia);
     if (timescale !== undefined) {
-      timescales.set(trackId, timescale);
+      trackInfo.set(trackId, {
+        timescale,
+        type: getTrackTypeFromTRAK(trak),
+      });
     }
   }
 
-  return timescales.size === 0 ? undefined : timescales;
+  return trackInfo.size === 0 ? undefined : trackInfo;
+}
+
+/**
+ * Get timescale information from the first movie track. Found in init segments.
+ * `undefined` if not found or not parsed.
+ * @param {Uint8Array} buffer
+ * @returns {Number | undefined}
+ */
+function getMDHDTimescale(buffer: Uint8Array): number | undefined {
+  const trackInfo = getInitTrackInfo(buffer);
+  if (trackInfo === undefined) {
+    return undefined;
+  }
+  return trackInfo.values().next().value?.timescale;
 }
 
 function getIsobmfTimeInfo(
   buffer: Uint8Array,
-  initTimescaleByTrackId: Map<number, number>,
+  initTrackInfoByTrackId: Map<
+    number,
+    { timescale: number; type: "audio" | "video" | "other" }
+  >,
 ): { time: number; duration: number | undefined; timescale: number } | null {
   const trafs = getTRAFs(buffer);
   if (trafs.length === 0) {
     return null;
   }
 
-  // XXX TODO: Video wins, else audio
-  for (const traf of trafs) {
-    const trackId = getTrackIdFromTFHDInTRAF(traf);
-    const decodeTime = getTrackFragmentDecodeTimeFromTRAF(traf);
-    if (trackId === undefined || decodeTime === undefined) {
-      continue;
-    }
-    const timescale = initTimescaleByTrackId.get(trackId);
-    if (timescale === undefined) {
-      continue;
-    }
-    const duration = getDurationFromTRAF(traf);
-    if (duration === undefined) {
-      continue;
-    }
+  const candidates = trafs
+    .map((traf) => {
+      const trackId = getTrackIdFromTFHDInTRAF(traf);
+      const decodeTime = getTrackFragmentDecodeTimeFromTRAF(traf);
+      if (trackId === undefined || decodeTime === undefined) {
+        return null;
+      }
+      const initTrackInfo = initTrackInfoByTrackId.get(trackId);
+      if (initTrackInfo === undefined) {
+        return null;
+      }
+      const duration = getDurationFromTRAF(traf);
+      if (duration === undefined) {
+        return null;
+      }
 
-    return {
-      time: decodeTime,
-      duration,
-      timescale,
-    };
+      return {
+        time: decodeTime,
+        duration,
+        timescale: initTrackInfo.timescale,
+        trackType: initTrackInfo.type,
+      };
+    })
+    .filter(isTrackTimeCandidate);
+
+  const bestCandidate =
+    candidates.find((candidate) => candidate.trackType === "video") ??
+    candidates.find((candidate) => candidate.trackType === "audio") ??
+    candidates[0];
+
+  if (bestCandidate === undefined) {
+    return null;
   }
-  return null;
+
+  return {
+    time: bestCandidate.time,
+    duration: bestCandidate.duration,
+    timescale: bestCandidate.timescale,
+  };
 }
 
+function isTrackTimeCandidate(
+  candidate:
+    | {
+        time: number;
+        duration: number;
+        timescale: number;
+        trackType: "audio" | "video" | "other";
+      }
+    | null,
+): candidate is {
+  time: number;
+  duration: number;
+  timescale: number;
+  trackType: "audio" | "video" | "other";
+} {
+  return candidate !== null;
+}
+
+function getTrackTypeFromTRAK(
+  trak: Uint8Array,
+): "audio" | "video" | "other" {
+  const mdia = getBoxContent(trak, 0x6d646961 /* mdia */);
+  if (mdia === null) {
+    return "other";
+  }
+
+  const hdlr = getBoxContent(mdia, 0x68646c72 /* hdlr */);
+  if (hdlr === null || hdlr.length < 12) {
+    return "other";
+  }
+
+  const handlerType = be4toi(hdlr, 8);
+  if (handlerType === 0x76696465 /* vide */) {
+    return "video";
+  }
+  if (handlerType === 0x736f756e /* soun */) {
+    return "audio";
+  }
+  return "other";
+}
 /**
  * Extract RFC 6381 codec strings from the initialization metadata contained in
  * the given ISOBMFF data.
@@ -939,9 +1004,9 @@ function be8toi(bytes: Uint8Array, offset: number): number {
 
 export {
   getDurationFromTrun,
+  getInitTrackInfo,
   getIsobmfTimeInfo,
   getTrackFragmentDecodeTime,
   getMDHDTimescale,
-  getMDHDTimescales,
   getIsoBmffCodecs,
 };

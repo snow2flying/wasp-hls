@@ -55,7 +55,7 @@ import {
 import type { RequestId, ResourceId, TimerId } from "./globals.ts";
 import {
   getIsoBmffCodecs,
-  getMDHDTimescales,
+  getInitTrackInfo,
   getIsobmfTimeInfo,
 } from "./isobmff-utils.js";
 import postMessageToMain from "./postMessage.js";
@@ -789,7 +789,7 @@ export function addSourceBuffer(
       }
       const sourceBufferId = nextSourceBufferId;
       sourceBuffers.push({
-        lastInitTimescaleByTrackId: undefined,
+        lastInitTrackInfoByTrackId: undefined,
         id: sourceBufferId,
         transmuxer: mimeType === typ ? null : createTransmuxer(),
         sourceBuffer: null,
@@ -837,7 +837,7 @@ export function addSourceBuffer(
       const sourceBufferId = nextSourceBufferId;
       const queuedSourceBuffer = new QueuedSourceBuffer(sourceBuffer);
       sourceBuffers.push({
-        lastInitTimescaleByTrackId: undefined,
+        lastInitTrackInfoByTrackId: undefined,
         id: sourceBufferId,
         sourceBuffer: queuedSourceBuffer,
         transmuxer: mimeType === typ ? null : createTransmuxer(),
@@ -967,18 +967,15 @@ export function appendBuffer(
   }
 
   // TODO Check if mp4 first (and if init segment)?
-  const initTimescaleByTrackId = getMDHDTimescales(segment);
-  if (initTimescaleByTrackId !== undefined) {
-    sourceBufferObj.lastInitTimescaleByTrackId = initTimescaleByTrackId;
+  const initTrackInfoByTrackId = getInitTrackInfo(segment);
+  if (initTrackInfoByTrackId !== undefined) {
+    sourceBufferObj.lastInitTrackInfoByTrackId = initTrackInfoByTrackId;
   }
 
-  if (
-    segmentPreciseTiming === undefined &&
-    sourceBufferObj.lastInitTimescaleByTrackId
-  ) {
+  if (segmentPreciseTiming === undefined && sourceBufferObj.lastInitTrackInfoByTrackId) {
     const timeInfo = getTimeInformationFromMp4(
       segment,
-      sourceBufferObj.lastInitTimescaleByTrackId,
+      sourceBufferObj.lastInitTrackInfoByTrackId,
     );
 
     if (timeInfo) {
@@ -1386,9 +1383,12 @@ export function freeResource(resourceId: ResourceId): boolean {
  */
 function getTimeInformationFromMp4(
   segment: Uint8Array,
-  initTimescaleByTrackId: Map<number, number>,
+  initTrackInfoByTrackId: Map<
+    number,
+    { timescale: number; type: "audio" | "video" | "other" }
+  >,
 ): { time: number; duration: number | undefined; timescale: number } | null {
-  return getIsobmfTimeInfo(segment, initTimescaleByTrackId);
+  return getIsobmfTimeInfo(segment, initTrackInfoByTrackId);
 }
 
 function splitTimeValue(value: number): ISafeU64 {
