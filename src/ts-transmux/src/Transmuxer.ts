@@ -1,9 +1,7 @@
 import { isLikelyAacData } from "./aac-utils.ts";
 import AdtsPacketParser from "./AdtsPacketParser.ts";
-import type { ITimescaledU64 } from "./clock-utils.ts";
 import {
-  getTimescaledValueToVideoTimescale,
-  ONE_SECOND_IN_TS,
+  toVideoTsFromTimescale,
 } from "./clock-utils.ts";
 import type { ElementaryPacket } from "./ElementaryPacketParser.ts";
 import ElementaryPacketParser from "./ElementaryPacketParser.ts";
@@ -61,12 +59,20 @@ export interface TransmuxedSegmentTimingInfo {
   timescale: number;
 }
 
+/** A timestamp represented alongside its timescale. */
+export interface TimescaledValue {
+  /** Timestamp value in the associated timescale. */
+  value: number;
+  /** Timescale used for that timestamp. */
+  timescale: number;
+}
+
 /** Context given to the transmuxer when transmuxing a segment. */
 export interface TransmuxSegmentOptions {
   /** If `true`, this segment is non-contiguous with the previous one. */
   reset?: boolean;
   /** The segment's base DTS, if known. */
-  baseMediaDecodeTime?: ITimescaledU64;
+  baseMediaDecodeTime?: TimescaledValue;
 }
 
 /** Output from the transmuxer. */
@@ -74,8 +80,9 @@ export interface TransmuxedSegmentData {
   /** The transmuxed fmp4, in the flesh. */
   data: Uint8Array;
   /**
-   * Precise timing information on it, about its start and end:
-   * - If segment is muxed audio + video, this corresponds to the video track.
+   * Precise timing information for continuity decisions:
+   * - If segment is muxed audio + video, this corresponds to the video track
+   *   and should be reused as the continuity anchor for the next segment.
    * - If segment is only audio or only video, this corresponds to that track.
    */
   timingInfo: TransmuxedSegmentTimingInfo | undefined;
@@ -87,7 +94,7 @@ export default class Transmuxer {
   private _audioTrack: any;
   private _baseMediaDecodeTime: number;
   private _currentPipeline: AacPipelineElements | TsPipelineElements | null;
-  private _pendingSegmentBaseDts: ITimescaledU64 | null;
+  private _pendingSegmentBaseMediaDecodeTime: number | null;
 
   constructor(options?: TransmuxerOptions | undefined) {
     this._options = options ?? {};
@@ -95,7 +102,7 @@ export default class Transmuxer {
     this._currentPipeline = null;
     this._videoTrack = null;
     this._audioTrack = null;
-    this._pendingSegmentBaseDts = null;
+    this._pendingSegmentBaseMediaDecodeTime = null;
   }
 
   public transmuxSegment(
@@ -131,7 +138,7 @@ export default class Transmuxer {
     this._currentPipeline = null;
     this._videoTrack = null;
     this._audioTrack = null;
-    this._pendingSegmentBaseDts = null;
+    this._pendingSegmentBaseMediaDecodeTime = null;
   }
 
   public pushTsSegment(input: Uint8Array): TransmuxedSegmentData | null {
@@ -354,7 +361,7 @@ export default class Transmuxer {
 
     if (pipeline?.mp4SegmentConstructor !== undefined) {
       const segmentInfo = pipeline.mp4SegmentConstructor.finishSegment();
-      this._pendingSegmentBaseDts = null;
+      this._pendingSegmentBaseMediaDecodeTime = null;
       if (segmentInfo === null) {
         return null;
       }
@@ -448,27 +455,25 @@ export default class Transmuxer {
   }
 
   private _prepareSegmentTimeline(
-    baseMediaDecodeTime: ITimescaledU64 | undefined,
+    baseMediaDecodeTime: TimescaledValue | undefined,
   ): void {
     if (baseMediaDecodeTime === undefined) {
       return;
     }
-    this._pendingSegmentBaseDts = baseMediaDecodeTime;
-
-    // XXX TODO: Maybe ineficient to play with timescales like this?
-    //           Shouldn't we rely on the sample rate with audio?
-    const baseMediaDecodeTimeVideoTs =
-      getTimescaledValueToVideoTimescale(baseMediaDecodeTime);
+    const baseMediaDecodeTimeVideoTs = toVideoTsFromTimescale(
+      baseMediaDecodeTime.value,
+      baseMediaDecodeTime.timescale,
+    );
+    this._pendingSegmentBaseMediaDecodeTime = baseMediaDecodeTimeVideoTs;
     this._resetTrackTimelineStart(this._videoTrack, baseMediaDecodeTimeVideoTs);
     this._resetTrackTimelineStart(this._audioTrack, baseMediaDecodeTimeVideoTs);
   }
 
   private _getCurrentBaseMediaDecodeTime(): number {
-    const currentStart = this._pendingSegmentBaseDts?.start;
-    if (currentStart === undefined) {
+    if (this._pendingSegmentBaseMediaDecodeTime === null) {
       return this._baseMediaDecodeTime;
     }
-    return Math.max(0, Math.round(currentStart * ONE_SECOND_IN_TS));
+    return this._pendingSegmentBaseMediaDecodeTime;
   }
 
   private _resetTrackTimelineStart(track: any, baseMediaDecodeTime: number) {
