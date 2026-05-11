@@ -422,9 +422,9 @@ impl MediaElementReference {
     /// Marks the next pushed media segment of the given media type as the beginning of a
     /// new segment sequence for the associated buffer.
     ///
-    /// This should be called when the next segment may not be safely processed
-    /// using state carried from previously pushed segments, such as after a
-    /// rendition/media switch or an HLS discontinuity.
+    /// This should be called when on rendition/media switch or on an HLS discontinuity,
+    /// to indicate that potential state maintained by buffers until now can be safely
+    /// reset.
     ///
     /// This does not remove buffered media and does not itself push an init
     /// segment. It only affects how the next media segment is processed.
@@ -455,11 +455,6 @@ impl MediaElementReference {
             MediaType::Audio => self.audio_inventory.contains_position(position),
             MediaType::Video => self.video_inventory.contains_position(position),
         }
-    }
-
-    pub(crate) fn has_operations_pending(&self, media_type: MediaType) -> bool {
-        self.buffer_for(media_type)
-            .is_some_and(source_buffers::SourceBuffer::has_operations_pending)
     }
 
     /// Method to call once a `MediaObservation` has been received.

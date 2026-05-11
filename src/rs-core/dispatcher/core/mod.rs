@@ -29,37 +29,6 @@ use crate::{
 
 mod startup;
 
-// XXX TODO: That's shit
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct NeededSegmentKey {
-    init_id: Option<f64>,
-    media_sequence: Option<u32>,
-    media_start: Option<f64>,
-    media_end: Option<f64>,
-}
-
-impl Dispatcher {
-    fn needed_segment_key_for(
-        &self,
-        selectors: &mut crate::segment_selector::NextSegmentSelectors,
-        media_type: MediaType,
-    ) -> Option<NeededSegmentKey> {
-        let pl_store = self.playlist_store.as_ref()?;
-        let (segment_list, context) = pl_store.curr_media_playlist_segment_info(media_type)?;
-        let needed = selectors.get_mut(media_type).most_needed_segment(
-            segment_list,
-            &context,
-            self.media_element_ref.inventory(media_type),
-        );
-        Some(NeededSegmentKey {
-            init_id: needed.init_segment().map(|i| i.id()),
-            media_sequence: needed.media_segment().map(|s| s.sequence()),
-            media_start: needed.media_segment().map(|s| s.start()),
-            media_end: needed.media_segment().map(|s| s.end()),
-        })
-    }
-}
-
 impl Dispatcher {
     /// Completely stop playback of the current content if one and free all its associated
     /// resources.
@@ -378,7 +347,6 @@ impl Dispatcher {
     ) {
         self.media_element_ref
             .on_source_buffer_update(source_buffer_id, buffered, true);
-        self.check_segments_to_request();
     }
 
     /// Method to call when a `SourceBuffer`'s `appendBuffer` call led to an `error` event.
@@ -745,39 +713,10 @@ impl Dispatcher {
     /// Actions to perform once a seek has been performed on the media element.
     fn on_seek(&mut self) {
         let wanted_pos = self.media_element_ref.wanted_position();
-        let mut previous_selectors = self.segment_selectors.clone();
-        let previous_needed = [MediaType::Audio, MediaType::Video]
-            .map(|mt| (mt, self.needed_segment_key_for(&mut previous_selectors, mt)));
         self.segment_selectors
             .restart_from_position(wanted_pos - 0.2);
 
-        let mut next_selectors = self.segment_selectors.clone();
-        let next_needed = [MediaType::Audio, MediaType::Video]
-            .map(|mt| (mt, self.needed_segment_key_for(&mut next_selectors, mt)));
-        for media_type in [MediaType::Audio, MediaType::Video] {
-            // XXX TODO:
-            // let _ = self
-            //     .media_element_ref
-            //     .notify_buffer_state_update(media_type, BufferStateUpdate::Seek);
-            let previous = previous_needed
-                .iter()
-                .find(|(mt, _)| *mt == media_type)
-                .map(|(_, key)| *key)
-                .unwrap_or(None);
-            let next = next_needed
-                .iter()
-                .find(|(mt, _)| *mt == media_type)
-                .map(|(_, key)| *key)
-                .unwrap_or(None);
-            let has_buffered_data_at_seek_pos = self
-                .media_element_ref
-                .has_buffered_data_at(media_type, wanted_pos);
-            if previous != next && !has_buffered_data_at_seek_pos {
-                let _ = self
-                    .media_element_ref
-                    .remove_data(media_type, wanted_pos, f64::INFINITY);
-            }
-        }
+        // TODO: Announce potentially a discontinuity for the buffer? Only if we know it to be true
 
         self.requester.lock_segment_requests();
         self.requester.update_base_position(Some(wanted_pos));
@@ -849,9 +788,6 @@ impl Dispatcher {
         let Some(pl_store) = self.playlist_store.as_ref() else {
             return;
         };
-        if self.media_element_ref.has_operations_pending(media_type) {
-            return;
-        }
         if !self.requester.has_segment_request_pending(media_type) {
             let inventory = self.media_element_ref.inventory(media_type);
             if let Some(seg_info) = pl_store.curr_media_playlist_segment_info(media_type) {
