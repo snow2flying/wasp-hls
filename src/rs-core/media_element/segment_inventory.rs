@@ -230,10 +230,6 @@ impl SegmentInventory {
         self.inventory = vec![];
     }
 
-    pub(super) fn has_validated_segments(&self) -> bool {
-        self.inventory.iter().any(|seg| seg.validated)
-    }
-
     /// Returns `true` if a validated buffered chunk currently covers `position`.
     pub(super) fn contains_position(&self, position: f64) -> bool {
         self.inventory.iter().any(|seg| {

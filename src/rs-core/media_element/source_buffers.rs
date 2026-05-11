@@ -49,7 +49,8 @@ pub(super) struct SourceBuffer {
     last_segment_end_time: Option<f64>,
 
     /// Explicit reason why the next media append should reseed transmux state.
-    pending_reset_reason: BufferStateUpdate,
+    /// XXX TODO: Bitset instead? We don't want new updates to totally replace old ones
+    pending_buffer_state_update: BufferStateUpdate,
 }
 
 impl SourceBuffer {
@@ -75,7 +76,7 @@ impl SourceBuffer {
                 last_segment_pushed: false,
                 media_type,
                 last_segment_end_time: None,
-                pending_reset_reason: BufferStateUpdate::None,
+                pending_buffer_state_update: BufferStateUpdate::None,
             }),
             Err(err) => Err(AddSourceBufferError::from_js_add_source_buffer_error(
                 err, &typ,
@@ -114,8 +115,8 @@ impl SourceBuffer {
         &mut self,
         segment_data: JsMemoryBlob,
     ) -> Result<AppendBufferResponse, PushSegmentError> {
-        if self.was_used && self.pending_reset_reason == BufferStateUpdate::None {
-            self.pending_reset_reason = BufferStateUpdate::InitSegmentChange;
+        if self.was_used && self.pending_buffer_state_update == BufferStateUpdate::None {
+            self.pending_buffer_state_update = BufferStateUpdate::InitSegmentChange;
         }
         self.was_used = true;
         self.queue
@@ -186,18 +187,18 @@ impl SourceBuffer {
     /// * `end` - End time, in seconds, of the range of time which should be removed from the
     ///   `SourceBuffer`.
     ///
-    /// * `reset_reason` - Supplementary context on why that removal operation happens. This is
+    /// * `state_update` - Supplementary context on why that removal operation happens. This is
     ///   necessary because transmuxing is stateful, supplementary context is thus necessary to
     ///   handle that maintained state properly.
     pub(super) fn remove_buffer(
         &mut self,
         start: f64,
         end: f64,
-        reset_reason_update: Option<BufferStateUpdate>,
+        state_update: Option<BufferStateUpdate>,
     ) {
         self.was_used = true;
-        if let Some(reason) = reset_reason_update {
-            self.pending_reset_reason = reason;
+        if let Some(upd) = state_update {
+            self.pending_buffer_state_update = upd;
         }
         self.queue
             .push_back(SourceBufferQueueElement::Remove { start, end });
@@ -212,16 +213,16 @@ impl SourceBuffer {
     ///
     /// There's special considerations too take care of here as we'll remove data corresponding to
     /// the current position. As such a seek will have to be performed once the remove is done
-    pub(super) fn flush_buffer(&mut self, reset_reason: BufferStateUpdate) {
+    pub(super) fn flush_buffer(&mut self, state_update: BufferStateUpdate) {
         self.was_used = true;
-        self.pending_reset_reason = reset_reason;
+        self.pending_buffer_state_update = state_update;
         self.queue.push_back(SourceBufferQueueElement::Emptying);
         Logger::debug(&format!("Buffer {} ({}): emptying", self.id, self.typ));
         let _ = jsRemoveBuffer(self.id, 0., f64::INFINITY);
     }
 
-    pub(super) fn set_pending_reset_reason(&mut self, reason: BufferStateUpdate) {
-        self.pending_reset_reason = reason;
+    pub(super) fn set_pending_buffer_state_update(&mut self, state_update: BufferStateUpdate) {
+        self.pending_buffer_state_update = state_update;
     }
 
     /// SourceBuffers maintain a queue of planned operations such as push and remove to media
@@ -285,22 +286,22 @@ impl SourceBuffer {
         &mut self,
         segment_time_info: &SegmentTimeInfo,
     ) -> BufferStateData {
-        let reset_reason = if self.pending_reset_reason != BufferStateUpdate::None {
-            let reason = self.pending_reset_reason;
-            self.pending_reset_reason = BufferStateUpdate::None;
-            reason
+        let state_update = if self.pending_buffer_state_update != BufferStateUpdate::None {
+            let state_update = self.pending_buffer_state_update;
+            self.pending_buffer_state_update = BufferStateUpdate::None;
+            state_update
         } else {
             BufferStateUpdate::None
         };
 
-        let segment_start = if reset_reason == BufferStateUpdate::None {
-            // If no ResetReason, assume contiguous-ness
+        let segment_start = if state_update == BufferStateUpdate::None {
+            // assume contiguous-ness
             self.last_segment_end_time
                 .unwrap_or_else(|| segment_time_info.start())
         } else {
             segment_time_info.start()
         };
-        BufferStateData::new(segment_start, segment_time_info.duration(), reset_reason)
+        BufferStateData::new(segment_start, segment_time_info.duration(), state_update)
     }
 }
 
@@ -546,10 +547,11 @@ pub(crate) enum RemoveDataError {
 /// This is what `BufferStateUpdate` is for, it communicates what happened since
 /// the last segment push so that state can be properly updated on the
 /// transmuxing side.
+/// XXX TODO: bitset?
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub(crate) enum BufferStateUpdate {
-    /// No need to reset the transmuxer's state
+    /// No need to update the transmuxer's state.
     None = 0,
     /// A seek has been performed
     Seek = 1,
@@ -572,7 +574,11 @@ pub(crate) struct BufferStateData {
     base_decode_time_start: f64,
     /// Duration of that segment
     duration: f64,
-    reset_reason: BufferStateUpdate,
+    /// Update(s) in the buffer state that may impact segment transmuxing.
+    /// XXX TODO: bitset?
+    /// XXX TODO: Can't we just handle everything rust-side? And just give a more
+    /// explicit hint here?
+    state_update: BufferStateUpdate,
 }
 
 impl BufferStateData {
@@ -580,12 +586,12 @@ impl BufferStateData {
     pub(crate) fn new(
         base_decode_time_start: f64,
         duration: f64,
-        reset_reason: BufferStateUpdate,
+        state_update: BufferStateUpdate,
     ) -> Self {
         Self {
             base_decode_time_start,
             duration,
-            reset_reason,
+            state_update,
         }
     }
 
@@ -597,7 +603,7 @@ impl BufferStateData {
         self.duration
     }
 
-    pub(crate) fn reset_reason(&self) -> BufferStateUpdate {
-        self.reset_reason
+    pub(crate) fn state_update(&self) -> BufferStateUpdate {
+        self.state_update
     }
 }

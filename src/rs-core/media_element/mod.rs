@@ -402,15 +402,15 @@ impl MediaElementReference {
         }
     }
 
-    pub(crate) fn set_pending_append_reset_reason(
+    pub(crate) fn notify_buffer_state_update(
         &mut self,
         media_type: MediaType,
-        reason: BufferStateUpdate,
+        state_update: BufferStateUpdate,
     ) -> Result<(), RemoveDataError> {
         match self.buffer_mut_for(media_type) {
             None => Err(RemoveDataError::NoSourceBuffer(media_type)),
             Some(sb) => {
-                sb.set_pending_reset_reason(reason);
+                sb.set_pending_buffer_state_update(state_update);
                 Ok(())
             }
         }
@@ -427,12 +427,12 @@ impl MediaElementReference {
     pub(crate) fn flush(
         &mut self,
         media_type: MediaType,
-        reset_reason: BufferStateUpdate,
+        state_update: BufferStateUpdate,
     ) -> Result<(), RemoveDataError> {
         match self.buffer_mut_for(media_type) {
             None => Err(RemoveDataError::NoSourceBuffer(media_type)),
             Some(sb) => {
-                sb.flush_buffer(reset_reason);
+                sb.flush_buffer(state_update);
                 Ok(())
             }
         }

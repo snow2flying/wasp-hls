@@ -756,7 +756,7 @@ impl Dispatcher {
         for media_type in [MediaType::Audio, MediaType::Video] {
             let _ = self
                 .media_element_ref
-                .set_pending_append_reset_reason(media_type, BufferStateUpdate::Seek);
+                .notify_buffer_state_update(media_type, BufferStateUpdate::Seek);
             let previous = previous_needed
                 .iter()
                 .find(|(mt, _)| *mt == media_type)
