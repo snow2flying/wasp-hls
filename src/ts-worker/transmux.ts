@@ -52,7 +52,3 @@ export function getTransmuxedType(typ: string, mediaType: MediaType): string {
 export function createTransmuxer(): Transmuxer {
   return new Transmuxer();
 }
-
-export function resetTransmuxer(transmuxer: Transmuxer | null): void {
-  transmuxer?.reset();
-}
