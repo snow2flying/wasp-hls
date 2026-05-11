@@ -91,47 +91,35 @@ function getMDHDTimescales(
 function getSegmentTimeInformation(
   buffer: Uint8Array,
   initTimescaleByTrackId: Map<number, number>,
-): { time: number; duration: number | undefined } | null {
+): { time: number; duration: number | undefined; timescale: number } | null {
   const trafs = getTRAFs(buffer);
   if (trafs.length === 0) {
     return null;
   }
 
-  let minStart = Infinity;
-  let maxEnd = -Infinity;
-  let hasKnownDuration = false;
-
+  // XXX TODO: Video wins, else audio
   for (const traf of trafs) {
     const trackId = getTrackIdFromTFHDInTRAF(traf);
     const decodeTime = getTrackFragmentDecodeTimeFromTRAF(traf);
     if (trackId === undefined || decodeTime === undefined) {
-      return null;
+      continue;
     }
-
     const timescale = initTimescaleByTrackId.get(trackId);
     if (timescale === undefined) {
-      return null;
+      continue;
     }
-
-    const start = decodeTime / timescale;
-    minStart = Math.min(minStart, start);
-
     const duration = getDurationFromTRAF(traf);
     if (duration === undefined) {
       continue;
     }
-    hasKnownDuration = true;
-    maxEnd = Math.max(maxEnd, start + duration / timescale);
-  }
 
-  if (!Number.isFinite(minStart)) {
-    return null;
+    return {
+      time: decodeTime,
+      duration,
+      timescale,
+    };
   }
-
-  return {
-    time: minStart,
-    duration: hasKnownDuration ? maxEnd - minStart : undefined,
-  };
+  return null;
 }
 
 /**

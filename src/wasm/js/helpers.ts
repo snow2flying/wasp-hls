@@ -1,9 +1,5 @@
-import {
-  getFloat64Memory,
-  getUint32Memory,
-  writeOptionalString,
-} from "./memory.js";
-import type { HostResult } from "./types.js";
+import { getUint32Memory, writeOptionalString } from "./memory.js";
+import type { HostResult, ISafeU64 } from "./types.js";
 
 // TODO: Maybe more safety into that one
 const OPTIONAL_ID_NONE = 0xffffffff;
@@ -26,26 +22,19 @@ export function unwrapResult<Value, ErrorCode extends number>(
 export function writeAppendBufferResult(
   result: HostResult<
     {
-      start: number | undefined;
-      duration: number | undefined;
-      continuityEnd:
-        | {
-            valueHi: number;
-            valueLo: number;
-            timescale: number;
-          }
-        | undefined;
+      start: ISafeU64 | undefined;
+      end: ISafeU64 | undefined;
+      timescale: number | undefined;
     },
     number
   >,
   hasStartOut: number,
-  startOut: number,
-  hasDurationOut: number,
-  durationOut: number,
-  hasContinuityEndOut: number,
-  continuityEndValueHiOut: number,
-  continuityEndValueLoOut: number,
-  continuityEndTimescaleOut: number,
+  startValueHiOut: number,
+  startValueLoOut: number,
+  hasEndOut: number,
+  endValueHiOut: number,
+  endValueLoOut: number,
+  timescale: number,
   errCodeOut: number,
   errDescPtrOut: number,
   errDescLenOut: number,
@@ -57,17 +46,12 @@ export function writeAppendBufferResult(
   }
   const parsed = result.value;
   getUint32Memory()[hasStartOut >>> 2] = parsed?.start == null ? 0 : 1;
-  getFloat64Memory()[startOut >>> 3] = parsed?.start ?? 0;
-  getUint32Memory()[hasDurationOut >>> 2] = parsed?.duration == null ? 0 : 1;
-  getFloat64Memory()[durationOut >>> 3] = parsed?.duration ?? 0;
-  getUint32Memory()[hasContinuityEndOut >>> 2] =
-    parsed?.continuityEnd == null ? 0 : 1;
-  getUint32Memory()[continuityEndValueHiOut >>> 2] =
-    parsed?.continuityEnd?.valueHi ?? 0;
-  getUint32Memory()[continuityEndValueLoOut >>> 2] =
-    parsed?.continuityEnd?.valueLo ?? 0;
-  getUint32Memory()[continuityEndTimescaleOut >>> 2] =
-    parsed?.continuityEnd?.timescale ?? 0;
+  getUint32Memory()[startValueHiOut >>> 2] = parsed?.start?.hi ?? 0;
+  getUint32Memory()[startValueLoOut >>> 2] = parsed?.start?.lo ?? 0;
+  getUint32Memory()[hasEndOut >>> 2] = parsed?.end == null ? 0 : 1;
+  getUint32Memory()[endValueHiOut >>> 2] = parsed?.end?.hi ?? 0;
+  getUint32Memory()[endValueLoOut >>> 2] = parsed?.end?.lo ?? 0;
+  getUint32Memory()[timescale >>> 2] = parsed?.timescale ?? 1;
   return 1;
 }
 

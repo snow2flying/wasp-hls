@@ -35,6 +35,7 @@ import type {
   AppendContinuityInfo,
   HostBindings,
   InspectSegmentValue,
+  ISafeU64,
   MediaPlaylistParsingErrorCode,
   MultivariantPlaylistParsingErrorCode,
   OtherErrorCode,
@@ -911,14 +912,15 @@ export function appendBuffer(
     );
   }
 
-  const sourceBufferObj = mediaSourceObj.sourceBuffers[sourceBufferObjIdx];
-  let continuityEnd:
+  let segmentPreciseTiming:
     | {
-        valueHi: number;
-        valueLo: number;
+        start: ISafeU64;
+        end: ISafeU64 | undefined;
         timescale: number;
       }
     | undefined;
+
+  const sourceBufferObj = mediaSourceObj.sourceBuffers[sourceBufferObjIdx];
   if (sourceBufferObj.transmuxer !== null) {
     try {
       const transmuxOptions =
@@ -933,13 +935,17 @@ export function appendBuffer(
       );
       if (transmuxedData !== null) {
         segment = transmuxedData.data;
-        continuityEnd =
-          transmuxedData.timingInfo === undefined
-            ? undefined
-            : splitTimeValue(
-                transmuxedData.timingInfo.end,
+        if (transmuxedData.timingInfo !== undefined) {
+          segmentPreciseTiming = {
+            // XXX TODO: Should already be timescaled
+            start: splitTimeValue(
+              transmuxedData.timingInfo.start *
                 transmuxedData.timingInfo.timescale,
-              );
+            ),
+            end: splitTimeValue(transmuxedData.timingInfo.end),
+            timescale: transmuxedData.timingInfo.timescale,
+          };
+        }
       } else {
         return AppendBufferResult.error(
           SegmentParsingErrorCode.TransmuxerError,
@@ -958,20 +964,32 @@ export function appendBuffer(
     }
   }
 
-  // TODO Check if mp4 first and if init segment?
+  // TODO Check if mp4 first (and if init segment)?
   const initTimescaleByTrackId = getMDHDTimescales(segment);
   if (initTimescaleByTrackId !== undefined) {
     sourceBufferObj.lastInitTimescaleByTrackId = initTimescaleByTrackId;
   }
 
-  const timeInfo =
-    sourceBufferObj.lastInitTimescaleByTrackId === undefined
-      ? null
-      : getTimeInformationFromMp4(
-          segment,
-          sourceBufferObj.lastInitTimescaleByTrackId,
-        );
+  if (
+    segmentPreciseTiming === undefined &&
+    sourceBufferObj.lastInitTimescaleByTrackId
+  ) {
+    const timeInfo = getTimeInformationFromMp4(
+      segment,
+      sourceBufferObj.lastInitTimescaleByTrackId,
+    );
 
+    if (timeInfo) {
+      segmentPreciseTiming = {
+        start: splitTimeValue(timeInfo.time),
+        timescale: timeInfo.timescale,
+        end:
+          timeInfo.duration !== undefined
+            ? splitTimeValue(timeInfo.time + timeInfo.duration)
+            : undefined,
+      };
+    }
+  }
   const transferableSegment = new Uint8Array(segment);
   try {
     if (sourceBufferObj.sourceBuffer !== null) {
@@ -1045,9 +1063,9 @@ export function appendBuffer(
     return AppendBufferResult.error(SegmentParsingErrorCode.UnknownError);
   }
   return AppendBufferResult.success(
-    timeInfo?.time,
-    timeInfo?.duration,
-    continuityEnd,
+    segmentPreciseTiming?.start,
+    segmentPreciseTiming?.end,
+    segmentPreciseTiming?.timescale,
   );
 }
 
@@ -1367,20 +1385,16 @@ export function freeResource(resourceId: ResourceId): boolean {
 function getTimeInformationFromMp4(
   segment: Uint8Array,
   initTimescaleByTrackId: Map<number, number>,
-): { time: number; duration: number | undefined } | null {
+): { time: number; duration: number | undefined; timescale: number } | null {
   return getSegmentTimeInformation(segment, initTimescaleByTrackId);
 }
 
-function splitTimeValue(
-  value: number,
-  timescale: number,
-): { valueHi: number; valueLo: number; timescale: number } {
-  const valueHi = Math.floor(value / 0x100000000);
-  const valueLo = value >>> 0;
+function splitTimeValue(value: number): ISafeU64 {
+  // XXX TODO: What? If it's to protect against overflows....
+  // Shouldn't it already have overflowed?
   return {
-    valueHi,
-    valueLo,
-    timescale,
+    hi: Math.floor(value / 0x100000000),
+    lo: value >>> 0,
   };
 }
 

@@ -22,16 +22,15 @@ import type {
   TimerReason,
 } from "./enums.js";
 
+export interface ISafeU64 {
+  hi: number;
+  lo: number;
+}
+
 export interface AppendBufferValue {
-  start: number | undefined;
-  duration: number | undefined;
-  continuityEnd:
-    | {
-        valueHi: number;
-        valueLo: number;
-        timescale: number;
-      }
-    | undefined;
+  start: ISafeU64 | undefined;
+  end: ISafeU64 | undefined;
+  timescale: number | undefined;
 }
 
 export type AppendResetReason =

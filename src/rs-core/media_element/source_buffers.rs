@@ -174,7 +174,7 @@ impl SourceBuffer {
         };
 
         // Use the parsed segment end as a good basis for the next decode time
-        self.last_segment_end_time = parsed.as_ref().and_then(|x| x.continuity_end().cloned());
+        self.last_segment_end_time = parsed.as_ref().and_then(|x| x.end());
         Ok(AppendBufferResponse { parsed })
     }
 
@@ -297,7 +297,7 @@ impl SourceBuffer {
 
         let segment_start = if state_update == BufferStateUpdate::None {
             // assume contiguous-ness
-            self.last_segment_end_time.clone().unwrap_or_else(|| {
+            self.last_segment_end_time.unwrap_or_else(|| {
                 TimescaledTimeValue::from_u64(
                     (segment_time_info.start() * 90000.).round() as u64,
                     90000,
@@ -376,16 +376,20 @@ impl AppendBufferResponse {
     /// If set it is generally closer to the real segment's start time, once pushed to the browser,
     /// than what the Media Playlist told us.
     pub(crate) fn media_start(&self) -> Option<f64> {
-        self.parsed.as_ref().and_then(|p| p.start())
+        self.parsed
+            .as_ref()
+            .and_then(|p| p.start().map(|x| x.to_f64_seconds()))
     }
 
-    /// Returns the optionally parsed duration, in seconds, found when parsing the segment's
+    /// Returns the optionally parsed end, in seconds, found when parsing the segment's
     /// internals.
     ///
-    /// If set it is generally closer to the real segment's duration, once pushed to the browser,
+    /// If set it is generally closer to the real segment's end, once pushed to the browser,
     /// than what the Media Playlist told us.
-    pub(crate) fn media_duration(&self) -> Option<f64> {
-        self.parsed.as_ref().and_then(|p| p.duration())
+    pub(crate) fn media_end(&self) -> Option<f64> {
+        self.parsed
+            .as_ref()
+            .and_then(|p| p.end().map(|x| x.to_f64_seconds()))
     }
 }
 

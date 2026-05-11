@@ -85,13 +85,15 @@ unsafe extern "C" {
         reset_reason: u32,
 
         has_start_out: *mut u32,
-        start_out: *mut f64,
-        has_duration_out: *mut u32,
-        duration_out: *mut f64,
-        has_continuity_end_out: *mut u32,
-        continuity_end_value_hi_out: *mut u32,
-        continuity_end_value_lo_out: *mut u32,
-        continuity_end_timescale_out: *mut u32,
+        start_value_hi_out: *mut u32,
+        start_value_lo_out: *mut u32,
+
+        has_end_out: *mut u32,
+        end_value_hi_out: *mut u32,
+        end_value_lo_out: *mut u32,
+
+        timescale: *mut u32,
+
         err_code_out: *mut u32,
         err_desc_ptr_out: *mut u32,
         err_desc_len_out: *mut u32,
@@ -532,13 +534,15 @@ pub fn jsAppendBuffer(
     buffer_state_data: Option<&BufferStateData>,
 ) -> Result<Option<ParsedSegmentInfo>, (SegmentParsingErrorCode, Option<String>)> {
     let mut has_start = 0;
-    let mut start = 0.0;
-    let mut has_duration = 0;
-    let mut duration = 0.0;
-    let mut has_continuity_end = 0;
-    let mut continuity_end_value_hi = 0;
-    let mut continuity_end_value_lo = 0;
-    let mut continuity_end_timescale = 0;
+    let mut start_value_hi = 0;
+    let mut start_value_lo = 0;
+
+    let mut has_end = 0;
+    let mut end_value_hi = 0;
+    let mut end_value_lo = 0;
+
+    let mut timescale = 1;
+
     let mut out = JsErrorOut::default();
     let success = unsafe {
         __js_func__append_buffer(
@@ -558,13 +562,12 @@ pub fn jsAppendBuffer(
                 .map(|t| t.state_update() as u32)
                 .unwrap_or(BufferStateUpdate::None as u32),
             &mut has_start,
-            &mut start,
-            &mut has_duration,
-            &mut duration,
-            &mut has_continuity_end,
-            &mut continuity_end_value_hi,
-            &mut continuity_end_value_lo,
-            &mut continuity_end_timescale,
+            &mut start_value_hi,
+            &mut start_value_lo,
+            &mut has_end,
+            &mut end_value_hi,
+            &mut end_value_lo,
+            &mut timescale,
             &mut out.code,
             &mut out.desc_ptr,
             &mut out.desc_len,
@@ -574,17 +577,20 @@ pub fn jsAppendBuffer(
         return Err(take_js_error_out(out, SegmentParsingErrorCode::from_raw));
     }
     Ok(Some(ParsedSegmentInfo {
-        start: if has_start != 0 { Some(start) } else { None },
-        duration: if has_duration != 0 {
-            Some(duration)
+        start: if has_start != 0 {
+            Some(TimescaledTimeValue::new(
+                start_value_hi,
+                start_value_lo,
+                timescale,
+            ))
         } else {
             None
         },
-        continuity_end: if has_continuity_end != 0 {
+        end: if has_end != 0 {
             Some(TimescaledTimeValue::new(
-                continuity_end_value_hi,
-                continuity_end_value_lo,
-                continuity_end_timescale,
+                end_value_hi,
+                end_value_lo,
+                timescale,
             ))
         } else {
             None
@@ -1008,24 +1014,20 @@ impl From<MediaPlaylistParsingError> for MediaPlaylistParsingErrorCode {
 }
 
 pub struct ParsedSegmentInfo {
-    start: Option<f64>,
-    duration: Option<f64>,
-    continuity_end: Option<TimescaledTimeValue>,
+    start: Option<TimescaledTimeValue>,
+    end: Option<TimescaledTimeValue>,
 }
 
 impl ParsedSegmentInfo {
-    pub(crate) fn start(&self) -> Option<f64> {
+    pub(crate) fn start(&self) -> Option<TimescaledTimeValue> {
         self.start
     }
-    pub(crate) fn duration(&self) -> Option<f64> {
-        self.duration
-    }
-    pub(crate) fn continuity_end(&self) -> Option<&TimescaledTimeValue> {
-        self.continuity_end.as_ref()
+    pub(crate) fn end(&self) -> Option<TimescaledTimeValue> {
+        self.end
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct TimescaledTimeValue {
     value_hi: u32,
     value_lo: u32,
@@ -1049,23 +1051,23 @@ impl TimescaledTimeValue {
         }
     }
 
-    pub(crate) fn to_f64_seconds(&self) -> f64 {
+    pub(crate) fn to_f64_seconds(self) -> f64 {
         self.value() as f64 / self.timescale as f64
     }
 
-    pub(crate) fn value_hi(&self) -> u32 {
+    pub(crate) fn value_hi(self) -> u32 {
         self.value_hi
     }
 
-    pub(crate) fn value_lo(&self) -> u32 {
+    pub(crate) fn value_lo(self) -> u32 {
         self.value_lo
     }
 
-    pub(crate) fn timescale(&self) -> u32 {
+    pub(crate) fn timescale(self) -> u32 {
         self.timescale
     }
 
-    fn value(&self) -> u64 {
+    pub(crate) fn value(self) -> u64 {
         ((self.value_hi as u64) << 32) | self.value_lo as u64
     }
 }
