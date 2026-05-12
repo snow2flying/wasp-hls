@@ -947,16 +947,6 @@ export function appendBuffer(
             end: splitTimeValue(transmuxedData.timingInfo.end),
             timescale: transmuxedData.timingInfo.timescale,
           };
-          // XXX TODO:
-          // eslint-disable-next-line
-          console.log(
-            "!!!!!! parsed start=",
-            Number(transmuxedData.timingInfo.start ?? 0) /
-              Number(transmuxedData.timingInfo.timescale ?? 1),
-            "end=",
-            Number(transmuxedData.timingInfo.end ?? 0) /
-              Number(transmuxedData.timingInfo.timescale ?? 1),
-          );
         }
       } else {
         return AppendBufferResult.error(

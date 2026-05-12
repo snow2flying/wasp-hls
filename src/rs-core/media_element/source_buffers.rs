@@ -45,21 +45,32 @@ pub(super) struct SourceBuffer {
     /// taken on buffer updates.
     needs_reflush: bool,
 
+    /// Set when the next media append must force a transmuxer reset regardless of its sequence
+    /// identity, such as after an explicit buffer flush.
+    reset_transmuxer_on_next_segment: bool,
+
+    // See `LastSegmentContinuityInfo`
+    last_pushed_segment_info: Option<LastSegmentContinuityInfo>,
+}
+
+/// To better handle dts continuity shenanigans unique to mpeg-ts segment, we maintain a complex
+/// state linked to the last segment pushed in this buffer
+struct LastSegmentContinuityInfo {
     /// End timing anchor of the last media segment known to have been appended successfully.
     ///
     /// When available, this exact timescaled value is used as the continuity anchor for the next
     /// transmuxed append.
-    last_segment_end_time: Option<TimescaledTimestamp>,
+    end_dts: Option<TimescaledTimestamp>,
+
+    /// That segment's sequence_number. This makes detection of non-contiguous segment extremely
+    /// easy
+    sequence_number: u32,
 
     /// Identity of the media timeline the last appended media segment belonged to.
     ///
     /// This allows the SourceBuffer to transparently determine whether the next append can reuse
     /// the lower-level transmuxer state or should start a new sequence.
-    last_media_sequence_identity: Option<MediaSequenceIdentity>,
-
-    /// Set when the next media append must force a transmuxer reset regardless of its sequence
-    /// identity, such as after an explicit buffer flush.
-    reset_transmuxer_on_next_segment: bool,
+    media_sequence_identity: MediaSequenceIdentity,
 }
 
 impl SourceBuffer {
@@ -84,9 +95,8 @@ impl SourceBuffer {
                 needs_reflush: false,
                 last_segment_pushed: false,
                 media_type,
-                last_segment_end_time: None,
-                last_media_sequence_identity: None,
                 reset_transmuxer_on_next_segment: false,
+                last_pushed_segment_info: None,
             }),
             Err(err) => Err(AddSourceBufferError::from_js_add_source_buffer_error(
                 err, &typ,
@@ -126,8 +136,7 @@ impl SourceBuffer {
         segment_data: JsMemoryBlob,
     ) -> Result<AppendBufferResponse, PushSegmentError> {
         self.was_used = true;
-        self.last_segment_end_time = None;
-        self.last_media_sequence_identity = None;
+        self.last_pushed_segment_info = None;
         self.reset_transmuxer_on_next_segment = true;
         self.queue
             .push_back(SourceBufferQueueElement::PushInit(segment_data.id()));
@@ -163,43 +172,38 @@ impl SourceBuffer {
     ) -> Result<AppendBufferResponse, PushSegmentError> {
         self.last_segment_pushed = false;
         self.was_used = true;
+        let sequence_number = data.sequence_number;
         let segment_data = data.segment_data.id();
         let segment_time_info = data.time_info.clone();
         let media_sequence_identity = data.media_sequence_identity;
         let should_reset_transmuxer = should_reset_transmuxer(
-            self.last_media_sequence_identity,
+            self.last_pushed_segment_info
+                .as_ref()
+                .map(|x| x.media_sequence_identity),
             media_sequence_identity,
             self.reset_transmuxer_on_next_segment,
         );
-        // XXX TODO: We should find some kind of way to detect that a seek has
-        // been done here and thus this is not a contiguous segment...
+
+        // Only use the previous segment if the new is contiguous with it
+        let prev_segment_dts = self
+            .last_pushed_segment_info
+            .as_ref()
+            .filter(|info| info.sequence_number + 1 == sequence_number)
+            .and_then(|info| info.end_dts);
+
         let segment_hints = build_segment_hints(
             &segment_time_info,
-            self.last_segment_end_time,
+            prev_segment_dts,
             data.base_dts_hint,
             should_reset_transmuxer,
         );
         self.reset_transmuxer_on_next_segment = false;
 
         let id = data.id;
-        Logger::debug(&format!("Buffer {} ({}): Pushing", self.id, self.typ));
-        if should_reset_transmuxer {
-            Logger::error(&format!(
-                "!!!!!! SHOULD RESET dts:{} start: {} end: {}",
-                segment_hints.base_decode_time_start() as f64
-                    / segment_hints.base_decode_time_start_timescale() as f64,
-                segment_time_info.start(),
-                segment_time_info.end()
-            ));
-        } else {
-            Logger::warn(&format!(
-                "!!!!!! DONT RESET dts:{} start: {} end: {}",
-                segment_hints.base_decode_time_start() as f64
-                    / segment_hints.base_decode_time_start_timescale() as f64,
-                segment_time_info.start(),
-                segment_time_info.end()
-            ));
-        }
+        Logger::debug(&format!(
+            "Buffer {} ({}): Pushing seq {}",
+            self.id, self.typ, data.sequence_number
+        ));
         self.queue
             .push_back(SourceBufferQueueElement::PushMedia { data, id });
         let parsed = match jsAppendBuffer(self.id, segment_data, &segment_hints) {
@@ -213,11 +217,14 @@ impl SourceBuffer {
         };
 
         // Use the parsed segment end as a good basis for the next decode time
-        self.last_segment_end_time = parsed.as_ref().and_then(|x| {
-            x.end()
-                .map(|value| TimescaledTimestamp::new(value, x.timescale()))
+        self.last_pushed_segment_info = Some(LastSegmentContinuityInfo {
+            sequence_number,
+            end_dts: parsed.as_ref().and_then(|x| {
+                x.end()
+                    .map(|value| TimescaledTimestamp::new(value, x.timescale()))
+            }),
+            media_sequence_identity: media_sequence_identity,
         });
-        self.last_media_sequence_identity = Some(media_sequence_identity);
         Ok(AppendBufferResponse { parsed })
     }
 
@@ -247,8 +254,7 @@ impl SourceBuffer {
     /// the current position. As such a seek will have to be performed once the remove is done
     pub(super) fn flush_buffer(&mut self) {
         self.was_used = true;
-        self.last_segment_end_time = None;
-        self.last_media_sequence_identity = None;
+        self.last_pushed_segment_info = None;
         self.reset_transmuxer_on_next_segment = true;
         self.queue.push_back(SourceBufferQueueElement::Emptying);
         Logger::debug(&format!("Buffer {} ({}): emptying", self.id, self.typ));
@@ -618,7 +624,7 @@ impl SegmentHints {
 
 fn build_segment_hints(
     segment_time_info: &SegmentTimeInfo,
-    last_segment_end: Option<TimescaledTimestamp>,
+    prev_segment_end: Option<TimescaledTimestamp>,
     base_dts_hint: Option<TimescaledTimestamp>,
     reset_transmuxer: bool,
 ) -> SegmentHints {
@@ -636,7 +642,7 @@ fn build_segment_hints(
         }
     } else {
         // just assume continuity
-        match last_segment_end {
+        match prev_segment_end {
             Some(last_end) => {
                 Logger::debug("Buffer: determine dts hint as last segment end dts");
                 (last_end.value(), last_end.timescale())
