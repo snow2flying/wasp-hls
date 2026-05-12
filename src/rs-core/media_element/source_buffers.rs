@@ -183,6 +183,23 @@ impl SourceBuffer {
 
         let id = data.id;
         Logger::debug(&format!("Buffer {} ({}): Pushing", self.id, self.typ));
+        if should_reset_transmuxer {
+            Logger::error(&format!(
+                "!!!!!! SHOULD RESET dts:{} start: {} end: {}",
+                segment_hints.base_decode_time_start() as f64
+                    / segment_hints.base_decode_time_start_timescale() as f64,
+                segment_time_info.start(),
+                segment_time_info.end()
+            ));
+        } else {
+            Logger::warn(&format!(
+                "!!!!!! DONT RESET dts:{} start: {} end: {}",
+                segment_hints.base_decode_time_start() as f64
+                    / segment_hints.base_decode_time_start_timescale() as f64,
+                segment_time_info.start(),
+                segment_time_info.end()
+            ));
+        }
         self.queue
             .push_back(SourceBufferQueueElement::PushMedia { data, id });
         let parsed = match jsAppendBuffer(self.id, segment_data, &segment_hints) {

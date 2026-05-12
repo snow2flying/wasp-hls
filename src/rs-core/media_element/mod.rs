@@ -391,9 +391,14 @@ impl MediaElementReference {
                 }
                 if let Some(media_start) = response.media_start() {
                     let media_offset = media_start - metadata_start;
+                    // XXX TODO: This underline a broken thing: `media_start` may be
+                    // `0` after a manual variant switch. The issue **is** that it should
+                    // not be `0`.
                     Logger::info(&format!(
-                        "Setting media offset: {}",
-                        media_start - metadata_start
+                        "Setting media offset: {} {} {}",
+                        media_start - metadata_start,
+                        media_start,
+                        metadata_start
                     ));
                     self.media_offset = Some(media_offset);
                     jsSetMediaOffset(media_offset);
