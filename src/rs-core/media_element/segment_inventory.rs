@@ -776,64 +776,53 @@ impl SegmentInventory {
         playlist_end: f64,
         discontinuity_sequence: u32,
     ) -> Option<TimescaledTimestamp> {
-        const OVERLAP_TOLERANCE: f64 = 0.05;
+        const BOUNDARY_TOLERANCE: f64 = 0.05;
 
-        // First, try to anchor from a segment that appears to describe the same playlist window.
+        let same_discontinuity =
+            |seg: &&BufferedChunk| matches_discontinuity(seg, discontinuity_sequence);
+
+        // Primary: find a segment that describes the same playlist window.
         //
-        // Rationale:
-        // - The best anchor is usually a buffered segment that already gives us continuity
-        //   information for that timeline area.
-        // - If the current segment already has a precise start associated to its inventory entry,
-        //   that direct timing information is also a valid overlap candidate and should compete
-        //   naturally with the others here.
-        // - Mere overlap is not enough: two different segments may overlap in playlist time while
-        //   still belonging to different timing windows. To avoid poisoning the base DTS with an
-        //   unrelated anchor, we only reuse `precise_start` when both playlist boundaries are
-        //   already close.
-        // - When multiple candidates still exist, we prefer the one with the largest overlap,
-        //   because it is the strongest indication that both entries refer to the same effective
-        //   buffered region.
-        // - If overlap sizes are equal, we currently prefer the later playlist_start through the
-        //   `max_by` tie-break below.
-        let overlap_anchor = self
+        // Both boundaries must be within BOUNDARY_TOLERANCE of the requested window.
+        // In HLS, playlist timestamps are rounded, so an exact match is unreliable;
+        // the tolerance accommodates that without admitting unrelated segments.
+        //
+        // When multiple candidates pass (e.g. two entries for the same segment after
+        // a playlist refresh), we prefer the one whose playlist_start is closest to
+        // ours as a tiebreaker — that is the most direct match.
+        let same_window_anchor = self
             .inventory
             .iter()
-            .filter_map(|seg| {
-                if !matches_discontinuity(seg, discontinuity_sequence) {
-                    return None;
-                }
-                let overlap_start = f64::max(seg.playlist_start, playlist_start);
-                let overlap_end = f64::min(seg.playlist_end, playlist_end);
-                let overlap_size = overlap_end - overlap_start;
-                if overlap_size <= OVERLAP_TOLERANCE {
-                    return None;
-                }
-                let start_delta = (seg.playlist_start - playlist_start).abs();
-                let end_delta = (seg.playlist_end - playlist_end).abs();
-                if start_delta > OVERLAP_TOLERANCE || end_delta > OVERLAP_TOLERANCE {
-                    return None;
-                }
-                seg.precise_start()
-                    .map(|precise_start| (overlap_size, seg.playlist_start, precise_start))
+            .filter(same_discontinuity)
+            .filter(|seg| {
+                (seg.playlist_start - playlist_start).abs() <= BOUNDARY_TOLERANCE
+                    && (seg.playlist_end - playlist_end).abs() <= BOUNDARY_TOLERANCE
             })
-            .max_by(|a, b| a.0.total_cmp(&b.0).then_with(|| a.1.total_cmp(&b.1)));
+            .filter_map(|seg| {
+                seg.precise_start()
+                    .map(|precise_start| (seg.playlist_start, precise_start))
+            })
+            .min_by(|a, b| {
+                let da = (a.0 - playlist_start).abs();
+                let db = (b.0 - playlist_start).abs();
+                da.total_cmp(&db)
+            })
+            .map(|(_, precise_start)| precise_start);
 
-        if let Some((_, _, precise_start)) = overlap_anchor {
-            return Some(precise_start);
+        if let Some(anchor) = same_window_anchor {
+            return Some(anchor);
         }
 
-        // Final fallback: anchor from the precise end of the closest previous segment.
+        // Fallback: use the precise end of the segment that ends right before ours.
         //
-        // This is less direct than an overlapping anchor, but it still gives a continuity point:
-        // if a segment ends right before the current one starts, its exact end timestamp can be
-        // used as the starting anchor for the next append.
-        //
-        // We only consider segments whose playlist end is at or before the current playlist start
-        // (within tolerance), and we keep the closest one by taking the greatest playlist_end.
+        // This gives a continuity point when no same-window entry exists yet (e.g.
+        // the segment is being appended for the first time). We require the
+        // predecessor's playlist_end to be within BOUNDARY_TOLERANCE of our
+        // playlist_start, so we never anchor from a segment that left a real gap.
         self.inventory
             .iter()
-            .filter(|seg| matches_discontinuity(seg, discontinuity_sequence))
-            .filter(|seg| seg.playlist_end <= playlist_start + OVERLAP_TOLERANCE)
+            .filter(same_discontinuity)
+            .filter(|seg| (seg.playlist_end - playlist_start).abs() <= BOUNDARY_TOLERANCE)
             .filter_map(|seg| {
                 seg.precise_end()
                     .map(|precise_end| (seg.playlist_end, precise_end))

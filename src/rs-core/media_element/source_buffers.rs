@@ -320,12 +320,20 @@ impl MediaSegmentPushData {
     /// * `segment_data` - The segment's actual data.
     ///
     /// * `time_info` - The playlist-originated time information on that segment.
-    pub(super) fn new(id: u64, segment_data: JsMemoryBlob, time_info: SegmentTimeInfo) -> Self {
+    ///
+    /// * `base_dts_hint` - An optional known base DTS for this segment, inferred for example from
+    /// other pushed segments whose dts is known.
+    pub(super) fn new(
+        id: u64,
+        segment_data: JsMemoryBlob,
+        time_info: SegmentTimeInfo,
+        base_dts_hint: Option<TimescaledTimestamp>,
+    ) -> Self {
         Self {
             id,
             segment_data,
             time_info,
-            base_dts_hint: None,
+            base_dts_hint,
         }
     }
 
@@ -350,10 +358,6 @@ impl MediaSegmentPushData {
 
     pub(crate) fn base_dts_hint(&self) -> Option<TimescaledTimestamp> {
         self.base_dts_hint
-    }
-
-    pub(crate) fn set_dts_hint(&mut self, base_dts_hint: Option<TimescaledTimestamp>) {
-        self.base_dts_hint = base_dts_hint;
     }
 }
 
