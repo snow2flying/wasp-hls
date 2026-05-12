@@ -1,0 +1,325 @@
+#![allow(non_snake_case)]
+#![allow(clippy::too_many_arguments)]
+
+use super::{RequestId, ResourceId, SourceBufferId, TimerId};
+
+fn non_wasm_binding_panic(binding_name: &str) -> ! {
+    panic!("WASM JS binding `{binding_name}` called on non-wasm target")
+}
+
+pub(super) unsafe fn __js_func__log(_log_level: u32, _ptr: *const u8, _len: u32) {
+    non_wasm_binding_panic("__js_func__log")
+}
+
+pub(super) unsafe fn __js_func__timer(_duration: f64, _reason: u32) -> TimerId {
+    non_wasm_binding_panic("__js_func__timer")
+}
+
+pub(super) unsafe fn __js_func__clear_timer(_id: TimerId) {
+    non_wasm_binding_panic("__js_func__clear_timer")
+}
+
+pub(super) unsafe fn __js_func__get_resource_len(_id: ResourceId) -> i32 {
+    non_wasm_binding_panic("__js_func__get_resource_len")
+}
+
+pub(super) unsafe fn __js_func__copy_resource_data(
+    _id: ResourceId,
+    _dest_ptr: *mut u8,
+    _dest_len: u32,
+) -> u32 {
+    non_wasm_binding_panic("__js_func__copy_resource_data")
+}
+
+pub(super) unsafe fn __js_func__fetch(
+    _url_ptr: *const u8,
+    _url_len: u32,
+    _has_range_base: u32,
+    _range_base: usize,
+    _has_range_end: u32,
+    _range_end: usize,
+    _timeout: f64,
+) -> RequestId {
+    non_wasm_binding_panic("__js_func__fetch")
+}
+
+pub(super) unsafe fn __js_func__abort_request(_request_id: RequestId) -> u32 {
+    non_wasm_binding_panic("__js_func__abort_request")
+}
+
+pub(super) unsafe fn __js_func__attach_media_source(
+    _err_code_out: *mut u32,
+    _err_desc_ptr_out: *mut u32,
+    _err_desc_len_out: *mut u32,
+) -> u32 {
+    non_wasm_binding_panic("__js_func__attach_media_source")
+}
+
+pub(super) unsafe fn __js_func__remove_media_source(
+    _err_code_out: *mut u32,
+    _err_desc_ptr_out: *mut u32,
+    _err_desc_len_out: *mut u32,
+) -> u32 {
+    non_wasm_binding_panic("__js_func__remove_media_source")
+}
+
+pub(super) unsafe fn __js_func__set_media_source_duration(
+    _duration: f64,
+    _err_code_out: *mut u32,
+    _err_desc_ptr_out: *mut u32,
+    _err_desc_len_out: *mut u32,
+) -> u32 {
+    non_wasm_binding_panic("__js_func__set_media_source_duration")
+}
+
+pub(super) unsafe fn __js_func__add_source_buffer(
+    _media_type: u32,
+    _typ_ptr: *const u8,
+    _typ_len: u32,
+    _source_buffer_id_out: *mut u32,
+    _err_code_out: *mut u32,
+    _err_desc_ptr_out: *mut u32,
+    _err_desc_len_out: *mut u32,
+) -> u32 {
+    non_wasm_binding_panic("__js_func__add_source_buffer")
+}
+
+pub(super) unsafe fn __js_func__is_type_supported(
+    _media_type: u32,
+    _typ_ptr: *const u8,
+    _typ_len: u32,
+) -> i32 {
+    non_wasm_binding_panic("__js_func__is_type_supported")
+}
+
+pub(super) unsafe fn __js_func__inspect_segment(
+    _segment_id: ResourceId,
+    _media_type_out: *mut u32,
+    _parsed_mime_type_ptr_out: *mut u32,
+    _parsed_mime_type_len_out: *mut u32,
+    _codec_ptr_out: *mut u32,
+    _codec_len_out: *mut u32,
+    _err_code_out: *mut u32,
+    _err_desc_ptr_out: *mut u32,
+    _err_desc_len_out: *mut u32,
+) -> u32 {
+    non_wasm_binding_panic("__js_func__inspect_segment")
+}
+
+pub(super) unsafe fn __js_func__append_buffer(
+    _source_buffer_id: SourceBufferId,
+    _segment_id: ResourceId,
+    _base_decode_time_start_hi: u32,
+    _base_decode_time_start_lo: u32,
+    _base_decode_time_start_timescale: u32,
+    _reset_transmuxer_state: u32,
+    _has_start_out: *mut u32,
+    _start_value_hi_out: *mut u32,
+    _start_value_lo_out: *mut u32,
+    _has_end_out: *mut u32,
+    _end_value_hi_out: *mut u32,
+    _end_value_lo_out: *mut u32,
+    _timescale: *mut u32,
+    _err_code_out: *mut u32,
+    _err_desc_ptr_out: *mut u32,
+    _err_desc_len_out: *mut u32,
+) -> u32 {
+    non_wasm_binding_panic("__js_func__append_buffer")
+}
+
+pub(super) unsafe fn __js_func__remove_buffer(
+    _source_buffer_id: SourceBufferId,
+    _start: f64,
+    _end: f64,
+    _err_code_out: *mut u32,
+    _err_desc_ptr_out: *mut u32,
+    _err_desc_len_out: *mut u32,
+) -> u32 {
+    non_wasm_binding_panic("__js_func__remove_buffer")
+}
+
+pub(super) unsafe fn __js_func__end_of_stream(
+    _err_code_out: *mut u32,
+    _err_desc_ptr_out: *mut u32,
+    _err_desc_len_out: *mut u32,
+) -> u32 {
+    non_wasm_binding_panic("__js_func__end_of_stream")
+}
+
+pub(super) unsafe fn __js_func__start_observing_playback() {
+    non_wasm_binding_panic("__js_func__start_observing_playback")
+}
+
+pub(super) unsafe fn __js_func__stop_observing_playback() {
+    non_wasm_binding_panic("__js_func__stop_observing_playback")
+}
+
+pub(super) unsafe fn __js_func__free_resource(_resource_id: ResourceId) -> u32 {
+    non_wasm_binding_panic("__js_func__free_resource")
+}
+
+pub(super) unsafe fn __js_func__set_playback_rate(_playback_rate: f64) {
+    non_wasm_binding_panic("__js_func__set_playback_rate")
+}
+
+pub(super) unsafe fn __js_func__seek(_position: f64) {
+    non_wasm_binding_panic("__js_func__seek")
+}
+
+pub(super) unsafe fn __js_func__flush() {
+    non_wasm_binding_panic("__js_func__flush")
+}
+
+pub(super) unsafe fn __js_func__set_media_offset(_media_offset: f64) {
+    non_wasm_binding_panic("__js_func__set_media_offset")
+}
+
+pub(super) unsafe fn __js_func__update_content_info(
+    _has_minimum_position: u32,
+    _minimum_position: f64,
+    _has_maximum_position: u32,
+    _maximum_position: f64,
+    _playlist_nat: u32,
+) {
+    non_wasm_binding_panic("__js_func__update_content_info")
+}
+
+pub(super) unsafe fn __js_func__announce_fetched_content(
+    _playlist_type: u32,
+    _variant_info_ptr: *const u32,
+    _variant_info_len: u32,
+    _audio_tracks_info_ptr: *const u32,
+    _audio_tracks_info_len: u32,
+) {
+    non_wasm_binding_panic("__js_func__announce_fetched_content")
+}
+
+pub(super) unsafe fn __js_func__announce_variant_update(_variant_id: u32) {
+    non_wasm_binding_panic("__js_func__announce_variant_update")
+}
+
+pub(super) unsafe fn __js_func__announce_track_update(
+    _media_type: u32,
+    _track_id: u32,
+    _is_selected: u32,
+) {
+    non_wasm_binding_panic("__js_func__announce_track_update")
+}
+
+pub(super) unsafe fn __js_func__announce_variant_lock_status_change(_variant_id: u32) {
+    non_wasm_binding_panic("__js_func__announce_variant_lock_status_change")
+}
+
+pub(super) unsafe fn __js_func__start_rebuffering() {
+    non_wasm_binding_panic("__js_func__start_rebuffering")
+}
+
+pub(super) unsafe fn __js_func__stop_rebuffering() {
+    non_wasm_binding_panic("__js_func__stop_rebuffering")
+}
+
+pub(super) unsafe fn __js_func__get_random() -> f64 {
+    non_wasm_binding_panic("__js_func__get_random")
+}
+
+pub(super) unsafe fn __js_func__send_segment_request_error(
+    _fatal: u32,
+    _url_ptr: *const u8,
+    _url_len: u32,
+    _is_init: u32,
+    _media_type: u32,
+    _start_ptr: *const f64,
+    _duration_ptr: *const f64,
+    _reason: u32,
+    _status: u32,
+) {
+    non_wasm_binding_panic("__js_func__send_segment_request_error")
+}
+
+pub(super) unsafe fn __js_func__send_multivariant_playlist_request_error(
+    _fatal: u32,
+    _url_ptr: *const u8,
+    _url_len: u32,
+    _reason: u32,
+    _status: u32,
+) {
+    non_wasm_binding_panic("__js_func__send_multivariant_playlist_request_error")
+}
+
+pub(super) unsafe fn __js_func__send_media_playlist_request_error(
+    _fatal: u32,
+    _url_ptr: *const u8,
+    _url_len: u32,
+    _reason: u32,
+    _media_type: u32,
+    _status: u32,
+) {
+    non_wasm_binding_panic("__js_func__send_media_playlist_request_error")
+}
+
+pub(super) unsafe fn __js_func__send_source_buffer_creation_error(
+    _fatal: u32,
+    _code: u32,
+    _media_type: u32,
+    _message_ptr: *const u8,
+    _message_len: u32,
+) {
+    non_wasm_binding_panic("__js_func__send_source_buffer_creation_error")
+}
+
+pub(super) unsafe fn __js_func__send_multivariant_playlist_parsing_error(
+    _fatal: u32,
+    _code: u32,
+    _message_ptr: *const u8,
+    _message_len: u32,
+) {
+    non_wasm_binding_panic("__js_func__send_multivariant_playlist_parsing_error")
+}
+
+pub(super) unsafe fn __js_func__send_media_playlist_parsing_error(
+    _fatal: u32,
+    _code: u32,
+    _media_type: u32,
+    _message_ptr: *const u8,
+    _message_len: u32,
+) {
+    non_wasm_binding_panic("__js_func__send_media_playlist_parsing_error")
+}
+
+pub(super) unsafe fn __js_func__send_segment_parsing_error(
+    _fatal: u32,
+    _code: u32,
+    _media_type: u32,
+    _message_ptr: *const u8,
+    _message_len: u32,
+) {
+    non_wasm_binding_panic("__js_func__send_segment_parsing_error")
+}
+
+pub(super) unsafe fn __js_func__send_pushed_segment_error(
+    _fatal: u32,
+    _code: u32,
+    _media_type: u32,
+    _message_ptr: *const u8,
+    _message_len: u32,
+) {
+    non_wasm_binding_panic("__js_func__send_pushed_segment_error")
+}
+
+pub(super) unsafe fn __js_func__send_remove_buffer_error(
+    _fatal: u32,
+    _media_type: u32,
+    _message_ptr: *const u8,
+    _message_len: u32,
+) {
+    non_wasm_binding_panic("__js_func__send_remove_buffer_error")
+}
+
+pub(super) unsafe fn __js_func__send_other_error(
+    _fatal: u32,
+    _code: u32,
+    _message_ptr: *const u8,
+    _message_len: u32,
+) {
+    non_wasm_binding_panic("__js_func__send_other_error")
+}
