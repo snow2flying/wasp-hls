@@ -171,6 +171,8 @@ impl SourceBuffer {
             media_sequence_identity,
             self.reset_transmuxer_on_next_segment,
         );
+        // XXX TODO: We should find some kind of way to detect that a seek has
+        // been done here and thus this is not a contiguous segment...
         let segment_hints = build_segment_hints(
             &segment_time_info,
             self.last_segment_end_time,
