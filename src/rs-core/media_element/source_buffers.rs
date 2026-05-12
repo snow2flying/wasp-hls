@@ -152,20 +152,20 @@ impl SourceBuffer {
     /// # Arguments
     ///
     /// * `data` - Actual data AND metadata on the segment you want to push. See
-    ///   `MediaSegmentPushData` documentation for more information.
+    ///   `PreparedPushData` documentation for more information.
     ///
     /// * `parse_time_info` - If set to `true`, the segment's data will be read before pushing it
     ///   to try recuperate its timing information. If it has been parsed with success, it will
     ///   be contained in the `AppendBufferResponse` returned by this method.
     pub(super) fn push_media_segment(
         &mut self,
-        data: MediaSegmentPushData,
+        data: PreparedPushData,
     ) -> Result<AppendBufferResponse, PushSegmentError> {
         self.last_segment_pushed = false;
         self.was_used = true;
         let segment_data = data.segment_data.id();
-        let segment_time_info = data.time_info().clone();
-        let media_sequence_identity = *data.media_sequence_identity();
+        let segment_time_info = data.time_info.clone();
+        let media_sequence_identity = data.media_sequence_identity;
         let should_reset_transmuxer = should_reset_transmuxer(
             self.last_media_sequence_identity,
             media_sequence_identity,
@@ -176,7 +176,7 @@ impl SourceBuffer {
         let segment_hints = build_segment_hints(
             &segment_time_info,
             self.last_segment_end_time,
-            data.base_dts_hint(),
+            data.base_dts_hint,
             should_reset_transmuxer,
         );
         self.reset_transmuxer_on_next_segment = false;
@@ -314,82 +314,32 @@ impl SourceBuffer {
 }
 
 /// Structure describing a media segment that should be pushed to the SourceBuffer.
-pub(crate) struct MediaSegmentPushData {
+pub(crate) struct PreparedPushData {
     /// Identifier used to identify the pushed segment in question.
     ///
     /// It can be useful for example to easily detect which segment has succesfully been pushed or
     /// caused an issue.
-    id: u64,
+    pub(super) id: u64,
 
     /// Raw data of the segment to push.
-    segment_data: JsMemoryBlob,
+    pub(super) segment_data: JsMemoryBlob,
 
-    /// Time information, as a tuple of its start time and end time in seconds as deduced from the
-    /// media playlist.
-    time_info: SegmentTimeInfo,
+    /// Time information for that segment as sourced from the media playlist.
+    pub(super) time_info: SegmentTimeInfo,
+
+    /// Media sequence number associated with this segment. Used to detect contiguous/non-contiguous
+    /// segments.
+    pub(super) sequence_number: u32,
+
+    /// Discontinuity sequence (from the HLS playlist) associated with this segment.
+    /// Used to detect contiguous/non-contiguous segments or state reset from previous segment.
+    pub(super) discontinuity_sequence: u32,
 
     /// Optional precise timing anchor to align this append against an already buffered segment.
-    base_dts_hint: Option<TimescaledTimestamp>,
+    pub(super) base_dts_hint: Option<TimescaledTimestamp>,
 
     /// Identity of the media sequence this append belongs to.
-    media_sequence_identity: MediaSequenceIdentity,
-}
-
-impl MediaSegmentPushData {
-    /// Creates a new `SegmentPushData` object linked to the given data and time information.
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - Identifier for the `MediaSegmentPushData`
-    ///
-    /// * `segment_data` - The segment's actual data.
-    ///
-    /// * `time_info` - The playlist-originated time information on that segment.
-    ///
-    /// * `base_dts_hint` - An optional known base DTS for this segment, inferred for example from
-    /// other pushed segments whose dts is known.
-    pub(super) fn new(
-        id: u64,
-        segment_data: JsMemoryBlob,
-        time_info: SegmentTimeInfo,
-        base_dts_hint: Option<TimescaledTimestamp>,
-        media_sequence_identity: MediaSequenceIdentity,
-    ) -> Self {
-        Self {
-            id,
-            segment_data,
-            time_info,
-            base_dts_hint,
-            media_sequence_identity,
-        }
-    }
-
-    pub(crate) fn id(&self) -> u64 {
-        self.id
-    }
-
-    /// Get time information linked to this segment as a reference to its `SegmentTimeInfo` object.
-    pub(crate) fn time_info(&self) -> &SegmentTimeInfo {
-        &self.time_info
-    }
-
-    /// Returns start, in seconds, at which the segment starts.
-    pub(crate) fn start(&self) -> f64 {
-        self.time_info.start()
-    }
-
-    /// Returns end, in seconds, at which the segment ends.
-    pub(crate) fn end(&self) -> f64 {
-        self.time_info.end()
-    }
-
-    pub(crate) fn base_dts_hint(&self) -> Option<TimescaledTimestamp> {
-        self.base_dts_hint
-    }
-
-    pub(crate) fn media_sequence_identity(&self) -> &MediaSequenceIdentity {
-        &self.media_sequence_identity
-    }
+    pub(super) media_sequence_identity: MediaSequenceIdentity,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -470,9 +420,9 @@ pub(crate) enum SourceBufferQueueElement {
     PushInit(ResourceId),
 
     /// A new chunk of media data needs to be pushed.
-    /// The `u64` is the corresponding `id` of the given `MediaSegmentPushData` when the
+    /// The `u64` is the corresponding `id` of the given `PreparedPushData` when the
     /// `push_media_segment` method was called.
-    PushMedia { data: MediaSegmentPushData, id: u64 },
+    PushMedia { data: PreparedPushData, id: u64 },
 
     /// Some already-buffered needs to be removed, `start` and `end` giving the
     /// time range of the data to remove, in seconds.

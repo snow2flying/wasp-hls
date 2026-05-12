@@ -1,5 +1,6 @@
 use super::super::segment_request_contexts::PendingSegmentRequest;
 use super::{utils, Dispatcher, PlayerReadyState, ReadyProbeSegment};
+use crate::media_element::SegmentPushMetadata;
 use crate::{
     bindings::{
         formatters::{
@@ -318,13 +319,16 @@ fn consume_probe_segment(dispatcher: &mut Dispatcher) {
                 .find(|seg| seg.sequence() == sequence)
                 .and_then(|seg| segment_list.init_for(seg))
                 .map(|init| init.id());
-            dispatcher.on_media_segment_loaded(
+            dispatcher.on_media_segment_loaded(SegmentPushMetadata {
                 data,
                 media_type,
                 time_info,
                 context,
                 init_segment_id,
-            );
+                sequence_number: sequence,
+                // XXX TODO:
+                discontinuity_sequence: 0,
+            });
         }
     }
 }

@@ -29,17 +29,23 @@ pub(crate) struct SegmentTimeInfo {
     /// Difference between the last presentation time at which the segment contains data for
     /// in seconds and `start`.
     duration: f64,
-    /// Discontinuity sequence associated to that segment.
-    discontinuity_sequence: u32,
+    // sequence_number: u32,
+    // /// Discontinuity sequence associated to that segment.
+    // discontinuity_sequence: u32,
 }
 
 impl SegmentTimeInfo {
     /// Create a new `SegmentTimeInfo` with the given `start` and `duration` in seconds.
-    pub(crate) fn new(start: f64, duration: f64) -> Self {
+    pub(crate) fn new(
+        start: f64,
+        duration: f64,
+        // sequence: u32
+    ) -> Self {
         Self {
             start,
             duration,
-            discontinuity_sequence: 0, // XXX TODO
+            // sequence_number: sequence,
+            // discontinuity_sequence: 0, // XXX TODO
         }
     }
 
@@ -58,10 +64,15 @@ impl SegmentTimeInfo {
         self.duration
     }
 
-    /// HLS discontinuity sequence associated to the segment.
-    pub(crate) fn discontinuity_sequence(&self) -> u32 {
-        self.discontinuity_sequence
-    }
+    // /// HLS media sequence number associated to the segment.
+    // pub(crate) fn sequence_number(&self) -> u32 {
+    //     self.discontinuity_sequence
+    // }
+    //
+    // /// HLS discontinuity sequence associated to the segment.
+    // pub(crate) fn discontinuity_sequence(&self) -> u32 {
+    //     self.discontinuity_sequence
+    // }
 }
 
 /// List of all segments a `MediaPlaylist` is associated to.
