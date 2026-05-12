@@ -466,7 +466,23 @@ export default class Transmuxer {
     this._pendingSegmentBaseMediaDecodeTime = baseMediaDecodeTimeVideoTs;
   }
 
+  private _getStoredBaseMediaDecodeTime(): number | undefined {
+    const tracks = [this._videoTrack, this._audioTrack];
+    for (const track of tracks) {
+      const storedBaseMediaDecodeTime =
+        track?.timelineStartInfo?.baseMediaDecodeTime;
+      if (storedBaseMediaDecodeTime !== undefined) {
+        return storedBaseMediaDecodeTime;
+      }
+    }
+    return undefined;
+  }
+
   private _getCurrentBaseMediaDecodeTime(): number {
+    const storedBaseMediaDecodeTime = this._getStoredBaseMediaDecodeTime();
+    if (storedBaseMediaDecodeTime !== undefined) {
+      return storedBaseMediaDecodeTime;
+    }
     if (this._pendingSegmentBaseMediaDecodeTime === null) {
       return this._baseMediaDecodeTime;
     }
