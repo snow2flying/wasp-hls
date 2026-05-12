@@ -223,7 +223,7 @@ impl SourceBuffer {
                 x.end()
                     .map(|value| TimescaledTimestamp::new(value, x.timescale()))
             }),
-            media_sequence_identity: media_sequence_identity,
+            media_sequence_identity,
         });
         Ok(AppendBufferResponse { parsed })
     }

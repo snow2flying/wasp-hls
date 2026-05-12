@@ -298,6 +298,7 @@ fn consume_probe_segment(dispatcher: &mut Dispatcher) {
         }
         ProbeSegmentContext::Media {
             sequence,
+            discontinuity_sequence,
             time_info,
         } => {
             let Some((segment_list, context)) = dispatcher
@@ -326,8 +327,7 @@ fn consume_probe_segment(dispatcher: &mut Dispatcher) {
                 context,
                 init_segment_id,
                 sequence_number: sequence,
-                // XXX TODO:
-                discontinuity_sequence: 0,
+                discontinuity_sequence,
             });
         }
     }

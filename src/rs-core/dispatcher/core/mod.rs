@@ -712,8 +712,6 @@ impl Dispatcher {
         self.segment_selectors
             .restart_from_position(wanted_pos - 0.2);
 
-        // TODO: Announce potentially a discontinuity for the buffer? Only if we know it to be true
-
         self.requester.lock_segment_requests();
         self.requester.update_base_position(Some(wanted_pos));
         self.check_requested_segments_still_needed();
@@ -814,8 +812,7 @@ impl Dispatcher {
                                 init_segment_id,
                                 quality_context: seg_info.1,
                                 sequence_number: seg.sequence(),
-                                // XXX TODO:
-                                discontinuity_sequence: 0,
+                                discontinuity_sequence: seg.discontinuity_sequence(),
                             });
                     self.requester
                         .request_media_segment(media_type, seg, req_id);

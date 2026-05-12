@@ -18,7 +18,8 @@
 - Add `SourceBufferEmptyMimeType`, `SourceBufferMediaSourceIsClosed`, `SourceBufferNoMediaSourceAttached` and `SourceBufferQuotaExceededError` error codes on a `WaspSourceBufferCreationError` error type.
 - Light handling of QuotaExceededError by removing data from buffers if/when it happens. More advanced handling would be to reduce buffer goal adaptively (not done yet)
 - Add parsing of `#EXT-X-DEFINE` tags
-- Handle `#EXT-X-MEDIA-SEQUENCE` tags and use it for segment staleness detection
+- Handle `#EXT-X-MEDIA-SEQUENCE` tags and use it both for segment staleness detection and contiguity checks
+- Handle `#EXT-X-DISCONTINUITY` and `#EXT-X-DISCONTINUITY-SEQUENCE` tags by resetting transmuxer state on discontinuities
 
 ### Bug fixes
 
