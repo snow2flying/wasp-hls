@@ -125,7 +125,7 @@ if (!hasFfmpeg()) {
     () => {},
   );
 } else {
-  test("TS transmux continuity prefers stored state over playlist decode-time hints", async () => {
+  test("TS transmux uses the decode-time hint to seed fresh timeline state", async () => {
     const tmpRoot = await mkdtemp(join(tmpdir(), "wasp-hls-transmux-test-"));
     try {
       const mod = await bundleTransmuxSource(tmpRoot);
@@ -159,8 +159,8 @@ if (!hasFfmpeg()) {
         "expected the first appended segment to seed the decode timeline near zero",
       );
       assert.ok(
-        lateThenEarlyLate < 0.1,
-        "expected a first appended late segment to follow the transmuxer's fresh state instead of its playlist hint",
+        lateThenEarlyLate > 5,
+        "expected a first appended late segment to keep a non-zero decode-time anchor",
       );
       assert.ok(
         earlyThenLateLate > 5,
@@ -168,11 +168,11 @@ if (!hasFfmpeg()) {
       );
       assert.ok(
         lateThenEarlyEarly < 0.1,
-        "expected a back-seek segment to rejoin the existing transmux timeline instead of being repositioned by its playlist hint",
+        "expected a back-seek segment to land back near zero when appended after a later segment",
       );
       assert.ok(
-        Math.abs(earlyThenLateLate - lateThenEarlyLate) > 5,
-        "expected the same playlist segment to land at different decode times when transmux continuity state differs",
+        Math.abs(earlyThenLateLate - lateThenEarlyLate) < 0.25,
+        "expected the same late playlist segment to keep the same decode-time anchor regardless of append order",
       );
     } finally {
       await rm(tmpRoot, { recursive: true, force: true });

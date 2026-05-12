@@ -69,3 +69,28 @@ test("transmuxer falls back to the decode-time hint when no state is stored", as
     await rm(tmpRoot, { recursive: true, force: true });
   }
 });
+
+test("transmuxer does not treat an unset track anchor as stored state", async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), "wasp-hls-transmux-state-"));
+  try {
+    const mod = await bundleTransmuxSource(tmpRoot);
+    const transmuxer = new mod.default();
+
+    transmuxer._videoTrack = {
+      timelineStartInfo: {},
+    };
+
+    transmuxer._prepareSegmentTimeline({
+      value: 54_321,
+      timescale: 1,
+    });
+
+    assert.equal(
+      transmuxer._getCurrentBaseMediaDecodeTime(),
+      54_321 * VIDEO_TIMESCALE,
+      "expected an unset track anchor to fall back to the pending decode-time hint",
+    );
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
