@@ -87,8 +87,6 @@ impl Dispatcher {
                     audio_track_change,
                 } => {
                     if let Some(track_id) = audio_track_change {
-                        self.media_element_ref
-                            .begin_new_segment_sequence(MediaType::Audio);
                         jsAnnounceTrackUpdate(
                             MediaType::Audio,
                             Some(track_id),
@@ -144,8 +142,6 @@ impl Dispatcher {
 
     /// Set an audio track whose `id` is given in argument.
     pub(super) fn set_audio_track_core(&mut self, track_id: Option<u32>) {
-        self.media_element_ref
-            .begin_new_segment_sequence(MediaType::Audio);
         if let Some(ref mut pl_store) = self.playlist_store {
             match pl_store.set_audio_track(track_id) {
                 SetAudioTrackResponse::AudioMediaUpdate => {
@@ -809,12 +805,14 @@ impl Dispatcher {
                         req_id,
                     );
                 } else if let Some(seg) = most_needed_segment.media_segment() {
+                    let init_segment_id = seg_info.0.init_for(seg).map(|i| i.id());
                     let req_id =
                         self.segment_request_contexts
                             .insert(PendingSegmentRequest::Media {
                                 media_type,
                                 time_info: seg.time_info().clone(),
                                 sequence: seg.sequence(),
+                                init_segment_id,
                                 quality_context: seg_info.1,
                             });
                     self.requester
@@ -834,10 +832,6 @@ impl Dispatcher {
                 return;
             }
         };
-
-        for mt in &changed_media_types {
-            self.media_element_ref.begin_new_segment_sequence(*mt);
-        }
 
         self.handle_media_playlist_update(&changed_media_types, flush || has_worsened, flush);
         if let Some(pl_store) = self.playlist_store.as_mut() {
@@ -932,6 +926,7 @@ impl Dispatcher {
         match req_ctxt {
             PendingSegmentRequest::Media {
                 media_type: req_media_type,
+                init_segment_id,
                 time_info,
                 quality_context,
                 ..
@@ -939,7 +934,13 @@ impl Dispatcher {
                 if Some(req_media_type) != media_type {
                     Logger::warn("Loaded media segment with mismatched media type context.");
                 }
-                self.on_media_segment_loaded(result, req_media_type, time_info, quality_context);
+                self.on_media_segment_loaded(
+                    result,
+                    req_media_type,
+                    time_info,
+                    quality_context,
+                    init_segment_id,
+                );
             }
             PendingSegmentRequest::Init {
                 media_type: req_media_type,
@@ -963,12 +964,17 @@ impl Dispatcher {
         media_type: MediaType,
         time_info: SegmentTimeInfo,
         context: SegmentQualityContext,
+        init_segment_id: Option<f64>,
     ) {
         let segment_start = time_info.start();
         let segment_end = time_info.end();
-        let prepared_data = self
-            .media_element_ref
-            .announce_incoming_media_segment(media_type, data, time_info, context);
+        let prepared_data = self.media_element_ref.announce_incoming_media_segment(
+            media_type,
+            data,
+            time_info,
+            context,
+            init_segment_id,
+        );
 
         // Check next segment BEFORE actually pushing, as the pushing operation could take in the
         // tens of ms or even in the hundreds depending on segment size and platform performance.

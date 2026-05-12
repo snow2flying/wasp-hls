@@ -295,8 +295,11 @@ fn consume_probe_segment(dispatcher: &mut Dispatcher) {
         ProbeSegmentContext::Init { id } => {
             dispatcher.on_init_segment_loaded(data, media_type, id);
         }
-        ProbeSegmentContext::Media { time_info, .. } => {
-            let Some((_, context)) = dispatcher
+        ProbeSegmentContext::Media {
+            sequence,
+            time_info,
+        } => {
+            let Some((segment_list, context)) = dispatcher
                 .playlist_store
                 .as_ref()
                 .and_then(|store| store.curr_media_playlist_segment_info(media_type))
@@ -309,7 +312,19 @@ fn consume_probe_segment(dispatcher: &mut Dispatcher) {
                 dispatcher.stop_current_content();
                 return;
             };
-            dispatcher.on_media_segment_loaded(data, media_type, time_info, context);
+            let init_segment_id = segment_list
+                .media()
+                .iter()
+                .find(|seg| seg.sequence() == sequence)
+                .and_then(|seg| segment_list.init_for(seg))
+                .map(|init| init.id());
+            dispatcher.on_media_segment_loaded(
+                data,
+                media_type,
+                time_info,
+                context,
+                init_segment_id,
+            );
         }
     }
 }

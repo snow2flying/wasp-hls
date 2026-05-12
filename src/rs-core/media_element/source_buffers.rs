@@ -51,9 +51,14 @@ pub(super) struct SourceBuffer {
     /// transmuxed append.
     last_segment_end_time: Option<TimescaledTimestamp>,
 
-    /// Some state may be maintained by the potential lower-level transmuxer we'll feed data too.
-    /// That state makes sense as we're pushing contiguous segments but does not make sense to be
-    /// maintained once either a track switch or a new init segment is pushed.
+    /// Identity of the media timeline the last appended media segment belonged to.
+    ///
+    /// This allows the SourceBuffer to transparently determine whether the next append can reuse
+    /// the lower-level transmuxer state or should start a new sequence.
+    last_media_sequence_identity: Option<MediaSequenceIdentity>,
+
+    /// Set when the next media append must force a transmuxer reset regardless of its sequence
+    /// identity, such as after an explicit buffer flush.
     reset_transmuxer_on_next_segment: bool,
 }
 
@@ -80,6 +85,7 @@ impl SourceBuffer {
                 last_segment_pushed: false,
                 media_type,
                 last_segment_end_time: None,
+                last_media_sequence_identity: None,
                 reset_transmuxer_on_next_segment: false,
             }),
             Err(err) => Err(AddSourceBufferError::from_js_add_source_buffer_error(
@@ -120,6 +126,9 @@ impl SourceBuffer {
         segment_data: JsMemoryBlob,
     ) -> Result<AppendBufferResponse, PushSegmentError> {
         self.was_used = true;
+        self.last_segment_end_time = None;
+        self.last_media_sequence_identity = None;
+        self.reset_transmuxer_on_next_segment = true;
         self.queue
             .push_back(SourceBufferQueueElement::PushInit(segment_data.id()));
         Logger::debug(&format!(
@@ -156,11 +165,17 @@ impl SourceBuffer {
         self.was_used = true;
         let segment_data = data.segment_data.id();
         let segment_time_info = data.time_info().clone();
+        let media_sequence_identity = *data.media_sequence_identity();
+        let should_reset_transmuxer = should_reset_transmuxer(
+            self.last_media_sequence_identity,
+            media_sequence_identity,
+            self.reset_transmuxer_on_next_segment,
+        );
         let segment_hints = build_segment_hints(
             &segment_time_info,
             self.last_segment_end_time,
             data.base_dts_hint(),
-            self.reset_transmuxer_on_next_segment,
+            should_reset_transmuxer,
         );
         self.reset_transmuxer_on_next_segment = false;
 
@@ -183,6 +198,7 @@ impl SourceBuffer {
             x.end()
                 .map(|value| TimescaledTimestamp::new(value, x.timescale()))
         });
+        self.last_media_sequence_identity = Some(media_sequence_identity);
         Ok(AppendBufferResponse { parsed })
     }
 
@@ -206,20 +222,6 @@ impl SourceBuffer {
         let _ = jsRemoveBuffer(self.id, start, end);
     }
 
-    /// Marks the next pushed media segment as the beginning of a new segment
-    /// sequence.
-    ///
-    /// This should be called when on rendition/media switch or on an HLS discontinuity,
-    /// to indicate that potential state maintained by buffers until now can be safely
-    /// reset.
-    ///
-    /// This does not remove buffered media and does not itself push an init
-    /// segment. It only affects how the next media segment is processed.
-    pub(crate) fn begin_new_segment_sequence(&mut self) {
-        self.last_segment_end_time = None;
-        self.reset_transmuxer_on_next_segment = true;
-    }
-
     /// Empty media data from this `SourceBuffer`.
     ///
     /// There's special considerations too take care of here as we'll remove data corresponding to
@@ -227,6 +229,7 @@ impl SourceBuffer {
     pub(super) fn flush_buffer(&mut self) {
         self.was_used = true;
         self.last_segment_end_time = None;
+        self.last_media_sequence_identity = None;
         self.reset_transmuxer_on_next_segment = true;
         self.queue.push_back(SourceBufferQueueElement::Emptying);
         Logger::debug(&format!("Buffer {} ({}): emptying", self.id, self.typ));
@@ -308,6 +311,9 @@ pub(crate) struct MediaSegmentPushData {
 
     /// Optional precise timing anchor to align this append against an already buffered segment.
     base_dts_hint: Option<TimescaledTimestamp>,
+
+    /// Identity of the media sequence this append belongs to.
+    media_sequence_identity: MediaSequenceIdentity,
 }
 
 impl MediaSegmentPushData {
@@ -328,12 +334,14 @@ impl MediaSegmentPushData {
         segment_data: JsMemoryBlob,
         time_info: SegmentTimeInfo,
         base_dts_hint: Option<TimescaledTimestamp>,
+        media_sequence_identity: MediaSequenceIdentity,
     ) -> Self {
         Self {
             id,
             segment_data,
             time_info,
             base_dts_hint,
+            media_sequence_identity,
         }
     }
 
@@ -359,6 +367,39 @@ impl MediaSegmentPushData {
     pub(crate) fn base_dts_hint(&self) -> Option<TimescaledTimestamp> {
         self.base_dts_hint
     }
+
+    pub(crate) fn media_sequence_identity(&self) -> &MediaSequenceIdentity {
+        &self.media_sequence_identity
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct MediaSequenceIdentity {
+    media_playlist_id: u32,
+    discontinuity_sequence: u32,
+    init_segment_id: Option<u64>,
+}
+
+impl MediaSequenceIdentity {
+    pub(crate) fn new(
+        media_playlist_id: u32,
+        discontinuity_sequence: u32,
+        init_segment_id: Option<f64>,
+    ) -> Self {
+        Self {
+            media_playlist_id,
+            discontinuity_sequence,
+            init_segment_id: init_segment_id.map(f64::to_bits),
+        }
+    }
+}
+
+fn should_reset_transmuxer(
+    previous_identity: Option<MediaSequenceIdentity>,
+    next_identity: MediaSequenceIdentity,
+    forced_reset: bool,
+) -> bool {
+    forced_reset || previous_identity != Some(next_identity)
 }
 
 /// Represents a successful response from the `append_buffer` SourceBuffer's method.
@@ -643,4 +684,42 @@ fn build_segment_hints(
         }
     };
     SegmentHints::new(start_dts, start_dts_timescale, reset_transmuxer)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{should_reset_transmuxer, MediaSequenceIdentity};
+
+    #[test]
+    fn transmuxer_reset_is_forced_when_requested() {
+        let identity = MediaSequenceIdentity::new(1, 2, Some(3.0));
+        assert!(should_reset_transmuxer(Some(identity), identity, true));
+    }
+
+    #[test]
+    fn transmuxer_reset_is_not_needed_for_same_sequence_identity() {
+        let identity = MediaSequenceIdentity::new(1, 2, Some(3.0));
+        assert!(!should_reset_transmuxer(Some(identity), identity, false));
+    }
+
+    #[test]
+    fn transmuxer_reset_happens_when_media_playlist_changes() {
+        let previous = MediaSequenceIdentity::new(1, 2, Some(3.0));
+        let next = MediaSequenceIdentity::new(2, 2, Some(3.0));
+        assert!(should_reset_transmuxer(Some(previous), next, false));
+    }
+
+    #[test]
+    fn transmuxer_reset_happens_when_discontinuity_changes() {
+        let previous = MediaSequenceIdentity::new(1, 2, Some(3.0));
+        let next = MediaSequenceIdentity::new(1, 3, Some(3.0));
+        assert!(should_reset_transmuxer(Some(previous), next, false));
+    }
+
+    #[test]
+    fn transmuxer_reset_happens_when_init_segment_changes() {
+        let previous = MediaSequenceIdentity::new(1, 2, Some(3.0));
+        let next = MediaSequenceIdentity::new(1, 2, Some(4.0));
+        assert!(should_reset_transmuxer(Some(previous), next, false));
+    }
 }

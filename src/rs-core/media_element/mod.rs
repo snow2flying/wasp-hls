@@ -11,7 +11,7 @@ use crate::Logger;
 pub(crate) use source_buffers::{PushSegmentError, RemoveDataError};
 
 pub(crate) use self::segment_inventory::{BufferedChunk, SegmentQualityContext};
-pub(crate) use source_buffers::{MediaSegmentPushData, SegmentHints};
+pub(crate) use source_buffers::{MediaSegmentPushData, MediaSequenceIdentity, SegmentHints};
 
 mod segment_inventory;
 mod source_buffers;
@@ -324,10 +324,16 @@ impl MediaElementReference {
         segment_data: JsMemoryBlob,
         time_info: SegmentTimeInfo,
         context: SegmentQualityContext,
+        init_segment_id: Option<f64>,
     ) -> MediaSegmentPushData {
         let dts_hint = self.infer_probable_base_dts(media_type, &time_info);
         let metadata_start = time_info.start();
         let metadata_end = time_info.end();
+        let media_sequence_identity = MediaSequenceIdentity::new(
+            context.media_id(),
+            time_info.discontinuity_sequence(),
+            init_segment_id,
+        );
         let inventory_metadata = BufferedSegmentMetadata {
             start: metadata_start,
             end: metadata_end,
@@ -340,7 +346,13 @@ impl MediaElementReference {
             MediaType::Audio => self.audio_inventory.insert_segment(inventory_metadata),
             MediaType::Video => self.video_inventory.insert_segment(inventory_metadata),
         };
-        MediaSegmentPushData::new(id, segment_data, time_info, dts_hint)
+        MediaSegmentPushData::new(
+            id,
+            segment_data,
+            time_info,
+            dts_hint,
+            media_sequence_identity,
+        )
     }
 
     /// Push a media segment to the SourceBuffer of the media type given.
@@ -450,21 +462,6 @@ impl MediaElementReference {
                 sb.flush_buffer();
                 Ok(())
             }
-        }
-    }
-
-    /// Marks the next pushed media segment of the given media type as the beginning of a
-    /// new segment sequence for the associated buffer.
-    ///
-    /// This should be called when on rendition/media switch or on an HLS discontinuity,
-    /// to indicate that potential state maintained by buffers until now can be safely
-    /// reset.
-    ///
-    /// This does not remove buffered media and does not itself push an init
-    /// segment. It only affects how the next media segment is processed.
-    pub(crate) fn begin_new_segment_sequence(&mut self, media_type: MediaType) {
-        if let Some(sb) = self.buffer_mut_for(media_type) {
-            sb.begin_new_segment_sequence();
         }
     }
 
