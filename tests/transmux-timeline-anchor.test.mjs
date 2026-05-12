@@ -103,12 +103,15 @@ async function transmuxSequence(mod, segments) {
   const values = [];
   for (const { data, start, duration } of segments) {
     const out = transmuxer.transmuxSegment(data, {
-      timing: { start, duration },
+      baseMediaDecodeTime: {
+        value: Math.round(start * 90000),
+        timescale: 90000,
+      },
     });
-    assert.ok(out instanceof Uint8Array, "expected transmuxed data");
-    lastTimescale = mod.getMDHDTimescale(out) ?? lastTimescale;
+    assert.ok(out?.data instanceof Uint8Array, "expected transmuxed data");
+    lastTimescale = mod.getMDHDTimescale(out.data) ?? lastTimescale;
     assert.equal(typeof lastTimescale, "number", "expected a parsed timescale");
-    const tfdt = mod.getTrackFragmentDecodeTime(out);
+    const tfdt = mod.getTrackFragmentDecodeTime(out.data);
     assert.equal(typeof tfdt, "number", "expected a parsed tfdt");
     values.push(tfdt / lastTimescale);
   }

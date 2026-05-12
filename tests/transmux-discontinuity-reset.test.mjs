@@ -127,42 +127,40 @@ if (!hasFfmpeg()) {
 
       const withoutReset = new mod.default();
       withoutReset.transmuxSegment(segmentFromA, {
-        continuity: {
-          start: 0,
-          duration: 2,
-          contiguous: false,
-          resetReason: "none",
+        baseMediaDecodeTime: {
+          value: 0,
+          timescale: 90000,
         },
       });
       const leakedAcrossDiscontinuity = withoutReset.transmuxSegment(
         midGopSegmentFromB,
         {
-          continuity: {
-            start: 2,
-            duration: 2,
-            contiguous: false,
-            resetReason: "playlist-discontinuity",
+          reset: true,
+          baseMediaDecodeTime: {
+            value: 2 * 90000,
+            timescale: 90000,
           },
         },
       );
 
       const fresh = new mod.default();
       const expectedAfterReset = fresh.transmuxSegment(midGopSegmentFromB, {
-        continuity: {
-          start: 2,
-          duration: 2,
-          contiguous: false,
-          resetReason: "none",
+        baseMediaDecodeTime: {
+          value: 2 * 90000,
+          timescale: 90000,
         },
       });
 
       assert.ok(
-        leakedAcrossDiscontinuity instanceof Uint8Array &&
-          expectedAfterReset instanceof Uint8Array,
+        leakedAcrossDiscontinuity?.data instanceof Uint8Array &&
+          expectedAfterReset?.data instanceof Uint8Array,
         "expected both transmux operations to produce output",
       );
       assert.ok(
-        areByteArraysEqual(leakedAcrossDiscontinuity, expectedAfterReset),
+        areByteArraysEqual(
+          leakedAcrossDiscontinuity.data,
+          expectedAfterReset.data,
+        ),
         "expected a discontinuity boundary to reseed transmux state instead of reusing cached GOP data from the previous stream",
       );
     } finally {

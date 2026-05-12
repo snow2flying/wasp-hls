@@ -215,6 +215,7 @@ impl SourceBuffer {
     /// This does not remove buffered media and does not itself push an init
     /// segment. It only affects how the next media segment is processed.
     pub(crate) fn begin_new_segment_sequence(&mut self) {
+        self.last_segment_end_time = None;
         self.reset_transmuxer_on_next_segment = true;
     }
 
@@ -224,6 +225,7 @@ impl SourceBuffer {
     /// the current position. As such a seek will have to be performed once the remove is done
     pub(super) fn flush_buffer(&mut self) {
         self.was_used = true;
+        self.last_segment_end_time = None;
         self.reset_transmuxer_on_next_segment = true;
         self.queue.push_back(SourceBufferQueueElement::Emptying);
         Logger::debug(&format!("Buffer {} ({}): emptying", self.id, self.typ));
@@ -576,38 +578,16 @@ fn build_segment_hints(
     reset_transmuxer: bool,
 ) -> SegmentHints {
     const TIMESCALE: u32 = 90_000;
-    const CONTIGUITY_TOLERANCE_TICKS: u64 = TIMESCALE as u64 / 4;
 
     let playlist_start = (segment_time_info.start() * TIMESCALE as f64).round() as u64;
 
-    let start_dts = match last_segment_end {
-        // TODO: We should just be able to determine with confidence what is and is not a
-        // discontinuity here, to not rely on that weird huge trick.
-        Some(last_end) => {
-            let last_end_in_video_ts = ((last_end.value() as f64 * TIMESCALE as f64)
-                / last_end.timescale() as f64)
-                .round() as u64;
-            if playlist_start.abs_diff(last_end_in_video_ts) <= CONTIGUITY_TOLERANCE_TICKS {
-                last_end.value()
-            } else {
-                playlist_start
-            }
+    let (start_dts, start_dts_timescale) = if reset_transmuxer {
+        (playlist_start, TIMESCALE)
+    } else {
+        match last_segment_end {
+            Some(last_end) => (last_end.value(), last_end.timescale()),
+            None => (playlist_start, TIMESCALE),
         }
-        None => playlist_start,
-    };
-
-    let start_dts_timescale = match last_segment_end {
-        Some(last_end) => {
-            let last_end_in_video_ts = ((last_end.value() as f64 * TIMESCALE as f64)
-                / last_end.timescale() as f64)
-                .round() as u64;
-            if playlist_start.abs_diff(last_end_in_video_ts) <= CONTIGUITY_TOLERANCE_TICKS {
-                last_end.timescale()
-            } else {
-                TIMESCALE
-            }
-        }
-        None => TIMESCALE,
     };
 
     SegmentHints::new(start_dts, start_dts_timescale, reset_transmuxer)

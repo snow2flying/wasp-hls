@@ -10,7 +10,6 @@ import Mp4VideoSegmentGenerator from "./Mp4VideoSegmentGenerator.ts";
 import { readNextAdtsOrId3 } from "./read-aac.ts";
 import TimedMetadataParser from "./TimedMetadataParser.ts";
 import TimestampRolloverHandler from "./TimestampRolloverHandler.ts";
-import { clearDtsInfo } from "./track-utils.ts";
 import TransportPacketParser from "./TransportPacketParser.ts";
 import TransportStreamSplitter from "./TransportStreamSplitter.ts";
 
@@ -465,8 +464,6 @@ export default class Transmuxer {
       baseMediaDecodeTime.timescale,
     );
     this._pendingSegmentBaseMediaDecodeTime = baseMediaDecodeTimeVideoTs;
-    this._resetTrackTimelineStart(this._videoTrack, baseMediaDecodeTimeVideoTs);
-    this._resetTrackTimelineStart(this._audioTrack, baseMediaDecodeTimeVideoTs);
   }
 
   private _getCurrentBaseMediaDecodeTime(): number {
@@ -474,17 +471,5 @@ export default class Transmuxer {
       return this._baseMediaDecodeTime;
     }
     return this._pendingSegmentBaseMediaDecodeTime;
-  }
-
-  private _resetTrackTimelineStart(track: any, baseMediaDecodeTime: number) {
-    if (track === null) {
-      return;
-    }
-    clearDtsInfo(track);
-    track.timelineStartInfo = {
-      baseMediaDecodeTime,
-      pts: undefined,
-      dts: undefined,
-    };
   }
 }
