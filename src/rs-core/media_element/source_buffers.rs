@@ -612,22 +612,30 @@ fn build_segment_hints(
 
     let playlist_start = (segment_time_info.start() * TIMESCALE as f64).round() as u64;
 
-    let fallback_val = if let Some(base_dts_hint) = base_dts_hint {
-        (base_dts_hint.value(), base_dts_hint.timescale())
-    } else {
-        (playlist_start, TIMESCALE)
-    };
-
     let (start_dts, start_dts_timescale) = if reset_transmuxer {
-        fallback_val
+        if let Some(base_dts_hint) = base_dts_hint {
+            Logger::debug("Buffer: using base dts hint");
+            (base_dts_hint.value(), base_dts_hint.timescale())
+        } else {
+            Logger::debug("Buffer: determine dts hint from playlist time");
+            (playlist_start, TIMESCALE)
+        }
     } else {
         // just assume continuity
-        // TODO: Is this still needed? Isn't this path now completely handled by
-        // the SegmentInventory store? Though there's "tolerance" for the SegmentInventory
-        // one that may not be needed if we know them to be contiguous.
         match last_segment_end {
-            Some(last_end) => (last_end.value(), last_end.timescale()),
-            None => fallback_val,
+            Some(last_end) => {
+                Logger::debug("Buffer: determine dts hint as last segment end dts");
+                (last_end.value(), last_end.timescale())
+            }
+            None => {
+                if let Some(base_dts_hint) = base_dts_hint {
+                    Logger::debug("Buffer: using base dts hint");
+                    (base_dts_hint.value(), base_dts_hint.timescale())
+                } else {
+                    Logger::debug("Buffer: determine dts hint from playlist time");
+                    (playlist_start, TIMESCALE)
+                }
+            }
         }
     };
     SegmentHints::new(start_dts, start_dts_timescale, reset_transmuxer)
