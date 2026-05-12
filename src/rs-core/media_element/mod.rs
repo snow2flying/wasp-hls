@@ -354,17 +354,37 @@ impl MediaElementReference {
     pub(crate) fn push_media_segment(
         &mut self,
         media_type: MediaType,
-        metadata: MediaSegmentPushData,
+        mut metadata: MediaSegmentPushData,
     ) -> Result<(), PushSegmentError> {
+        let dts_hint = match media_type {
+            MediaType::Audio => self
+                .audio_inventory
+                .infer_probable_base_dts(metadata.start(), metadata.end()),
+            MediaType::Video => self
+                .video_inventory
+                .infer_probable_base_dts(metadata.start(), metadata.end()),
+        };
+        metadata.set_dts_hint(dts_hint);
+
         match self.buffer_mut_for(media_type) {
             None => Err(PushSegmentError::NoSourceBuffer(media_type)),
 
             Some(sb) => {
-                // TODO: we might also want to update the inventory with our more
-                // precise timings
-
                 let metadata_start = metadata.start();
+                let seg_id = metadata.id();
                 let response = sb.push_media_segment(metadata)?;
+                match media_type {
+                    MediaType::Audio => self.audio_inventory.update_precise_timing(
+                        seg_id,
+                        response.precise_start(),
+                        response.precise_end(),
+                    ),
+                    MediaType::Video => self.video_inventory.update_precise_timing(
+                        seg_id,
+                        response.precise_start(),
+                        response.precise_end(),
+                    ),
+                }
                 if let Some(media_start) = response.media_start() {
                     let media_offset = media_start - metadata_start;
                     Logger::info(&format!(

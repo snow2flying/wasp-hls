@@ -1,6 +1,16 @@
 use std::sync::atomic::AtomicU8;
 
-use crate::bindings::{jsLog, LogLevel};
+#[cfg(target_arch = "wasm32")]
+use crate::bindings::jsLog;
+use crate::bindings::LogLevel;
+
+#[cfg(target_arch = "wasm32")]
+fn emit_log(level: LogLevel, text: &str) {
+    jsLog(level, text);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn emit_log<T>(_level: T, _text: &str) {}
 
 pub static MAX_LOG_LEVEL: AtomicU8 = AtomicU8::new(4);
 
@@ -24,49 +34,49 @@ impl Logger {
 
     pub fn info(text: &str) {
         if MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed) >= LoggerLevel::Info as u8 {
-            jsLog(LogLevel::Info, text);
+            emit_log(LogLevel::Info, text);
         }
     }
 
     pub fn error(text: &str) {
         if MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed) >= LoggerLevel::Error as u8 {
-            jsLog(LogLevel::Error, text);
+            emit_log(LogLevel::Error, text);
         }
     }
 
     pub fn warn(text: &str) {
         if MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed) >= LoggerLevel::Warn as u8 {
-            jsLog(LogLevel::Warn, text);
+            emit_log(LogLevel::Warn, text);
         }
     }
 
     pub fn debug(text: &str) {
         if MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed) >= LoggerLevel::Debug as u8 {
-            jsLog(LogLevel::Debug, text);
+            emit_log(LogLevel::Debug, text);
         }
     }
 
     pub fn lazy_info(func: &dyn Fn() -> String) {
         if MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed) >= LoggerLevel::Info as u8 {
-            jsLog(LogLevel::Info, &func());
+            emit_log(LogLevel::Info, &func());
         }
     }
 
     pub fn lazy_error(func: &dyn Fn() -> String) {
         if MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed) >= LoggerLevel::Error as u8 {
-            jsLog(LogLevel::Error, &func());
+            emit_log(LogLevel::Error, &func());
         }
     }
 
     pub fn lazy_warn(func: &dyn Fn() -> String) {
         if MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed) >= LoggerLevel::Warn as u8 {
-            jsLog(LogLevel::Warn, &func());
+            emit_log(LogLevel::Warn, &func());
         }
     }
 
     pub fn lazy_debug(func: &dyn Fn() -> String) {
         if MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed) >= LoggerLevel::Debug as u8 {
-            jsLog(LogLevel::Debug, &func());
+            emit_log(LogLevel::Debug, &func());
         }
     }
 }

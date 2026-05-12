@@ -159,6 +159,7 @@ impl SourceBuffer {
         let segment_hints = build_segment_hints(
             &segment_time_info,
             self.last_segment_end_time,
+            data.base_dts_hint(),
             self.reset_transmuxer_on_next_segment,
         );
         self.reset_transmuxer_on_next_segment = false;
@@ -304,6 +305,9 @@ pub(crate) struct MediaSegmentPushData {
     /// Time information, as a tuple of its start time and end time in seconds as deduced from the
     /// media playlist.
     time_info: SegmentTimeInfo,
+
+    /// Optional precise timing anchor to align this append against an already buffered segment.
+    base_dts_hint: Option<TimescaledTimestamp>,
 }
 
 impl MediaSegmentPushData {
@@ -321,7 +325,12 @@ impl MediaSegmentPushData {
             id,
             segment_data,
             time_info,
+            base_dts_hint: None,
         }
+    }
+
+    pub(crate) fn id(&self) -> u64 {
+        self.id
     }
 
     /// Get time information linked to this segment as a reference to its `SegmentTimeInfo` object.
@@ -338,6 +347,14 @@ impl MediaSegmentPushData {
     pub(crate) fn end(&self) -> f64 {
         self.time_info.end()
     }
+
+    pub(crate) fn base_dts_hint(&self) -> Option<TimescaledTimestamp> {
+        self.base_dts_hint
+    }
+
+    pub(crate) fn set_dts_hint(&mut self, base_dts_hint: Option<TimescaledTimestamp>) {
+        self.base_dts_hint = base_dts_hint;
+    }
 }
 
 /// Represents a successful response from the `append_buffer` SourceBuffer's method.
@@ -347,6 +364,19 @@ pub(crate) struct AppendBufferResponse {
 }
 
 impl AppendBufferResponse {
+    pub(crate) fn precise_start(&self) -> Option<TimescaledTimestamp> {
+        self.parsed.as_ref().and_then(|p| {
+            p.start()
+                .map(|x| TimescaledTimestamp::new(x, p.timescale()))
+        })
+    }
+
+    pub(crate) fn precise_end(&self) -> Option<TimescaledTimestamp> {
+        self.parsed
+            .as_ref()
+            .and_then(|p| p.end().map(|x| TimescaledTimestamp::new(x, p.timescale())))
+    }
+
     /// Returns the optionally parsed start time, in seconds, found when parsing the segment's
     /// internals.
     ///
@@ -575,20 +605,30 @@ impl SegmentHints {
 fn build_segment_hints(
     segment_time_info: &SegmentTimeInfo,
     last_segment_end: Option<TimescaledTimestamp>,
+    base_dts_hint: Option<TimescaledTimestamp>,
     reset_transmuxer: bool,
 ) -> SegmentHints {
     const TIMESCALE: u32 = 90_000;
 
     let playlist_start = (segment_time_info.start() * TIMESCALE as f64).round() as u64;
 
-    let (start_dts, start_dts_timescale) = if reset_transmuxer {
-        (playlist_start, TIMESCALE)
+    let fallback_val = if let Some(base_dts_hint) = base_dts_hint {
+        (base_dts_hint.value(), base_dts_hint.timescale())
     } else {
-        match last_segment_end {
-            Some(last_end) => (last_end.value(), last_end.timescale()),
-            None => (playlist_start, TIMESCALE),
-        }
+        (playlist_start, TIMESCALE)
     };
 
+    let (start_dts, start_dts_timescale) = if reset_transmuxer {
+        fallback_val
+    } else {
+        // just assume continuity
+        // TODO: Is this still needed? Isn't this path now completely handled by
+        // the SegmentInventory store? Though there's "tolerance" for the SegmentInventory
+        // one that may not be needed if we know them to be contiguous.
+        match last_segment_end {
+            Some(last_end) => (last_end.value(), last_end.timescale()),
+            None => fallback_val,
+        }
+    };
     SegmentHints::new(start_dts, start_dts_timescale, reset_transmuxer)
 }
