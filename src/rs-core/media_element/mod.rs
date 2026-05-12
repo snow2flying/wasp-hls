@@ -331,6 +331,7 @@ impl MediaElementReference {
             start: metadata_start,
             end: metadata_end,
             context,
+            discontinuity_sequence: time_info.discontinuity_sequence(),
             playlist_start: metadata_start,
             playlist_end: metadata_end,
         };
@@ -359,10 +360,18 @@ impl MediaElementReference {
         let dts_hint = match media_type {
             MediaType::Audio => self
                 .audio_inventory
-                .infer_probable_base_dts(metadata.start(), metadata.end()),
+                .infer_probable_base_dts(
+                    metadata.start(),
+                    metadata.end(),
+                    metadata.time_info().discontinuity_sequence(),
+                ),
             MediaType::Video => self
                 .video_inventory
-                .infer_probable_base_dts(metadata.start(), metadata.end()),
+                .infer_probable_base_dts(
+                    metadata.start(),
+                    metadata.end(),
+                    metadata.time_info().discontinuity_sequence(),
+                ),
         };
         metadata.set_dts_hint(dts_hint);
 

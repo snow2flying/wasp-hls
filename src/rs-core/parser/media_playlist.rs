@@ -29,12 +29,18 @@ pub(crate) struct SegmentTimeInfo {
     /// Difference between the last presentation time at which the segment contains data for
     /// in seconds and `start`.
     duration: f64,
+    /// Discontinuity sequence associated to that segment.
+    discontinuity_sequence: u32,
 }
 
 impl SegmentTimeInfo {
     /// Create a new `SegmentTimeInfo` with the given `start` and `duration` in seconds.
     pub(crate) fn new(start: f64, duration: f64) -> Self {
-        Self { start, duration }
+        Self {
+            start,
+            duration,
+            discontinuity_sequence: 0, // XXX TODO
+        }
     }
 
     /// First presentation time the segment contains media data for, in seconds.
@@ -50,6 +56,11 @@ impl SegmentTimeInfo {
     /// Difference between `self.end()` and `self.start()`
     pub(crate) fn duration(&self) -> f64 {
         self.duration
+    }
+
+    /// HLS discontinuity sequence associated to the segment.
+    pub(crate) fn discontinuity_sequence(&self) -> u32 {
+        self.discontinuity_sequence
     }
 }
 

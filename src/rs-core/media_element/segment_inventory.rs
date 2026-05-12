@@ -108,6 +108,9 @@ pub(crate) struct BufferedChunk {
     /// Identifier for the corresponding quality
     media_id: u32,
 
+    /// HLS discontinuity sequence associated to the segment.
+    discontinuity_sequence: u32,
+
     /// Parsed precise segment start, when known.
     precise_start: Option<TimescaledTimestamp>,
 
@@ -123,6 +126,7 @@ impl BufferedChunk {
             variant_score: metadata.context.variant_score,
             start: metadata.start,
             media_id: metadata.context.media_id,
+            discontinuity_sequence: metadata.discontinuity_sequence,
             playlist_start: metadata.playlist_start,
             playlist_end: metadata.playlist_end,
             last_buffered_end: metadata.end,
@@ -195,6 +199,10 @@ impl BufferedChunk {
     /// current type, not).
     pub(crate) fn media_id(&self) -> u32 {
         self.media_id
+    }
+
+    pub(crate) fn discontinuity_sequence(&self) -> u32 {
+        self.discontinuity_sequence
     }
 
     fn precise_start(&self) -> Option<TimescaledTimestamp> {
@@ -714,6 +722,7 @@ impl SegmentInventory {
                     let duplicated = BufferedSegmentMetadata {
                         playlist_start: seg.playlist_start,
                         playlist_end: seg.playlist_end,
+                        discontinuity_sequence: seg.discontinuity_sequence,
                         start: end,
                         end: seg.end,
                         context: SegmentQualityContext {
@@ -765,10 +774,11 @@ impl SegmentInventory {
         &self,
         playlist_start: f64,
         playlist_end: f64,
+        discontinuity_sequence: u32,
     ) -> Option<TimescaledTimestamp> {
         const OVERLAP_TOLERANCE: f64 = 0.05;
 
-        // First, try to anchor from a segment that overlaps the same playlist window.
+        // First, try to anchor from a segment that appears to describe the same playlist window.
         //
         // Rationale:
         // - The best anchor is usually a buffered segment that already gives us continuity
@@ -776,19 +786,31 @@ impl SegmentInventory {
         // - If the current segment already has a precise start associated to its inventory entry,
         //   that direct timing information is also a valid overlap candidate and should compete
         //   naturally with the others here.
-        // - When multiple overlapping candidates exist, we prefer the one with the largest
-        //   overlap, because it is the strongest indication that both entries refer to the same
-        //   effective buffered region.
+        // - Mere overlap is not enough: two different segments may overlap in playlist time while
+        //   still belonging to different timing windows. To avoid poisoning the base DTS with an
+        //   unrelated anchor, we only reuse `precise_start` when both playlist boundaries are
+        //   already close.
+        // - When multiple candidates still exist, we prefer the one with the largest overlap,
+        //   because it is the strongest indication that both entries refer to the same effective
+        //   buffered region.
         // - If overlap sizes are equal, we currently prefer the later playlist_start through the
         //   `max_by` tie-break below.
         let overlap_anchor = self
             .inventory
             .iter()
             .filter_map(|seg| {
+                if !matches_discontinuity(seg, discontinuity_sequence) {
+                    return None;
+                }
                 let overlap_start = f64::max(seg.playlist_start, playlist_start);
                 let overlap_end = f64::min(seg.playlist_end, playlist_end);
                 let overlap_size = overlap_end - overlap_start;
                 if overlap_size <= OVERLAP_TOLERANCE {
+                    return None;
+                }
+                let start_delta = (seg.playlist_start - playlist_start).abs();
+                let end_delta = (seg.playlist_end - playlist_end).abs();
+                if start_delta > OVERLAP_TOLERANCE || end_delta > OVERLAP_TOLERANCE {
                     return None;
                 }
                 seg.precise_start()
@@ -810,6 +832,7 @@ impl SegmentInventory {
         // (within tolerance), and we keep the closest one by taking the greatest playlist_end.
         self.inventory
             .iter()
+            .filter(|seg| matches_discontinuity(seg, discontinuity_sequence))
             .filter(|seg| seg.playlist_end <= playlist_start + OVERLAP_TOLERANCE)
             .filter_map(|seg| {
                 seg.precise_end()
@@ -1198,6 +1221,8 @@ pub(super) struct BufferedSegmentMetadata {
 
     pub(super) playlist_end: f64,
 
+    pub(super) discontinuity_sequence: u32,
+
     /// Supposed start, in seconds, the segment is expected to start at.
     pub(super) start: f64,
 
@@ -1213,15 +1238,28 @@ fn buffered_overlap_size(seg: &BufferedChunk, range: (f64, f64), media_offset: f
     overlap_end - overlap_start
 }
 
+fn matches_discontinuity(seg: &BufferedChunk, discontinuity_sequence: u32) -> bool {
+    seg.discontinuity_sequence() == discontinuity_sequence
+}
+
 #[cfg(test)]
 mod tests {
     use super::{BufferedSegmentMetadata, SegmentInventory, SegmentQualityContext};
     use crate::bindings::{MediaType, TimescaledTimestamp};
 
     fn metadata(start: f64, end: f64) -> BufferedSegmentMetadata {
+        metadata_with_discontinuity(start, end, 0)
+    }
+
+    fn metadata_with_discontinuity(
+        start: f64,
+        end: f64,
+        discontinuity_sequence: u32,
+    ) -> BufferedSegmentMetadata {
         BufferedSegmentMetadata {
             playlist_start: start,
             playlist_end: end,
+            discontinuity_sequence,
             start,
             end,
             context: SegmentQualityContext::new(1.0, 1),
@@ -1239,7 +1277,7 @@ mod tests {
         );
 
         let anchor = inventory
-            .infer_probable_base_dts(10.0, 20.0)
+            .infer_probable_base_dts(10.0, 20.0, 0)
             .expect("expected overlap anchor");
         assert_eq!(anchor.value(), 900_000);
         assert_eq!(anchor.timescale(), 90_000);
@@ -1264,7 +1302,7 @@ mod tests {
         );
 
         let anchor = inventory
-            .infer_probable_base_dts(10.0, 20.0)
+            .infer_probable_base_dts(10.0, 20.0, 0)
             .expect("expected overlap anchor");
         assert_eq!(anchor.value(), 950_000);
         assert_eq!(anchor.timescale(), 90_000);
@@ -1281,13 +1319,12 @@ mod tests {
         );
 
         let anchor = inventory
-            .infer_probable_base_dts(10.0, 20.0)
+            .infer_probable_base_dts(10.0, 20.0, 0)
             .expect("expected previous end anchor");
         assert_eq!(anchor.value(), 900_000);
         assert_eq!(anchor.timescale(), 90_000);
     }
 
-    // TODO: That one should fail
     #[test]
     fn timing_anchor_don_t_include_different_timing() {
         let mut inventory = SegmentInventory::new(MediaType::Video);
@@ -1298,24 +1335,55 @@ mod tests {
             Some(TimescaledTimestamp::new(1_170_000, 90_000)), // 13
         );
 
-        let anchor = inventory.infer_probable_base_dts(10.0, 20.0);
+        let anchor = inventory.infer_probable_base_dts(10.0, 20.0, 0);
         assert!(anchor.is_none());
     }
 
     #[test]
     fn timing_anchor_should_have_tolerance() {
         let mut inventory = SegmentInventory::new(MediaType::Video);
-        let prev_id = inventory.insert_segment(metadata(10.100, 18.100));
+        let prev_id = inventory.insert_segment(metadata(10.01, 20.01));
         inventory.update_precise_timing(
             prev_id,
-            Some(TimescaledTimestamp::new(90_900, 90_000)), // 10.1
-            Some(TimescaledTimestamp::new(1_800_000, 90_000)), // 20
+            Some(TimescaledTimestamp::new(900_900, 90_000)), // 10.01
+            Some(TimescaledTimestamp::new(1_800_900, 90_000)), // 20.01
         );
 
         let anchor = inventory
-            .infer_probable_base_dts(10.0, 20.0)
+            .infer_probable_base_dts(10.0, 20.0, 0)
             .expect("expected overlap anchor");
-        assert_eq!(anchor.value(), 90_000);
-        assert_eq!(anchor.timescale(), 1_800_000);
+        assert_eq!(anchor.value(), 900_900);
+        assert_eq!(anchor.timescale(), 90_000);
+    }
+
+    #[test]
+    fn timing_anchor_ignores_different_discontinuity_sequence() {
+        let mut inventory = SegmentInventory::new(MediaType::Video);
+        let seg_id = inventory.insert_segment(metadata_with_discontinuity(10.0, 20.0, 7));
+        inventory.update_precise_timing(
+            seg_id,
+            Some(TimescaledTimestamp::new(900_000, 90_000)),
+            Some(TimescaledTimestamp::new(1_800_000, 90_000)),
+        );
+
+        let anchor = inventory.infer_probable_base_dts(10.0, 20.0, 8);
+        assert!(anchor.is_none());
+    }
+
+    #[test]
+    fn timing_anchor_accepts_matching_discontinuity_sequence() {
+        let mut inventory = SegmentInventory::new(MediaType::Video);
+        let seg_id = inventory.insert_segment(metadata_with_discontinuity(10.0, 20.0, 7));
+        inventory.update_precise_timing(
+            seg_id,
+            Some(TimescaledTimestamp::new(900_000, 90_000)),
+            Some(TimescaledTimestamp::new(1_800_000, 90_000)),
+        );
+
+        let anchor = inventory
+            .infer_probable_base_dts(10.0, 20.0, 7)
+            .expect("expected discontinuity-matched overlap anchor");
+        assert_eq!(anchor.value(), 900_000);
+        assert_eq!(anchor.timescale(), 90_000);
     }
 }
