@@ -59,7 +59,11 @@ import {
   getIsobmfTimeInfo,
 } from "./isobmff-utils.js";
 import postMessageToMain from "./postMessage.js";
-import { getTransmuxedType, createTransmuxer } from "./transmux.js";
+import {
+  createTransmuxer,
+  getFmp4Type,
+  getTransmuxedType,
+} from "./transmux.js";
 import { formatErrMessage, shouldTransmux } from "./utils.js";
 
 // Some environments (such as Safari Desktop) weirdly do not support
@@ -1683,19 +1687,7 @@ export function isTypeSupported(
   mediaType: MediaType,
   codec: string,
 ): boolean | undefined {
-  let mimeTypePrefix: string;
-  switch (mediaType) {
-    case MediaType.Audio:
-      mimeTypePrefix = "audio/";
-      break;
-    case MediaType.Video:
-      mimeTypePrefix = "video/";
-      break;
-    default:
-      logger.error("Unknown MediaType");
-      return false;
-  }
-  const mimeType = `${mimeTypePrefix}mp4;codecs=\"${codec}\"`;
+  const mimeType = getFmp4Type(mediaType, codec);
 
   // TODO keep somewhere which one is supported to be able to know if
   // transmuxing is necessary or not

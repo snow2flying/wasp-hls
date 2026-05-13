@@ -3,6 +3,34 @@ import Transmuxer from "../ts-transmux/index.ts";
 import { MediaType } from "../wasm/index.js";
 import { canTransmux } from "./utils.js";
 
+function normalizeLegacyAvc1Codec(mimeType: string): string {
+  const match = /avc1\.(66|77|100)\.(\d+)/.exec(mimeType);
+  if (match === null) {
+    return mimeType;
+  }
+
+  const profile = match[1];
+  let newProfile;
+  if (profile === "66") {
+    newProfile = "4200";
+  } else if (profile === "77") {
+    newProfile = "4d00";
+  } else {
+    if (profile !== "100") {
+      logger.error("Impossible regex catch");
+    }
+    newProfile = "6400";
+  }
+
+  // Convert the level to hex and append to the codec string.
+  const level = Number(match[2]);
+  if (level >= 256) {
+    logger.error("Invalid legacy avc1 level number.");
+  }
+  const newLevel = (level >> 4).toString(16) + (level & 0xf).toString(16);
+  return mimeType.replace(match[0], `avc1.${newProfile}${newLevel}`);
+}
+
 export function getTransmuxedType(typ: string, mediaType: MediaType): string {
   if (!canTransmux(typ)) {
     return typ;
@@ -14,39 +42,27 @@ export function getTransmuxedType(typ: string, mediaType: MediaType): string {
   if (mediaType === MediaType.Audio) {
     mimeType = mimeType.replace(/video/i, "audio");
   }
+  return normalizeLegacyAvc1Codec(mimeType);
+}
 
-  // This is a workaround seen in the Shaka-player, which allows to play some
-  // legacy HLS contents made that way for retro-compatibility-reasons:
-  // Handle legacy AVC1 codec strings (pre-RFC 6381).
-  // Look for "avc1.<profile>.<level>", where profile is:
-  //   66 (baseline => 0x42)
-  //   77 (main => 0x4d)
-  //   100 (high => 0x64)
-  // https://github.com/scheib/chromium/blob/b03fc92/media/base/video_codecs.cc#L356
-  const match = /avc1\.(66|77|100)\.(\d+)/.exec(mimeType);
-  if (match) {
-    const profile = match[1];
-    let newProfile;
-    if (profile === "66") {
-      newProfile = "4200";
-    } else if (profile === "77") {
-      newProfile = "4d00";
-    } else {
-      if (profile !== "100") {
-        logger.error("Impossible regex catch");
-      }
-      newProfile = "6400";
-    }
-
-    // Convert the level to hex and append to the codec string.
-    const level = Number(match[2]);
-    if (level >= 256) {
-      logger.error("Invalid legacy avc1 level number.");
-    }
-    const newLevel = (level >> 4).toString(16) + (level & 0xf).toString(16);
-    mimeType = `avc1.${newProfile}${newLevel}`;
+export function getFmp4Type(mediaType: MediaType, codec: string): string {
+  codec = codec.trim();
+  let mimeTypePrefix: string;
+  switch (mediaType) {
+    case MediaType.Audio:
+      mimeTypePrefix = "audio/";
+      break;
+    case MediaType.Video:
+      mimeTypePrefix = "video/";
+      break;
+    default:
+      logger.error("Unknown MediaType");
+      mimeTypePrefix = "video/";
+      break;
   }
-  return mimeType;
+  return normalizeLegacyAvc1Codec(
+    `${mimeTypePrefix}mp4;codecs="${codec}"`,
+  );
 }
 
 export function createTransmuxer(): Transmuxer {

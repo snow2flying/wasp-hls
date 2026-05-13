@@ -53,8 +53,8 @@ fn advance_awaiting_playlist_info_state(dispatcher: &mut Dispatcher) {
     // Progress through the "startup steps" of the linked `PlaylistStore`, returning `true`
     let wanted_position = utils::get_initial_position(playlist_store, starting_position);
     match playlist_store.startup_status(wanted_position) {
-        Ok(StartupStatus::Ready) => false,
-        Ok(StartupStatus::AwaitingSupportCheck) => true,
+        Ok(StartupStatus::Ready) => {}
+        Ok(StartupStatus::AwaitingSupportCheck) => return,
         Ok(StartupStatus::NeedsProbe(probe_segment)) => {
             if start_probe_segment_request(dispatcher, probe_segment) {
                 return;
