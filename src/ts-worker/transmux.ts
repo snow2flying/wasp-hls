@@ -45,8 +45,8 @@ export function getTransmuxedType(typ: string, mediaType: MediaType): string {
   return normalizeLegacyAvc1Codec(mimeType);
 }
 
-export function getFmp4Type(mediaType: MediaType, codec: string): string {
-  codec = codec.trim();
+export function getFmp4Type(mediaType: MediaType, codecP: string): string {
+  const codec = codecP.trim();
   let mimeTypePrefix: string;
   switch (mediaType) {
     case MediaType.Audio:
@@ -60,9 +60,7 @@ export function getFmp4Type(mediaType: MediaType, codec: string): string {
       mimeTypePrefix = "video/";
       break;
   }
-  return normalizeLegacyAvc1Codec(
-    `${mimeTypePrefix}mp4;codecs="${codec}"`,
-  );
+  return normalizeLegacyAvc1Codec(`${mimeTypePrefix}mp4;codecs="${codec}"`);
 }
 
 export function createTransmuxer(): Transmuxer {
