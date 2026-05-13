@@ -194,14 +194,9 @@ impl PlaylistStore {
             return Ok(true);
         }
 
-        let playlist = match &self.playlist {
-            TopLevelPlaylist::Multivariant(playlist) => playlist,
-            TopLevelPlaylist::DirectMedia(_) => {
-                return Ok(true);
-            }
-        };
-
         let curr_variant_id = self.curr_variant_id;
+        let curr_audio_required = self.curr_audio_id.is_some();
+        let curr_video_required = self.curr_video_id.is_some();
         let inferred_audio_codec = self
             .curr_media_playlist(MediaType::Audio)
             .and_then(|p| p.external_media_info())
@@ -211,74 +206,76 @@ impl PlaylistStore {
             .and_then(|p| p.external_media_info())
             .map(|i| i.codec.clone());
 
-        // For each variant, in order:
-        // - Some(true) -> Codec is known to be supported
-        // - Some(false) -> Codec is known to be unsupported
-        // - None -> We don't know yet
-        let variants_support: Vec<Option<bool>> = playlist
-            .all_variants()
-            .iter()
-            .map(|v| -> Result<Option<bool>, PlaylistStoreError> {
-                // If support was already determined for this variant, reuse it.
-                if let Some(supported) = v.supported() {
-                    return Ok(Some(supported));
-                }
+        let is_multivariant_support_resolved;
 
-                let mut variant_is_supported = false;
-                for mt in [MediaType::Video, MediaType::Audio] {
-                    // Try to get the codec from the variant directly, falling back to
-                    // the inferred codec if this is the current variant.
-                    let codec = v.codecs(mt).or_else(|| {
-                        if Some(v.id()) == curr_variant_id {
-                            match mt {
-                                MediaType::Audio => inferred_audio_codec.clone(),
-                                MediaType::Video => inferred_video_codec.clone(),
-                            }
-                        } else {
-                            None
-                        }
-                    });
-
-                    if let Some(codec) = codec {
-                        match jsIsTypeSupported(mt, &codec) {
-                            // Codec is explicitly unsupported: the whole variant is out.
-                            Some(false) => return Ok(Some(false)),
-                            // Codec is supported: keep going.
-                            Some(true) => variant_is_supported = true,
-                            // Support cannot be determined yet: signal unresolved and bail.
-                            None => return Ok(None),
-                        }
-                    }
-                }
-
-                Ok(variant_is_supported.then_some(true)) // `None` if no codec is known
-            })
-            .collect::<Result<Vec<_>, PlaylistStoreError>>()?;
-
+        // Borrow playlist immutably first to get the mutable reference after
         let playlist = match &mut self.playlist {
             TopLevelPlaylist::Multivariant(playlist) => playlist,
-            TopLevelPlaylist::DirectMedia(_) => unreachable!(),
+            TopLevelPlaylist::DirectMedia(_) => {
+                return Ok(true);
+            }
         };
 
-        let is_multivariant_support_resolved = !variants_support.contains(&None);
+        let mut all_resolved = true;
+        'variant: for v in playlist.variants_mut().iter_mut() {
+            // If support was already determined for this variant, reuse it.
+            if v.supported().is_some() {
+                continue;
+            }
 
-        // Re-iterate, now mutably
-        // NOTE: `all_variants()` and `variants_mut()` return variants in the same order;
-        // `zip` here relies on that invariant.
-        playlist
-            .variants_mut()
-            .iter_mut()
-            .zip(variants_support)
-            .for_each(|(v, support)| {
-                if v.supported().is_some() {
-                    return;
+            let mut variant_is_supported = false;
+            let is_current_variant = Some(v.id()) == curr_variant_id;
+            let mut saw_codec = false;
+
+            for mt in [MediaType::Video, MediaType::Audio] {
+                let codec = v.codecs(mt).or_else(|| {
+                    if is_current_variant {
+                        match mt {
+                            MediaType::Audio => inferred_audio_codec.clone(),
+                            MediaType::Video => inferred_video_codec.clone(),
+                        }
+                    } else {
+                        None
+                    }
+                });
+
+                let Some(codec) = codec else {
+                    let media_required = is_current_variant
+                        && match mt {
+                            MediaType::Audio => curr_audio_required,
+                            MediaType::Video => curr_video_required,
+                        };
+                    if media_required {
+                        all_resolved = false;
+                        continue 'variant;
+                    }
+                    continue;
+                };
+                saw_codec = true;
+
+                match jsIsTypeSupported(mt, &codec) {
+                    Some(false) => {
+                        v.update_support(false);
+                        continue 'variant;
+                    }
+                    Some(true) => variant_is_supported = true,
+                    None => {
+                        all_resolved = false;
+                        continue 'variant;
+                    }
                 }
-                if let Some(support) = support {
-                    v.update_support(support);
-                }
-            });
+            }
+
+            if variant_is_supported {
+                v.update_support(true);
+            } else if !saw_codec {
+                all_resolved = false;
+            }
+        }
 
         // If any variant returned None, multi-variant support is not yet resolved.
+        is_multivariant_support_resolved = all_resolved;
+
         self.multivariant_support_resolved = is_multivariant_support_resolved;
 
         if is_multivariant_support_resolved {
