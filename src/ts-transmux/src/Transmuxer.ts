@@ -40,7 +40,8 @@ interface TsPipelineElements {
 
 /** Contrustor options for `Transmuxer`. */
 export interface TransmuxerOptions {
-  baseMediaDecodeTime?: number;
+  /** Decode-time seed used until the transmuxer can infer continuity itself. */
+  baseMediaDecodeTimeSeed?: number;
   keepOriginalTimestamps?: boolean;
   firstSequenceNumber?: number;
   alignGopsAtEnd?: boolean;
@@ -60,8 +61,8 @@ export interface TransmuxedSegmentTimingInfo {
 export interface TransmuxSegmentOptions {
   /** If `true`, this segment is non-contiguous with the previous one. */
   reset?: boolean;
-  /** The segment's base DTS, if known. */
-  baseMediaDecodeTime?: {
+  /** Decode-time seed to use when the transmuxer has no prior DTS continuity. */
+  baseMediaDecodeTimeSeed?: {
     /** Timestamp value in the associated timescale. */
     value: number;
     /** Timescale used for that timestamp. */
@@ -86,17 +87,17 @@ export default class Transmuxer {
   private _options: TransmuxerOptions;
   private _videoTrack: any;
   private _audioTrack: any;
-  private _baseMediaDecodeTime: number;
+  private _baseMediaDecodeTimeSeed: number;
   private _currentPipeline: AacPipelineElements | TsPipelineElements | null;
-  private _pendingSegmentBaseMediaDecodeTime: number | null;
+  private _pendingSegmentBaseMediaDecodeTimeSeed: number | null;
 
   constructor(options?: TransmuxerOptions | undefined) {
     this._options = options ?? {};
-    this._baseMediaDecodeTime = options?.baseMediaDecodeTime ?? 0;
+    this._baseMediaDecodeTimeSeed = options?.baseMediaDecodeTimeSeed ?? 0;
     this._currentPipeline = null;
     this._videoTrack = null;
     this._audioTrack = null;
-    this._pendingSegmentBaseMediaDecodeTime = null;
+    this._pendingSegmentBaseMediaDecodeTimeSeed = null;
   }
 
   public transmuxSegment(
@@ -106,7 +107,7 @@ export default class Transmuxer {
     if (options?.reset === true) {
       this.reset();
     }
-    this._prepareSegmentTimeline(options.baseMediaDecodeTime);
+    this._prepareSegmentTimeline(options.baseMediaDecodeTimeSeed);
     const isAac = isLikelyAacData(data);
     if (isAac && this._currentPipeline?.name !== "aac") {
       this._setupAacPipeline();
@@ -132,7 +133,7 @@ export default class Transmuxer {
     this._currentPipeline = null;
     this._videoTrack = null;
     this._audioTrack = null;
-    this._pendingSegmentBaseMediaDecodeTime = null;
+    this._pendingSegmentBaseMediaDecodeTimeSeed = null;
   }
 
   public pushTsSegment(input: Uint8Array): TransmuxedSegmentData | null {
@@ -324,16 +325,19 @@ export default class Transmuxer {
         videoBaseMediaDecodeTime = trackInfo.baseMediaDecodeTime;
         continuityTiming = timingInfo;
         if (this._options.keepOriginalTimestamps !== true) {
-          const { timelineStartInfo } = trackInfo;
+          const { timelineStartInfo, minSegmentDts, baseMediaDecodeTime } =
+            trackInfo;
           if (this._audioTrack !== null) {
             this._audioTrack.timelineStartInfo = timelineStartInfo;
-            if (timelineStartInfo.dts !== undefined) {
-              // On the first segment we trim AAC frames that exist before the
-              // very earliest DTS we have seen in video because Chrome will
-              // interpret any video track with a baseMediaDecodeTime that is
-              // non-zero as a gap.
-              earliestAllowedDts =
-                timelineStartInfo.dts - this._baseMediaDecodeTime;
+            if (
+              minSegmentDts !== undefined &&
+              baseMediaDecodeTime !== undefined
+            ) {
+              // Keep audio from starting before the current segment's decode
+              // timeline floor. When baseMediaDecodeTime gets clamped to 0 for
+              // an earlier segment, that floor must move with that segment
+              // instead of staying tied to the first post-reset DTS.
+              earliestAllowedDts = minSegmentDts - baseMediaDecodeTime;
             }
           }
         }
@@ -355,7 +359,7 @@ export default class Transmuxer {
 
     if (pipeline?.mp4SegmentConstructor !== undefined) {
       const segmentInfo = pipeline.mp4SegmentConstructor.finishSegment();
-      this._pendingSegmentBaseMediaDecodeTime = null;
+      this._pendingSegmentBaseMediaDecodeTimeSeed = null;
       if (segmentInfo === null) {
         return null;
       }
@@ -449,21 +453,22 @@ export default class Transmuxer {
   }
 
   private _prepareSegmentTimeline(
-    baseMediaDecodeTime:
+    baseMediaDecodeTimeSeed:
       | {
           value: number;
           timescale: number;
         }
       | undefined,
   ): void {
-    if (baseMediaDecodeTime === undefined) {
+    if (baseMediaDecodeTimeSeed === undefined) {
       return;
     }
-    const baseMediaDecodeTimeVideoTs = toVideoTsFromTimescale(
-      baseMediaDecodeTime.value,
-      baseMediaDecodeTime.timescale,
+    const baseMediaDecodeTimeSeedVideoTs = toVideoTsFromTimescale(
+      baseMediaDecodeTimeSeed.value,
+      baseMediaDecodeTimeSeed.timescale,
     );
-    this._pendingSegmentBaseMediaDecodeTime = baseMediaDecodeTimeVideoTs;
+    this._pendingSegmentBaseMediaDecodeTimeSeed =
+      baseMediaDecodeTimeSeedVideoTs;
   }
 
   private _getStoredBaseMediaDecodeTime(): number | undefined {
@@ -483,9 +488,9 @@ export default class Transmuxer {
     if (storedBaseMediaDecodeTime !== undefined) {
       return storedBaseMediaDecodeTime;
     }
-    if (this._pendingSegmentBaseMediaDecodeTime === null) {
-      return this._baseMediaDecodeTime;
+    if (this._pendingSegmentBaseMediaDecodeTimeSeed === null) {
+      return this._baseMediaDecodeTimeSeed;
     }
-    return this._pendingSegmentBaseMediaDecodeTime;
+    return this._pendingSegmentBaseMediaDecodeTimeSeed;
   }
 }

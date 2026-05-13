@@ -305,6 +305,12 @@ export default class Mp4VideoSegmentGenerator {
   public _getGopForFusion(nalUnit: ParsedNalUnit): any {
     const halfSecond = 45000; // Half-a-second in a 90khz clock
     const allowableOverlap = 10000; // About 3 frames @ 30fps
+    const baseMediaDecodeTime = calculateTrackBaseMediaDecodeTime(
+      this._trackInfo,
+      this._keepOriginalTimestamps,
+    );
+    const earliestAllowedDts =
+      this._trackInfo.minSegmentDts - baseMediaDecodeTime;
     let nearestDistance = Infinity;
     let nearestGopObj: any;
 
@@ -328,8 +334,8 @@ export default class Mp4VideoSegmentGenerator {
         return;
       }
 
-      // Reject Gops that would require a negative baseMediaDecodeTime
-      if (currentGop.dts < this._trackInfo.timelineStartInfo.dts) {
+      // Reject Gops that would require a negative baseMediaDecodeTime.
+      if (currentGop.dts < earliestAllowedDts) {
         return;
       }
 

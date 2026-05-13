@@ -934,7 +934,7 @@ export function appendBuffer(
         segment,
         {
           reset: segmentHints.resetTransmuxerState,
-          baseMediaDecodeTime: {
+          baseMediaDecodeTimeSeed: {
             value: dtsHint,
             timescale: segmentHints.baseDecodeTimeStartTimescale,
           },
@@ -1149,6 +1149,7 @@ function inspectProbeSegment(
   }
   const transmuxedCodecs = getIsoBmffCodecs(transmuxedSegment.data);
   if (transmuxedCodecs.length === 0) {
+    logger.error("Worker: transmuxed segment is null");
     return undefined;
   }
   const mediaType = inferMediaTypeFromCodecs(transmuxedCodecs);

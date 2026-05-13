@@ -81,6 +81,12 @@ export class Mp4AudioSegmentGenerator {
       earliestAllowedDts,
     );
 
+    if (frames.length === 0) {
+      this._aacFrames = [];
+      clearDtsInfo(this._trackInfo);
+      return null;
+    }
+
     this._trackInfo.baseMediaDecodeTime = calculateTrackBaseMediaDecodeTime(
       this._trackInfo,
       keepOriginalTimestamps,
