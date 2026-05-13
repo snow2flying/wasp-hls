@@ -196,6 +196,7 @@ async function buildDemoFull(root, { release }) {
 async function startStaticBuildServer(root) {
   const server = launchStaticServer(join(ROOT, "build"), {
     verbose: true,
+    noCache: command === "start",
     httpPort: 8000,
     httpsPort: 8443,
     certificatePath: join(root, "localhost.crt"),

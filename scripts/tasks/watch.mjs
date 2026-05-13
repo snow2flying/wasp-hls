@@ -124,22 +124,28 @@ function createTreeWatcher(root, configs) {
   const refreshTimers = new Map();
   const triggerTimers = new Map();
 
+  const watcherKey = (watchRoot, dir) => `${watchRoot}\n${dir}`;
+
   const refreshRoot = (watchRoot) => {
     const absoluteRoot = join(root, watchRoot);
     const nextDirectories = new Set(listDirectories(absoluteRoot));
 
-    for (const [dir, handle] of watchers) {
-      if (
-        (dir === absoluteRoot || dir.startsWith(`${absoluteRoot}/`)) &&
-        !nextDirectories.has(dir)
-      ) {
+    for (const [key, handle] of watchers) {
+      const separatorIndex = key.indexOf("\n");
+      const keyWatchRoot = key.slice(0, separatorIndex);
+      const dir = key.slice(separatorIndex + 1);
+      if (keyWatchRoot !== watchRoot) {
+        continue;
+      }
+      if (!nextDirectories.has(dir)) {
         handle.close();
-        watchers.delete(dir);
+        watchers.delete(key);
       }
     }
 
     for (const dir of nextDirectories) {
-      if (watchers.has(dir)) continue;
+      const key = watcherKey(watchRoot, dir);
+      if (watchers.has(key)) continue;
       const handle = watch(dir, (_eventType, filename) => {
         scheduleRefresh(watchRoot);
         if (filename == null) return;
@@ -153,7 +159,7 @@ function createTreeWatcher(root, configs) {
           }
         }
       });
-      watchers.set(dir, handle);
+      watchers.set(key, handle);
     }
   };
 

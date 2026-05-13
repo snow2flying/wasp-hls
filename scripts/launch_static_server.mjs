@@ -24,6 +24,7 @@ import getHumanReadableHours from "./utils/get_human_readable_hours.mjs";
  *   httpPort: number;
  *   httpsPort?: number;
  *   verbose?: boolean;
+ *   noCache?: boolean;
  *   certificatePath?: string;
  *   keyPath?: string;
  * }} LaunchStaticServerConfig
@@ -35,6 +36,8 @@ import getHumanReadableHours from "./utils/get_human_readable_hours.mjs";
  * HTTPS traffic. If not defined, the server won't listen for HTTPS traffic.
  * @property {boolean} [verbose] - If set to `true`, the server outputs when it
  * starts listening and when startup fails.
+ * @property {boolean} [noCache] - If set to `true`, disable browser caching
+ * for served assets through response headers.
  * @property {string} [certificatePath] - Path to the TLS certificate used for
  * HTTPS connections. If not defined, the server won't listen for HTTPS traffic.
  * @property {string} [keyPath] - Path to the private key used for HTTPS
@@ -73,6 +76,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   let keyFile;
   let httpPort;
   let httpsPort;
+  let noCache = false;
   for (let argOffset = 0; argOffset < args.length; argOffset++) {
     const currentArg = args[argOffset];
     switch (currentArg) {
@@ -189,6 +193,10 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
         }
         break;
 
+      case "--no-cache":
+        noCache = true;
+        break;
+
       case "--":
         argOffset = args.length;
         break;
@@ -223,6 +231,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     /** @type {LaunchStaticServerConfig} */
     const launchConfig = {
       verbose: true,
+      noCache,
       httpPort: httpPort ?? 8000,
       httpsPort: httpsPort ?? 8443,
     };
@@ -420,7 +429,14 @@ export default function launchStaticServer(path, config) {
       file.ext in MIME_TYPES
         ? MIME_TYPES[/** @type {MimeTypeExtension} */ (file.ext)]
         : MIME_TYPES.default;
-    response.writeHead(200, { "Content-Type": mimeType });
+    /** @type {Record<string, string>} */
+    const headers = { "Content-Type": mimeType };
+    if (config.noCache) {
+      headers["Cache-Control"] = "no-store";
+      headers.Pragma = "no-cache";
+      headers.Expires = "0";
+    }
+    response.writeHead(200, headers);
     file.stream.pipe(response);
   }
 }
@@ -468,6 +484,7 @@ Options:
   -s <NUMBER>, --https <NUMBER>    Configure the port listening for HTTPS connections.
                                    Also requires "-c" and "-k" options to be set.
                                    8443 by default.
+  --no-cache                       Disable browser caching for served assets.
   -c <PATH>, --certificate <PATH>  Only required for HTTPS connections.
                                    Path to the corresponding certificate file.
   -k <PATH>, --key <PATH>          Only required for HTTPS connections.
