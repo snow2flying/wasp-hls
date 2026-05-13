@@ -78,15 +78,20 @@ pub(super) fn is_stale_segment_request_context(
             .is_some_and(|playlist| !playlist.contains_sequence(*sequence_number)),
 
         PendingSegmentRequest::Probe {
+            requested_media_type,
             probe_segment:
                 ProbeSegmentMetadata {
                     context: ProbeSegmentContext::Media { sequence, .. },
                     ..
                 },
-        } => playlist_store
-            .as_ref()
-            .and_then(|pl_store| pl_store.direct_media_playlist())
-            .is_some_and(|(_, playlist)| !playlist.contains_sequence(*sequence)),
+        } => match requested_media_type {
+            Some(media_type) => playlist_store
+                .and_then(|pl_store| pl_store.curr_media_playlist(*media_type))
+                .is_some_and(|playlist| !playlist.contains_sequence(*sequence)),
+            None => playlist_store
+                .and_then(|pl_store| pl_store.direct_media_playlist())
+                .is_some_and(|(_, playlist)| !playlist.contains_sequence(*sequence)),
+        },
         _ => false,
     }
 }
@@ -107,9 +112,6 @@ pub(super) fn handle_playlist_store_error(err: PlaylistStoreError) {
             Some(MediaType::Video),
             &err.to_string(),
         ),
-        PlaylistStoreError::MissingSelectedStreamMetadata => {
-            jsSendOtherError(true, OtherErrorCode::Unknown, &err.to_string())
-        }
         PlaylistStoreError::UnsupportedStartupStream => {
             jsSendOtherError(true, OtherErrorCode::NoSupportedVariant, &err.to_string())
         }

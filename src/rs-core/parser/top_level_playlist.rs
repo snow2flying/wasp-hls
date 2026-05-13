@@ -22,14 +22,9 @@ pub(crate) struct DirectMediaPlaylist {
     url: Url,
     /// The `MediaPlaylist` itself
     playlist: MediaPlaylist,
-    /// Known metadata for the segments of that media playlist.
-    ///
-    /// Can rely on the loading of a "probe segment" in which case it is first set to
-    /// `None` and only set to an actual value when known.
-    media_info: Option<DirectMediaInfo>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct DirectMediaInfo {
     pub(crate) mime_type: String,
     pub(crate) media_type: crate::bindings::MediaType,
@@ -75,7 +70,6 @@ impl DirectMediaPlaylist {
             id: MediaPlaylistPermanentId::new(MediaPlaylistUrlLocation::Direct, 0),
             url,
             playlist,
-            media_info: None,
         })
     }
 
@@ -91,12 +85,16 @@ impl DirectMediaPlaylist {
         &self.playlist
     }
 
-    pub(crate) fn media_info(&self) -> Option<&DirectMediaInfo> {
-        self.media_info.as_ref()
+    pub(crate) fn playlist_mut(&mut self) -> &mut MediaPlaylist {
+        &mut self.playlist
     }
 
-    pub(crate) fn set_media_info(&mut self, media_info: DirectMediaInfo) {
-        self.media_info = Some(media_info);
+    pub(crate) fn external_media_info(&self) -> Option<&DirectMediaInfo> {
+        self.playlist.external_media_info()
+    }
+
+    pub(crate) fn set_external_media_info(&mut self, external_media_info: DirectMediaInfo) {
+        self.playlist.set_external_media_info(external_media_info);
     }
 
     pub(crate) fn media_playlist_url(&self, wanted_id: &MediaPlaylistPermanentId) -> Option<&Url> {

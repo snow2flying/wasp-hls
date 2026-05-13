@@ -1,6 +1,7 @@
 use super::super::segment_request_contexts::PendingSegmentRequest;
 use super::{utils, Dispatcher, PlayerReadyState, ReadyProbeSegment};
 use crate::media_element::SegmentPushMetadata;
+use crate::playlist_store::ProbeSegmentMetadata;
 use crate::{
     bindings::{
         formatters::{
@@ -14,7 +15,7 @@ use crate::{
         PlaylistType,
     },
     media_element::SourceBufferCreationError,
-    playlist_store::{ProbeSegmentContext, ProbeSegmentMetadata, StartupStatus},
+    playlist_store::{ProbeSegmentContext, StartupStatus},
     requester::{PlaylistFileType, RequestLaneTag},
     Logger,
 };
@@ -50,44 +51,7 @@ fn advance_awaiting_playlist_info_state(dispatcher: &mut Dispatcher) {
             }
         };
 
-    // Progress through the "startup steps" of the linked `PlaylistStore`, returning `true`
     let wanted_position = utils::get_initial_position(playlist_store, starting_position);
-    match playlist_store.startup_status(wanted_position) {
-        Ok(StartupStatus::Ready) => {}
-        Ok(StartupStatus::AwaitingSupportCheck) => return,
-        Ok(StartupStatus::NeedsProbe(probe_segment)) => {
-            if start_probe_segment_request(dispatcher, probe_segment) {
-                return;
-            } else {
-                jsSendSegmentParsingError(
-                    true,
-                    crate::bindings::SegmentParsingErrorCode::UnknownError,
-                    Some(MediaType::Video),
-                    "No probe segment was available to determine startup metadata",
-                );
-                dispatcher.stop_current_content();
-                return;
-            }
-        }
-        Err(err) => {
-            utils::handle_playlist_store_error(err);
-            dispatcher.stop_current_content();
-            return;
-        }
-    };
-
-    // Ensure there's at least one variant that is supported here
-    if playlist_store.playlist_kind() == PlaylistType::MultivariantPlaylist
-        && playlist_store.supported_variants().is_empty()
-    {
-        jsSendOtherError(
-            true,
-            crate::bindings::OtherErrorCode::NoSupportedVariant,
-            "Error while parsing MultivariantPlaylist: no compatible variant found.",
-        );
-        dispatcher.stop_current_content();
-        return;
-    }
 
     // Start fetching initial media playlists if needed
     for mt in [MediaType::Video, MediaType::Audio] {
@@ -155,10 +119,48 @@ fn advance_awaiting_playlist_info_state(dispatcher: &mut Dispatcher) {
     jsAnnounceVariantUpdate(curr_variant);
     jsAnnounceTrackUpdate(MediaType::Audio, curr_audio_track, is_selected);
 
-    if playlist_store.are_playlists_ready() {
-        dispatcher.ready_state = PlayerReadyState::AwaitingMediaSource { starting_position };
-        dispatcher.recheck_player_state();
+    if !playlist_store.are_playlists_ready() {
+        return;
     }
+
+    match playlist_store.startup_status(wanted_position) {
+        Ok(StartupStatus::Ready) => {}
+        Ok(StartupStatus::AwaitingSupportCheck) => return,
+        Ok(StartupStatus::NeedsProbes(probe_requests)) => {
+            if start_probe_segment_requests(dispatcher, probe_requests) {
+                return;
+            } else {
+                jsSendSegmentParsingError(
+                    true,
+                    crate::bindings::SegmentParsingErrorCode::UnknownError,
+                    Some(MediaType::Video),
+                    "No probe segment was available to determine startup metadata",
+                );
+                dispatcher.stop_current_content();
+                return;
+            }
+        }
+        Err(err) => {
+            utils::handle_playlist_store_error(err);
+            dispatcher.stop_current_content();
+            return;
+        }
+    };
+
+    if playlist_store.playlist_kind() == PlaylistType::MultivariantPlaylist
+        && playlist_store.supported_variants().is_empty()
+    {
+        jsSendOtherError(
+            true,
+            crate::bindings::OtherErrorCode::NoSupportedVariant,
+            "Error while parsing MultivariantPlaylist: no compatible variant found.",
+        );
+        dispatcher.stop_current_content();
+        return;
+    }
+
+    dispatcher.ready_state = PlayerReadyState::AwaitingMediaSource { starting_position };
+    dispatcher.recheck_player_state();
 }
 
 /// Try to progress `ready_state` when in the `AwaitingMediaSource` state
@@ -207,7 +209,7 @@ fn advance_awaiting_media_source_state(dispatcher: &mut Dispatcher) {
         return;
     }
     jsStartObservingPlayback();
-    consume_probe_segment(dispatcher);
+    consume_probe_segments(dispatcher);
 }
 
 /// Start a startup probe request if not already in progress.
@@ -219,26 +221,46 @@ fn advance_awaiting_media_source_state(dispatcher: &mut Dispatcher) {
 ///
 /// Returns `true` if the probe process has been started, or `false` if we
 /// cannot do that.
+fn start_probe_segment_requests(
+    dispatcher: &mut Dispatcher,
+    probe_requests: Vec<(ProbeSegmentMetadata, Option<MediaType>)>,
+) -> bool {
+    probe_requests
+        .into_iter()
+        .all(|probe_request| start_probe_segment_request(dispatcher, probe_request))
+}
+
 fn start_probe_segment_request(
     dispatcher: &mut Dispatcher,
-    probe_segment: ProbeSegmentMetadata,
+    probe_request: (ProbeSegmentMetadata, Option<MediaType>),
 ) -> bool {
-    if dispatcher.ready_probe_segment.is_some()
-        || dispatcher.segment_request_contexts.has(|a| a.is_probe())
+    let (probe_segment, requested_media_type) = probe_request;
+    if requested_media_type.is_some_and(|mt| dispatcher.ready_probe_segments.get(mt).is_some())
+        || dispatcher.segment_request_contexts.has(|context| {
+            matches!(
+                context,
+                PendingSegmentRequest::Probe {
+                    requested_media_type: context_media_type,
+                    ..
+                } if *context_media_type == requested_media_type
+            )
+        })
     {
-        return true; // probe already going on
+        return true;
     }
 
+    let lane_tag = requested_media_type
+        .map(RequestLaneTag::from_media_type)
+        .unwrap_or(RequestLaneTag::Probe);
     let req_id = dispatcher
         .segment_request_contexts
         .insert(PendingSegmentRequest::Probe {
-            // TODO: cloning here may be unnecessary if we're smart about it? Though
-            // it may be not worth it.
             probe_segment: probe_segment.clone(),
+            requested_media_type,
         });
     match &probe_segment.context {
         ProbeSegmentContext::Init { .. } => dispatcher.requester.request_segment_immediately(
-            RequestLaneTag::Probe,
+            lane_tag,
             &probe_segment.url,
             probe_segment.byte_range.as_ref(),
             None,
@@ -246,7 +268,7 @@ fn start_probe_segment_request(
         ),
         ProbeSegmentContext::Media { time_info, .. } => {
             dispatcher.requester.request_segment_immediately(
-                RequestLaneTag::Probe,
+                lane_tag,
                 &probe_segment.url,
                 probe_segment.byte_range.as_ref(),
                 Some(time_info.clone()),
@@ -277,58 +299,55 @@ fn init_source_buffer(
 ///
 /// As it is usable data and should anyway correspond to the initial segment to load, this
 /// method allows to both reset that state and to push it to the buffers.
-fn consume_probe_segment(dispatcher: &mut Dispatcher) {
-    let Some(ReadyProbeSegment { request, data }) = dispatcher.ready_probe_segment.take() else {
-        return; // No stored probe segment
-    };
-    let Some(media_type) = utils::has_playlist_store_media_type(dispatcher.playlist_store.as_ref())
-    else {
-        jsSendOtherError(
-            true,
-            OtherErrorCode::Unknown,
-            "No direct-media type could be resolved after probing",
-        );
-        dispatcher.stop_current_content();
-        return;
-    };
+fn consume_probe_segments(dispatcher: &mut Dispatcher) {
+    for media_type in [MediaType::Audio, MediaType::Video] {
+        let Some(ReadyProbeSegment {
+            request,
+            media_type,
+            data,
+        }) = dispatcher.ready_probe_segments.take(media_type)
+        else {
+            continue;
+        };
 
-    match request.context {
-        ProbeSegmentContext::Init { id } => {
-            dispatcher.on_init_segment_loaded(data, media_type, id);
-        }
-        ProbeSegmentContext::Media {
-            sequence,
-            discontinuity_sequence,
-            time_info,
-        } => {
-            let Some((segment_list, context)) = dispatcher
-                .playlist_store
-                .as_ref()
-                .and_then(|store| store.curr_media_playlist_segment_info(media_type))
-            else {
-                jsSendOtherError(
-                    true,
-                    OtherErrorCode::Unknown,
-                    "No direct-media context could be resolved after probing",
-                );
-                dispatcher.stop_current_content();
-                return;
-            };
-            let init_segment_id = segment_list
-                .media()
-                .iter()
-                .find(|seg| seg.sequence() == sequence)
-                .and_then(|seg| segment_list.init_for(seg))
-                .map(|init| init.id());
-            dispatcher.on_media_segment_loaded(SegmentPushMetadata {
-                data,
-                media_type,
-                time_info,
-                context,
-                init_segment_id,
-                sequence_number: sequence,
+        match request.context {
+            ProbeSegmentContext::Init { id } => {
+                dispatcher.on_init_segment_loaded(data, media_type, id);
+            }
+            ProbeSegmentContext::Media {
+                sequence,
                 discontinuity_sequence,
-            });
+                time_info,
+            } => {
+                let Some((segment_list, context)) = dispatcher
+                    .playlist_store
+                    .as_ref()
+                    .and_then(|store| store.curr_media_playlist_segment_info(media_type))
+                else {
+                    jsSendOtherError(
+                        true,
+                        OtherErrorCode::Unknown,
+                        "No media context could be resolved after probing",
+                    );
+                    dispatcher.stop_current_content();
+                    return;
+                };
+                let init_segment_id = segment_list
+                    .media()
+                    .iter()
+                    .find(|seg| seg.sequence() == sequence)
+                    .and_then(|seg| segment_list.init_for(seg))
+                    .map(|init| init.id());
+                dispatcher.on_media_segment_loaded(SegmentPushMetadata {
+                    data,
+                    media_type,
+                    time_info,
+                    context,
+                    init_segment_id,
+                    sequence_number: sequence,
+                    discontinuity_sequence,
+                });
+            }
         }
     }
 }

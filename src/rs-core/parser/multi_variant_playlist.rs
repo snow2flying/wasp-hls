@@ -420,6 +420,29 @@ impl MultivariantPlaylist {
         }
     }
 
+    pub(crate) fn media_playlist_mut(
+        &mut self,
+        wanted_id: &MediaPlaylistPermanentId,
+    ) -> Option<&mut MediaPlaylist> {
+        match wanted_id.location() {
+            MediaPlaylistUrlLocation::Variant => self
+                .variants
+                .iter_mut()
+                .find(|v| v.id() == wanted_id.id())
+                .and_then(|v| v.media_playlist_mut()),
+            MediaPlaylistUrlLocation::AudioTrack => self
+                .audio_tracks
+                .media_tag_mut(wanted_id.id())
+                .and_then(|m| m.media_playlist_mut()),
+            MediaPlaylistUrlLocation::OtherMedia => self
+                .other_media
+                .iter_mut()
+                .find(|m| m.id() == wanted_id.id())
+                .and_then(|m| m.media_playlist_mut()),
+            MediaPlaylistUrlLocation::Direct => None,
+        }
+    }
+
     pub(crate) fn update_media_playlist(
         &mut self,
         id: &MediaPlaylistPermanentId,

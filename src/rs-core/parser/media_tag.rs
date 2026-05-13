@@ -322,6 +322,10 @@ impl MediaTag {
         self.media_playlist.as_ref()
     }
 
+    pub(super) fn media_playlist_mut(&mut self) -> Option<&mut MediaPlaylist> {
+        self.media_playlist.as_mut()
+    }
+
     pub(crate) fn update(
         &mut self,
         playlist: impl BufRead,

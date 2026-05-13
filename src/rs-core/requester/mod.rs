@@ -23,7 +23,7 @@ pub(crate) enum RequestLaneTag {
 }
 
 impl RequestLaneTag {
-    fn from_media_type(media_type: MediaType) -> Self {
+    pub(crate) fn from_media_type(media_type: MediaType) -> Self {
         match media_type {
             MediaType::Audio => Self::Audio,
             MediaType::Video => Self::Video,

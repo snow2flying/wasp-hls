@@ -299,6 +299,10 @@ impl VariantStream {
         self.media_playlist.as_ref()
     }
 
+    pub(super) fn media_playlist_mut(&mut self) -> Option<&mut MediaPlaylist> {
+        self.media_playlist.as_mut()
+    }
+
     pub(super) fn update_media_playlist(
         &mut self,
         playlist: impl BufRead,

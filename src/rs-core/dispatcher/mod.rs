@@ -1,4 +1,5 @@
 use crate::{
+    bindings::MediaType,
     adaptive::AdaptiveQualitySelector,
     dispatcher::playlist_refresh_timers::PlaylistRefreshTimers,
     media_element::MediaElementReference,
@@ -66,9 +67,9 @@ pub struct Dispatcher {
     /// Allowing to retreive them once finished.
     segment_request_contexts: SegmentRequestContexts,
 
-    /// A startup probe segment that has already been fetched and inspected and now only waits for
+    /// Startup probe segments that have already been fetched and inspected and now only wait for
     /// the regular buffering pipeline to be ready before being pushed.
-    ready_probe_segment: Option<ReadyProbeSegment>,
+    ready_probe_segments: ReadyProbeSegments,
 }
 
 /// Identify the playback-related state the `Dispatcher` is in.
@@ -119,5 +120,47 @@ impl StartingPosition {
 #[derive(Debug)]
 struct ReadyProbeSegment {
     request: ProbeSegmentMetadata,
+    media_type: MediaType,
     data: event_listeners::JsMemoryBlob,
+}
+
+#[derive(Default)]
+struct ReadyProbeSegments {
+    audio: Option<ReadyProbeSegment>,
+    video: Option<ReadyProbeSegment>,
+}
+
+impl ReadyProbeSegments {
+    fn get(&self, media_type: MediaType) -> Option<&ReadyProbeSegment> {
+        match media_type {
+            MediaType::Audio => self.audio.as_ref(),
+            MediaType::Video => self.video.as_ref(),
+        }
+    }
+
+    fn insert(&mut self, probe: ReadyProbeSegment) {
+        match probe.media_type {
+            MediaType::Audio => self.audio = Some(probe),
+            MediaType::Video => self.video = Some(probe),
+        }
+    }
+
+    fn take(&mut self, media_type: MediaType) -> Option<ReadyProbeSegment> {
+        match media_type {
+            MediaType::Audio => self.audio.take(),
+            MediaType::Video => self.video.take(),
+        }
+    }
+
+    fn clear_media_type(&mut self, media_type: MediaType) {
+        match media_type {
+            MediaType::Audio => self.audio = None,
+            MediaType::Video => self.video = None,
+        }
+    }
+
+    fn clear(&mut self) {
+        self.audio = None;
+        self.video = None;
+    }
 }
