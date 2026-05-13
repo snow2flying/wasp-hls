@@ -770,6 +770,8 @@ impl SegmentInventory {
         }
     }
 
+    // TODO: Naming make it look a little out of place, though determining where a future segment
+    // might be could be part of the role of the `SegmentInventory`. To ponder about...
     pub(super) fn infer_probable_base_dts(
         &self,
         playlist_start: f64,
