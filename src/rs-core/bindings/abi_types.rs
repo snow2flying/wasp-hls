@@ -443,22 +443,22 @@ impl TimerReason {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LogLevel {
     /// Log level reserved for very important errors and highly unexpected events.
-    Error = 0,
+    Error = 1,
     /// Log level reserved for less important errors and unexpected events.
-    Warn = 1,
+    Warn = 2,
     /// Log level reserved for important events
-    Info = 2,
+    Info = 3,
     /// Log level used when debugging. Small-ish yet impactful events should be logged with it.
-    Debug = 3,
+    Debug = 4,
 }
 
 impl LogLevel {
     pub fn from_raw(value: u32) -> Self {
         match value {
-            0 => Self::Error,
-            1 => Self::Warn,
-            2 => Self::Info,
-            3 => Self::Debug,
+            1 => Self::Error,
+            2 => Self::Warn,
+            3 => Self::Info,
+            4 => Self::Debug,
             _ => Self::Error,
         }
     }

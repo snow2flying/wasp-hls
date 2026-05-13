@@ -436,23 +436,23 @@
       "doc": ["Levels with which a log can be emitted."],
       "members": {
         "Error": {
-          "value": 0,
+          "value": 1,
           "doc": [
             "Log level reserved for very important errors and highly unexpected events."
           ]
         },
         "Warn": {
-          "value": 1,
+          "value": 2,
           "doc": [
             "Log level reserved for less important errors and unexpected events."
           ]
         },
         "Info": {
-          "value": 2,
+          "value": 3,
           "doc": ["Log level reserved for important events"]
         },
         "Debug": {
-          "value": 3,
+          "value": 4,
           "doc": [
             "Log level used when debugging. Small-ish yet impactful events should be logged with it."
           ]

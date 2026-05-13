@@ -369,19 +369,19 @@ export const LogLevel = Object.freeze({
   /**
    * Log level reserved for very important errors and highly unexpected events.
    */
-  Error: 0,
+  Error: 1,
   /**
    * Log level reserved for less important errors and unexpected events.
    */
-  Warn: 1,
+  Warn: 2,
   /**
    * Log level reserved for important events
    */
-  Info: 2,
+  Info: 3,
   /**
    * Log level used when debugging. Small-ish yet impactful events should be logged with it.
    */
-  Debug: 3,
+  Debug: 4,
 } as const);
 export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
 
