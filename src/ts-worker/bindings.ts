@@ -926,15 +926,16 @@ export function appendBuffer(
   const sourceBufferObj = mediaSourceObj.sourceBuffers[sourceBufferObjIdx];
   if (sourceBufferObj.transmuxer !== null) {
     try {
+      const dtsHint = combineSafeTimeValue(
+        segmentHints.baseDecodeTimeStartHi,
+        segmentHints.baseDecodeTimeStartLo,
+      );
       const transmuxedData = sourceBufferObj.transmuxer.transmuxSegment(
         segment,
         {
           reset: segmentHints.resetTransmuxerState,
           baseMediaDecodeTime: {
-            value: combineSafeTimeValue(
-              segmentHints.baseDecodeTimeStartHi,
-              segmentHints.baseDecodeTimeStartLo,
-            ),
+            value: dtsHint,
             timescale: segmentHints.baseDecodeTimeStartTimescale,
           },
         },
@@ -942,11 +943,29 @@ export function appendBuffer(
       if (transmuxedData !== null) {
         segment = transmuxedData.data;
         if (transmuxedData.timingInfo !== undefined) {
+          if (logger.hasLevel(LogLevel.Debug)) {
+            const startString = (
+              transmuxedData.timingInfo.start /
+              transmuxedData.timingInfo.timescale
+            ).toFixed(3);
+            const endString = (
+              transmuxedData.timingInfo.end /
+              transmuxedData.timingInfo.timescale
+            ).toFixed(3);
+            const hint = (
+              dtsHint / segmentHints.baseDecodeTimeStartTimescale
+            ).toFixed(3);
+            logger.debug(
+              `Worker: transmuxed segment with start=${startString} end=${endString} hinted=${hint}`,
+            );
+          }
           segmentPreciseTiming = {
             start: splitTimeValue(transmuxedData.timingInfo.start),
             end: splitTimeValue(transmuxedData.timingInfo.end),
             timescale: transmuxedData.timingInfo.timescale,
           };
+        } else {
+          logger.warn("Worker: transmuxed segment with no timing info");
         }
       } else {
         return AppendBufferResult.error(
@@ -966,9 +985,9 @@ export function appendBuffer(
     }
   }
 
-  // TODO Check if mp4 first (and if init segment)?
   const initTrackInfoByTrackId = getInitTrackInfo(segment);
   if (initTrackInfoByTrackId !== undefined) {
+    // TODO: In transmuxing step when possible?
     sourceBufferObj.lastInitTrackInfoByTrackId = initTrackInfoByTrackId;
   }
 
