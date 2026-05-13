@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use crate::bindings::{
     jsAddSourceBuffer, jsAppendBuffer, jsFlush, jsRemoveBuffer, AddSourceBufferErrorCode,
     MediaType, ParsedSegmentInfo, ResourceId, SegmentParsingErrorCode, SourceBufferId,
+    TimescaledTimestamp,
 };
 use crate::dispatcher::JsMemoryBlob;
 use crate::parser::SegmentTimeInfo;
@@ -43,6 +44,33 @@ pub(super) struct SourceBuffer {
     /// buffer, so special considerations, such as calling the `jsFlush` function might need to be
     /// taken on buffer updates.
     needs_reflush: bool,
+
+    /// Set when the next media append must force a transmuxer reset regardless of its sequence
+    /// identity, such as after an explicit buffer flush.
+    reset_transmuxer_on_next_segment: bool,
+
+    // See `LastSegmentContinuityInfo`
+    last_pushed_segment_info: Option<LastSegmentContinuityInfo>,
+}
+
+/// To better handle dts continuity shenanigans unique to mpeg-ts segment, we maintain a complex
+/// state linked to the last segment pushed in this buffer
+struct LastSegmentContinuityInfo {
+    /// End timing anchor of the last media segment known to have been appended successfully.
+    ///
+    /// When available, this exact timescaled value is used as the continuity anchor for the next
+    /// transmuxed append.
+    end_dts: Option<TimescaledTimestamp>,
+
+    /// That segment's sequence_number. This makes detection of non-contiguous segment extremely
+    /// easy
+    sequence_number: u32,
+
+    /// Identity of the media timeline the last appended media segment belonged to.
+    ///
+    /// This allows the SourceBuffer to transparently determine whether the next append can reuse
+    /// the lower-level transmuxer state or should start a new sequence.
+    media_sequence_identity: MediaSequenceIdentity,
 }
 
 impl SourceBuffer {
@@ -67,6 +95,8 @@ impl SourceBuffer {
                 needs_reflush: false,
                 last_segment_pushed: false,
                 media_type,
+                reset_transmuxer_on_next_segment: false,
+                last_pushed_segment_info: None,
             }),
             Err(err) => Err(AddSourceBufferError::from_js_add_source_buffer_error(
                 err, &typ,
@@ -106,13 +136,15 @@ impl SourceBuffer {
         segment_data: JsMemoryBlob,
     ) -> Result<AppendBufferResponse, PushSegmentError> {
         self.was_used = true;
+        self.last_pushed_segment_info = None;
+        self.reset_transmuxer_on_next_segment = true;
         self.queue
             .push_back(SourceBufferQueueElement::PushInit(segment_data.id()));
         Logger::debug(&format!(
             "Buffer {} ({}): Pushing initialization segment",
             self.id, self.typ
         ));
-        match jsAppendBuffer(self.id, segment_data.id(), false) {
+        match jsAppendBuffer(self.id, segment_data.id(), &SegmentHints::new(0, 1, true)) {
             Err(err) => Err(PushSegmentError::from_js_append_buffer_error(
                 self.media_type,
                 err,
@@ -129,30 +161,71 @@ impl SourceBuffer {
     /// # Arguments
     ///
     /// * `data` - Actual data AND metadata on the segment you want to push. See
-    ///   `MediaSegmentPushData` documentation for more information.
+    ///   `PreparedPushData` documentation for more information.
     ///
     /// * `parse_time_info` - If set to `true`, the segment's data will be read before pushing it
     ///   to try recuperate its timing information. If it has been parsed with success, it will
     ///   be contained in the `AppendBufferResponse` returned by this method.
     pub(super) fn push_media_segment(
         &mut self,
-        data: MediaSegmentPushData,
-        parse_time_info: bool,
+        data: PreparedPushData,
     ) -> Result<AppendBufferResponse, PushSegmentError> {
         self.last_segment_pushed = false;
         self.was_used = true;
+        let sequence_number = data.sequence_number;
         let segment_data = data.segment_data.id();
+        let segment_time_info = data.time_info.clone();
+        let media_sequence_identity = data.media_sequence_identity;
+        let should_reset_transmuxer = should_reset_transmuxer(
+            self.last_pushed_segment_info
+                .as_ref()
+                .map(|x| x.media_sequence_identity),
+            media_sequence_identity,
+            self.reset_transmuxer_on_next_segment,
+        );
+
+        // Only use the previous segment if the new is contiguous with it
+        let prev_segment_dts = self
+            .last_pushed_segment_info
+            .as_ref()
+            .filter(|info| info.sequence_number + 1 == sequence_number)
+            .and_then(|info| info.end_dts);
+
+        let segment_hints = build_segment_hints(
+            &segment_time_info,
+            prev_segment_dts,
+            data.base_dts_hint,
+            should_reset_transmuxer,
+        );
+        self.reset_transmuxer_on_next_segment = false;
+
         let id = data.id;
+        Logger::debug(&format!(
+            "Buffer {} ({}): Pushing seq {}",
+            self.id, self.typ, data.sequence_number
+        ));
         self.queue
-            .push_back(SourceBufferQueueElement::PushMedia((data, id)));
-        Logger::debug(&format!("Buffer {} ({}): Pushing", self.id, self.typ));
-        match jsAppendBuffer(self.id, segment_data, parse_time_info) {
-            Err(err) => Err(PushSegmentError::from_js_append_buffer_error(
-                self.media_type,
-                err,
-            )),
-            Ok(x) => Ok(AppendBufferResponse { parsed: x }),
-        }
+            .push_back(SourceBufferQueueElement::PushMedia { data, id });
+        let parsed = match jsAppendBuffer(self.id, segment_data, &segment_hints) {
+            Err(err) => {
+                return Err(PushSegmentError::from_js_append_buffer_error(
+                    self.media_type,
+                    err,
+                ));
+            }
+            Ok(parsed) => parsed,
+        };
+
+        // Use the parsed segment end as a good basis for the next decode time
+        self.last_pushed_segment_info = Some(LastSegmentContinuityInfo {
+            sequence_number,
+            end_dts: parsed.as_ref().and_then(|x| {
+                x.end()
+                    .map(|value| TimescaledTimestamp::new(value, x.timescale()))
+            }),
+            media_sequence_identity,
+        });
+        Ok(AppendBufferResponse { parsed })
     }
 
     /// Remove media data from this `SourceBuffer`, based on a `start` and `end` time in seconds.
@@ -181,6 +254,8 @@ impl SourceBuffer {
     /// the current position. As such a seek will have to be performed once the remove is done
     pub(super) fn flush_buffer(&mut self) {
         self.was_used = true;
+        self.last_pushed_segment_info = None;
+        self.reset_transmuxer_on_next_segment = true;
         self.queue.push_back(SourceBufferQueueElement::Emptying);
         Logger::debug(&format!("Buffer {} ({}): emptying", self.id, self.typ));
         let _ = jsRemoveBuffer(self.id, 0., f64::INFINITY);
@@ -245,53 +320,61 @@ impl SourceBuffer {
 }
 
 /// Structure describing a media segment that should be pushed to the SourceBuffer.
-pub(crate) struct MediaSegmentPushData {
+pub(crate) struct PreparedPushData {
     /// Identifier used to identify the pushed segment in question.
     ///
     /// It can be useful for example to easily detect which segment has succesfully been pushed or
     /// caused an issue.
-    id: u64,
+    pub(super) id: u64,
 
     /// Raw data of the segment to push.
-    segment_data: JsMemoryBlob,
+    pub(super) segment_data: JsMemoryBlob,
 
-    /// Time information, as a tuple of its start time and end time in seconds as deduced from the
-    /// media playlist.
-    time_info: SegmentTimeInfo,
+    /// Time information for that segment as sourced from the media playlist.
+    pub(super) time_info: SegmentTimeInfo,
+
+    /// Media sequence number associated with this segment. Used to detect contiguous/non-contiguous
+    /// segments.
+    pub(super) sequence_number: u32,
+
+    /// Discontinuity sequence (from the HLS playlist) associated with this segment.
+    /// Used to detect contiguous/non-contiguous segments or state reset from previous segment.
+    pub(super) discontinuity_sequence: u32,
+
+    /// Optional precise timing anchor to align this append against an already buffered segment.
+    pub(super) base_dts_hint: Option<TimescaledTimestamp>,
+
+    /// Identity of the media sequence this append belongs to.
+    pub(super) media_sequence_identity: MediaSequenceIdentity,
 }
 
-impl MediaSegmentPushData {
-    /// Creates a new `SegmentPushData` object linked to the given data and time information.
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - Identifier for the `MediaSegmentPushData`
-    ///
-    /// * `segment_data` - The segment's actual data.
-    ///
-    /// * `time_info` - The playlist-originated time information on that segment.
-    pub(super) fn new(id: u64, segment_data: JsMemoryBlob, time_info: SegmentTimeInfo) -> Self {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct MediaSequenceIdentity {
+    media_playlist_id: u32,
+    discontinuity_sequence: u32,
+    init_segment_id: Option<u64>,
+}
+
+impl MediaSequenceIdentity {
+    pub(crate) fn new(
+        media_playlist_id: u32,
+        discontinuity_sequence: u32,
+        init_segment_id: Option<f64>,
+    ) -> Self {
         Self {
-            id,
-            segment_data,
-            time_info,
+            media_playlist_id,
+            discontinuity_sequence,
+            init_segment_id: init_segment_id.map(f64::to_bits),
         }
     }
+}
 
-    /// Get time information linked to this segment as a reference to its `SegmentTimeInfo` object.
-    pub(crate) fn time_info(&self) -> &SegmentTimeInfo {
-        &self.time_info
-    }
-
-    /// Returns start, in seconds, at which the segment starts.
-    pub(crate) fn start(&self) -> f64 {
-        self.time_info.start()
-    }
-
-    /// Returns end, in seconds, at which the segment ends.
-    pub(crate) fn end(&self) -> f64 {
-        self.time_info.end()
-    }
+fn should_reset_transmuxer(
+    previous_identity: Option<MediaSequenceIdentity>,
+    next_identity: MediaSequenceIdentity,
+    forced_reset: bool,
+) -> bool {
+    forced_reset || previous_identity != Some(next_identity)
 }
 
 /// Represents a successful response from the `append_buffer` SourceBuffer's method.
@@ -301,22 +384,39 @@ pub(crate) struct AppendBufferResponse {
 }
 
 impl AppendBufferResponse {
+    pub(crate) fn precise_start(&self) -> Option<TimescaledTimestamp> {
+        self.parsed.as_ref().and_then(|p| {
+            p.start()
+                .map(|x| TimescaledTimestamp::new(x, p.timescale()))
+        })
+    }
+
+    pub(crate) fn precise_end(&self) -> Option<TimescaledTimestamp> {
+        self.parsed
+            .as_ref()
+            .and_then(|p| p.end().map(|x| TimescaledTimestamp::new(x, p.timescale())))
+    }
+
     /// Returns the optionally parsed start time, in seconds, found when parsing the segment's
     /// internals.
     ///
     /// If set it is generally closer to the real segment's start time, once pushed to the browser,
     /// than what the Media Playlist told us.
     pub(crate) fn media_start(&self) -> Option<f64> {
-        self.parsed.as_ref().and_then(|p| p.start)
+        self.parsed
+            .as_ref()
+            .and_then(|p| p.start().map(|x| x as f64 / p.timescale() as f64))
     }
 
-    /// Returns the optionally parsed duration, in seconds, found when parsing the segment's
+    /// Returns the optionally parsed end, in seconds, found when parsing the segment's
     /// internals.
     ///
-    /// If set it is generally closer to the real segment's duration, once pushed to the browser,
+    /// If set it is generally closer to the real segment's end, once pushed to the browser,
     /// than what the Media Playlist told us.
-    pub(crate) fn media_duration(&self) -> Option<f64> {
-        self.parsed.as_ref().and_then(|p| p.duration)
+    pub(crate) fn media_end(&self) -> Option<f64> {
+        self.parsed
+            .as_ref()
+            .and_then(|p| p.end().map(|x| x as f64 / p.timescale() as f64))
     }
 }
 
@@ -326,9 +426,9 @@ pub(crate) enum SourceBufferQueueElement {
     PushInit(ResourceId),
 
     /// A new chunk of media data needs to be pushed.
-    /// The `u64` is the corresponding `id` of the given `MediaSegmentPushData` when the
+    /// The `u64` is the corresponding `id` of the given `PreparedPushData` when the
     /// `push_media_segment` method was called.
-    PushMedia((MediaSegmentPushData, u64)),
+    PushMedia { data: PreparedPushData, id: u64 },
 
     /// Some already-buffered needs to be removed, `start` and `end` giving the
     /// time range of the data to remove, in seconds.
@@ -475,4 +575,126 @@ impl PushSegmentError {
 pub(crate) enum RemoveDataError {
     #[error("No SourceBuffer created for {0}")]
     NoSourceBuffer(MediaType),
+}
+
+/// Context about the continuity context of a pushed segment with a previously-pushed one.
+#[derive(Clone, Debug)]
+pub(crate) struct SegmentHints {
+    /// Exact DTS anchor to use when computing the next base decode time.
+    base_decode_time_start: u64,
+    /// Timescale associated to `base_decode_time_start`.
+    base_decode_time_start_timescale: u32,
+    /// Whether transmuxer state should be discarded before processing this segment.
+    ///
+    /// This is intended for hard discontinuities such as rendition switches,
+    /// codec/config changes, explicit discontinuity tags, or parser invalidation.
+    ///
+    /// This does NOT indicate whether the segment is timestamp-contiguous with
+    /// the previous one. Timestamp continuity is determined solely through
+    /// `base_decode_time_start`.
+    reset_transmuxer_state: bool,
+}
+
+impl SegmentHints {
+    /// Create a new `SegmentHints`
+    pub(crate) fn new(
+        base_decode_time_start: u64,
+        base_decode_time_start_timescale: u32,
+        reset_transmuxer_state: bool,
+    ) -> Self {
+        Self {
+            base_decode_time_start,
+            base_decode_time_start_timescale,
+            reset_transmuxer_state,
+        }
+    }
+
+    pub(crate) fn base_decode_time_start(&self) -> u64 {
+        self.base_decode_time_start
+    }
+
+    pub(crate) fn base_decode_time_start_timescale(&self) -> u32 {
+        self.base_decode_time_start_timescale
+    }
+
+    pub(crate) fn reset_transmuxer_state(&self) -> bool {
+        self.reset_transmuxer_state
+    }
+}
+
+fn build_segment_hints(
+    segment_time_info: &SegmentTimeInfo,
+    prev_segment_end: Option<TimescaledTimestamp>,
+    base_dts_hint: Option<TimescaledTimestamp>,
+    reset_transmuxer: bool,
+) -> SegmentHints {
+    const TIMESCALE: u32 = 90_000;
+
+    let playlist_start = (segment_time_info.start() * TIMESCALE as f64).round() as u64;
+
+    let (start_dts, start_dts_timescale) = if reset_transmuxer {
+        if let Some(base_dts_hint) = base_dts_hint {
+            Logger::debug("Buffer: using base dts hint");
+            (base_dts_hint.value(), base_dts_hint.timescale())
+        } else {
+            Logger::debug("Buffer: determine dts hint from playlist time");
+            (playlist_start, TIMESCALE)
+        }
+    } else {
+        // just assume continuity
+        match prev_segment_end {
+            Some(last_end) => {
+                Logger::debug("Buffer: determine dts hint as last segment end dts");
+                (last_end.value(), last_end.timescale())
+            }
+            None => {
+                if let Some(base_dts_hint) = base_dts_hint {
+                    Logger::debug("Buffer: using base dts hint");
+                    (base_dts_hint.value(), base_dts_hint.timescale())
+                } else {
+                    Logger::debug("Buffer: determine dts hint from playlist time");
+                    (playlist_start, TIMESCALE)
+                }
+            }
+        }
+    };
+    SegmentHints::new(start_dts, start_dts_timescale, reset_transmuxer)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{should_reset_transmuxer, MediaSequenceIdentity};
+
+    #[test]
+    fn transmuxer_reset_is_forced_when_requested() {
+        let identity = MediaSequenceIdentity::new(1, 2, Some(3.0));
+        assert!(should_reset_transmuxer(Some(identity), identity, true));
+    }
+
+    #[test]
+    fn transmuxer_reset_is_not_needed_for_same_sequence_identity() {
+        let identity = MediaSequenceIdentity::new(1, 2, Some(3.0));
+        assert!(!should_reset_transmuxer(Some(identity), identity, false));
+    }
+
+    #[test]
+    fn transmuxer_reset_happens_when_media_playlist_changes() {
+        let previous = MediaSequenceIdentity::new(1, 2, Some(3.0));
+        let next = MediaSequenceIdentity::new(2, 2, Some(3.0));
+        assert!(should_reset_transmuxer(Some(previous), next, false));
+    }
+
+    #[test]
+    fn transmuxer_reset_happens_when_discontinuity_changes() {
+        let previous = MediaSequenceIdentity::new(1, 2, Some(3.0));
+        let next = MediaSequenceIdentity::new(1, 3, Some(3.0));
+        assert!(should_reset_transmuxer(Some(previous), next, false));
+    }
+
+    #[test]
+    fn transmuxer_reset_happens_when_init_segment_changes() {
+        let previous = MediaSequenceIdentity::new(1, 2, Some(3.0));
+        let next = MediaSequenceIdentity::new(1, 2, Some(4.0));
+        assert!(should_reset_transmuxer(Some(previous), next, false));
+    }
 }

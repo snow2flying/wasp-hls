@@ -19,6 +19,7 @@ export interface FrameData {
   data: Uint8Array;
   dts: number;
   pts: number;
+  sampleCount?: number;
 }
 
 /**

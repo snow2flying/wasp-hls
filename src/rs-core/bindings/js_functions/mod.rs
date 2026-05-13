@@ -8,7 +8,7 @@ use super::{
     SegmentParsingErrorCode, SourceBufferCreationErrorCode, TimerReason,
 };
 use crate::{
-    media_element::PushSegmentError,
+    media_element::{PushSegmentError, SegmentHints},
     parser::{
         MediaPlaylistParsingError, MediaPlaylistUpdateError, MultivariantPlaylistParsingError,
     },
@@ -20,180 +20,15 @@ use std::{fmt, slice};
 // This file lists all JavaScript functions that are callable from Rust as well as
 // struct and enumeration used by those functions.
 
-#[link(wasm_import_module = "wasp")]
-unsafe extern "C" {
-    fn __js_func__log(log_level: u32, ptr: *const u8, len: u32);
-    fn __js_func__timer(duration: f64, reason: u32) -> TimerId;
-    fn __js_func__clear_timer(id: TimerId);
-    fn __js_func__get_resource_len(id: ResourceId) -> i32;
-    fn __js_func__copy_resource_data(id: ResourceId, dest_ptr: *mut u8, dest_len: u32) -> u32;
-    fn __js_func__fetch(
-        url_ptr: *const u8,
-        url_len: u32,
-        has_range_base: u32,
-        range_base: usize,
-        has_range_end: u32,
-        range_end: usize,
-        timeout: f64,
-    ) -> RequestId;
-    fn __js_func__abort_request(request_id: RequestId) -> u32;
-    fn __js_func__attach_media_source(
-        err_code_out: *mut u32,
-        err_desc_ptr_out: *mut u32,
-        err_desc_len_out: *mut u32,
-    ) -> u32;
-    fn __js_func__remove_media_source(
-        err_code_out: *mut u32,
-        err_desc_ptr_out: *mut u32,
-        err_desc_len_out: *mut u32,
-    ) -> u32;
-    fn __js_func__set_media_source_duration(
-        duration: f64,
-        err_code_out: *mut u32,
-        err_desc_ptr_out: *mut u32,
-        err_desc_len_out: *mut u32,
-    ) -> u32;
-    fn __js_func__add_source_buffer(
-        media_type: u32,
-        typ_ptr: *const u8,
-        typ_len: u32,
-        source_buffer_id_out: *mut u32,
-        err_code_out: *mut u32,
-        err_desc_ptr_out: *mut u32,
-        err_desc_len_out: *mut u32,
-    ) -> u32;
-    fn __js_func__is_type_supported(media_type: u32, typ_ptr: *const u8, typ_len: u32) -> i32;
-    fn __js_func__inspect_segment(
-        segment_id: ResourceId,
-        media_type_out: *mut u32,
-        parsed_mime_type_ptr_out: *mut u32,
-        parsed_mime_type_len_out: *mut u32,
-        codec_ptr_out: *mut u32,
-        codec_len_out: *mut u32,
-        err_code_out: *mut u32,
-        err_desc_ptr_out: *mut u32,
-        err_desc_len_out: *mut u32,
-    ) -> u32;
-    fn __js_func__append_buffer(
-        source_buffer_id: SourceBufferId,
-        segment_id: ResourceId,
-        parse_time_information: u32,
-        has_start_out: *mut u32,
-        start_out: *mut f64,
-        has_duration_out: *mut u32,
-        duration_out: *mut f64,
-        err_code_out: *mut u32,
-        err_desc_ptr_out: *mut u32,
-        err_desc_len_out: *mut u32,
-    ) -> u32;
-    fn __js_func__remove_buffer(
-        source_buffer_id: SourceBufferId,
-        start: f64,
-        end: f64,
-        err_code_out: *mut u32,
-        err_desc_ptr_out: *mut u32,
-        err_desc_len_out: *mut u32,
-    ) -> u32;
-    fn __js_func__end_of_stream(
-        err_code_out: *mut u32,
-        err_desc_ptr_out: *mut u32,
-        err_desc_len_out: *mut u32,
-    ) -> u32;
-    fn __js_func__start_observing_playback();
-    fn __js_func__stop_observing_playback();
-    fn __js_func__free_resource(resource_id: ResourceId) -> u32;
-    fn __js_func__set_playback_rate(playback_rate: f64);
-    fn __js_func__seek(position: f64);
-    fn __js_func__flush();
-    fn __js_func__set_media_offset(media_offset: f64);
-    fn __js_func__update_content_info(
-        has_minimum_position: u32,
-        minimum_position: f64,
-        has_maximum_position: u32,
-        maximum_position: f64,
-        playlist_nat: u32,
-    );
-    fn __js_func__announce_fetched_content(
-        playlist_type: u32,
-        variant_info_ptr: *const u32,
-        variant_info_len: u32,
-        audio_tracks_info_ptr: *const u32,
-        audio_tracks_info_len: u32,
-    );
-    fn __js_func__announce_variant_update(variant_id: u32);
-    fn __js_func__announce_track_update(media_type: u32, track_id: u32, is_selected: u32);
-    fn __js_func__announce_variant_lock_status_change(variant_id: u32);
-    fn __js_func__start_rebuffering();
-    fn __js_func__stop_rebuffering();
-    fn __js_func__get_random() -> f64;
-    fn __js_func__send_segment_request_error(
-        fatal: u32,
-        url_ptr: *const u8,
-        url_len: u32,
-        is_init: u32,
-        media_type: u32,
-        start_ptr: *const f64,
-        duration_ptr: *const f64,
-        reason: u32,
-        status: u32,
-    );
-    fn __js_func__send_multivariant_playlist_request_error(
-        fatal: u32,
-        url_ptr: *const u8,
-        url_len: u32,
-        reason: u32,
-        status: u32,
-    );
-    fn __js_func__send_media_playlist_request_error(
-        fatal: u32,
-        url_ptr: *const u8,
-        url_len: u32,
-        reason: u32,
-        media_type: u32,
-        status: u32,
-    );
-    fn __js_func__send_source_buffer_creation_error(
-        fatal: u32,
-        code: u32,
-        media_type: u32,
-        message_ptr: *const u8,
-        message_len: u32,
-    );
-    fn __js_func__send_multivariant_playlist_parsing_error(
-        fatal: u32,
-        code: u32,
-        message_ptr: *const u8,
-        message_len: u32,
-    );
-    fn __js_func__send_media_playlist_parsing_error(
-        fatal: u32,
-        code: u32,
-        media_type: u32,
-        message_ptr: *const u8,
-        message_len: u32,
-    );
-    fn __js_func__send_segment_parsing_error(
-        fatal: u32,
-        code: u32,
-        media_type: u32,
-        message_ptr: *const u8,
-        message_len: u32,
-    );
-    fn __js_func__send_pushed_segment_error(
-        fatal: u32,
-        code: u32,
-        media_type: u32,
-        message_ptr: *const u8,
-        message_len: u32,
-    );
-    fn __js_func__send_remove_buffer_error(
-        fatal: u32,
-        media_type: u32,
-        message_ptr: *const u8,
-        message_len: u32,
-    );
-    fn __js_func__send_other_error(fatal: u32, code: u32, message_ptr: *const u8, message_len: u32);
-}
+#[cfg(not(target_arch = "wasm32"))]
+mod raw_host;
+#[cfg(target_arch = "wasm32")]
+mod raw_wasm;
+
+#[cfg(not(target_arch = "wasm32"))]
+use raw_host::*;
+#[cfg(target_arch = "wasm32")]
+use raw_wasm::*;
 
 fn bool_to_raw(value: bool) -> u32 {
     if value {
@@ -519,22 +354,34 @@ pub fn jsInspectSegment(
 pub fn jsAppendBuffer(
     source_buffer_id: SourceBufferId,
     segment_id: ResourceId,
-    parse_time_information: bool,
+    segment_hints: &SegmentHints,
 ) -> Result<Option<ParsedSegmentInfo>, (SegmentParsingErrorCode, Option<String>)> {
     let mut has_start = 0;
-    let mut start = 0.0;
-    let mut has_duration = 0;
-    let mut duration = 0.0;
+    let mut start_value_hi = 0;
+    let mut start_value_lo = 0;
+
+    let mut has_end = 0;
+    let mut end_value_hi = 0;
+    let mut end_value_lo = 0;
+
+    let mut timescale = 1;
+
     let mut out = JsErrorOut::default();
     let success = unsafe {
         __js_func__append_buffer(
             source_buffer_id,
             segment_id,
-            bool_to_raw(parse_time_information),
+            (segment_hints.base_decode_time_start() >> 32) as u32,
+            segment_hints.base_decode_time_start() as u32,
+            segment_hints.base_decode_time_start_timescale(),
+            segment_hints.reset_transmuxer_state() as u32,
             &mut has_start,
-            &mut start,
-            &mut has_duration,
-            &mut duration,
+            &mut start_value_hi,
+            &mut start_value_lo,
+            &mut has_end,
+            &mut end_value_hi,
+            &mut end_value_lo,
+            &mut timescale,
             &mut out.code,
             &mut out.desc_ptr,
             &mut out.desc_len,
@@ -543,18 +390,19 @@ pub fn jsAppendBuffer(
     if success == 0 {
         return Err(take_js_error_out(out, SegmentParsingErrorCode::from_raw));
     }
-    if parse_time_information {
-        Ok(Some(ParsedSegmentInfo {
-            start: if has_start != 0 { Some(start) } else { None },
-            duration: if has_duration != 0 {
-                Some(duration)
-            } else {
-                None
-            },
-        }))
-    } else {
-        Ok(None)
-    }
+    Ok(Some(ParsedSegmentInfo {
+        start: if has_start != 0 {
+            Some(((start_value_hi as u64) << 32) | start_value_lo as u64)
+        } else {
+            None
+        },
+        end: if has_end != 0 {
+            Some(((end_value_hi as u64) << 32) | end_value_lo as u64)
+        } else {
+            None
+        },
+        timescale,
+    }))
 }
 
 /// Remove media data from the given SourceBuffer.
@@ -972,9 +820,55 @@ impl From<MediaPlaylistParsingError> for MediaPlaylistParsingErrorCode {
     }
 }
 
+/// Return value of the `jsAppendBuffer` call, corresponding to the obtained
+/// data after both potentially transmuxing and inspecting a media segment.
 pub struct ParsedSegmentInfo {
-    pub start: Option<f64>,
-    pub duration: Option<f64>,
+    /// Its precise start time if known, in the original timescale
+    start: Option<u64>,
+    /// Its precise end time if known, in the original timescale
+    end: Option<u64>,
+    /// Timescale associated to `start` and `end`.
+    timescale: u32,
+}
+
+impl ParsedSegmentInfo {
+    /// Obtain precise start time with its original timescale
+    pub(crate) fn start(&self) -> Option<u64> {
+        self.start
+    }
+    /// Obtain precise end time with its original timescale
+    pub(crate) fn end(&self) -> Option<u64> {
+        self.end
+    }
+    /// Obtain the timescale associated to the parsed timing values.
+    pub(crate) fn timescale(&self) -> u32 {
+        self.timescale
+    }
+}
+
+/// Precise timestamp value represented as an integer and its associated timescale.
+#[derive(Clone, Copy, Debug)]
+pub struct TimescaledTimestamp {
+    value: u64,
+    timescale: u32,
+}
+
+impl TimescaledTimestamp {
+    pub(crate) fn new(value: u64, timescale: u32) -> Self {
+        Self { value, timescale }
+    }
+
+    pub(crate) fn value(self) -> u64 {
+        self.value
+    }
+
+    pub(crate) fn timescale(self) -> u32 {
+        self.timescale
+    }
+
+    pub(crate) fn to_f64_seconds(self) -> f64 {
+        self.value as f64 / self.timescale as f64
+    }
 }
 
 /// Result of a segment inspection (e.g. when calling `jsInspectSegment`)

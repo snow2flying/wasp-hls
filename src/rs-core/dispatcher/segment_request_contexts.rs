@@ -87,12 +87,16 @@ pub(crate) enum PendingSegmentRequest {
     Media {
         /// The `MediaType` the media segment is linked to.
         media_type: MediaType,
-        /// Media sequence number identifying that segment within the current playlist lineage.
-        sequence: u32,
+        /// Unique identifier of the initialization segment applying to that media segment, if any.
+        init_segment_id: Option<f64>,
         /// Time-related metadata linked to that segment.
         time_info: SegmentTimeInfo,
         /// Additional context required for ABR
         quality_context: SegmentQualityContext,
+        // The media segment sequence number, as infered by the HLS playlist
+        sequence_number: u32,
+        // The media segment discontinuity sequence number, as infered by the HLS playlist
+        discontinuity_sequence: u32,
     },
     /// This request concerns a "probe" request: we're loading a segment to know about a media's
     /// characteristics

@@ -131,6 +131,8 @@ impl InitSegmentInfo {
 pub(crate) struct MediaSegmentInfo {
     /// Media sequence number identifying this segment within the current playlist lineage.
     sequence: u32,
+    /// Discontinuity sequence number identifying the timeline continuity context of the segment.
+    discontinuity_sequence: u32,
     /// Information on the time boundaries of that segment.
     ///
     /// It should be exclusive to the time boundaries of all other segments in this Media Playlist.
@@ -145,6 +147,11 @@ impl MediaSegmentInfo {
     /// Media sequence number identifying this segment within the current playlist lineage.
     pub(crate) fn sequence(&self) -> u32 {
         self.sequence
+    }
+
+    /// Discontinuity sequence number identifying the timeline continuity context of the segment.
+    pub(crate) fn discontinuity_sequence(&self) -> u32 {
+        self.discontinuity_sequence
     }
 
     /// First presentation time the segment contains media data for, in seconds.
@@ -293,10 +300,12 @@ impl MediaPlaylist {
         let mut end_list = false;
         let mut playlist_type = PlaylistNature::Unknown;
         let mut i_frames_only = false;
+        let mut discontinuity_sequence = 0;
         let mut last_incomplete_map = None;
         let mut maps_info: Vec<InitSegmentInfo> = vec![];
         let mut start = None;
         let mut skip_next_segment = false;
+        let mut pending_discontinuities = 0u32;
 
         let playlist_base_url = url.pathname();
 
@@ -375,6 +384,15 @@ impl MediaPlaylist {
                             _ => Logger::warn("Unparsable MEDIA-SEQUENCE value"),
                         }
                     }
+                    "-X-DISCONTINUITY-SEQUENCE" => {
+                        match parse_decimal_integer(&str_line, colon_idx + 1).0 {
+                            Ok(s) if s <= (u32::MAX as u64) => discontinuity_sequence = s as u32,
+                            _ => Logger::warn("Unparsable DISCONTINUITY-SEQUENCE value"),
+                        }
+                    }
+                    "-X-DISCONTINUITY" => {
+                        pending_discontinuities = pending_discontinuities.wrapping_add(1);
+                    }
                     "-X-PLAYLIST-TYPE" => match parse_enumerated_string(&str_line, colon_idx + 1).0
                     {
                         "EVENT" => playlist_type = PlaylistNature::Event,
@@ -443,6 +461,9 @@ impl MediaPlaylist {
             } else if skip_next_segment {
                 skip_next_segment = false;
                 if let Some(duration) = next_segment_duration {
+                    discontinuity_sequence =
+                        discontinuity_sequence.wrapping_add(pending_discontinuities);
+                    pending_discontinuities = 0;
                     curr_start_time += duration;
                     next_segment_duration = None;
                     next_segment_byte_range = None;
@@ -459,8 +480,12 @@ impl MediaPlaylist {
                     Url::from_relative(playlist_base_url, seg_url)
                 };
                 if let Some(duration) = next_segment_duration {
+                    discontinuity_sequence =
+                        discontinuity_sequence.wrapping_add(pending_discontinuities);
+                    pending_discontinuities = 0;
                     let seg = MediaSegmentInfo {
                         sequence: 0,
+                        discontinuity_sequence,
                         time_info: SegmentTimeInfo::new(curr_start_time, duration),
                         byte_range: next_segment_byte_range,
                         url: seg_url,
@@ -690,5 +715,94 @@ impl MediaPlaylist {
     /// Returns `None` if unknown.
     fn extension(&self) -> Option<&str> {
         self.segment_list.media().first().map(|s| s.url.extension())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MediaPlaylist;
+    use crate::{parser::multi_variant_playlist::MediaPlaylistContext, utils::url::Url};
+    use std::io::Cursor;
+
+    #[test]
+    fn defaults_discontinuity_sequence_to_zero_without_tags() {
+        let playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXTINF:4,
+seg-0.ts
+#EXTINF:4,
+seg-1.ts
+"#;
+
+        let parsed = MediaPlaylist::create(
+            Cursor::new(playlist),
+            Url::new("https://example.com/media.m3u8".to_owned()),
+            None,
+            &MediaPlaylistContext::default(),
+        )
+        .unwrap();
+
+        let segments = parsed.segment_list().media();
+        assert_eq!(segments[0].discontinuity_sequence(), 0);
+        assert_eq!(segments[1].discontinuity_sequence(), 0);
+    }
+
+    #[test]
+    fn parses_discontinuity_sequence_and_discontinuity_tags() {
+        let playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-DISCONTINUITY-SEQUENCE:7
+#EXTINF:4,
+seg-0.ts
+#EXT-X-DISCONTINUITY
+#EXTINF:4,
+seg-1.ts
+#EXTINF:4,
+seg-2.ts
+#EXT-X-DISCONTINUITY
+#EXTINF:4,
+seg-3.ts
+"#;
+
+        let parsed = MediaPlaylist::create(
+            Cursor::new(playlist),
+            Url::new("https://example.com/media.m3u8".to_owned()),
+            None,
+            &MediaPlaylistContext::default(),
+        )
+        .unwrap();
+
+        let segments = parsed.segment_list().media();
+        assert_eq!(segments[0].discontinuity_sequence(), 7);
+        assert_eq!(segments[1].discontinuity_sequence(), 8);
+        assert_eq!(segments[2].discontinuity_sequence(), 8);
+        assert_eq!(segments[3].discontinuity_sequence(), 9);
+    }
+
+    #[test]
+    fn discontinuity_before_gap_still_advances_following_segment_sequence() {
+        let playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-DISCONTINUITY-SEQUENCE:5
+#EXT-X-DISCONTINUITY
+#EXT-X-GAP
+#EXTINF:4,
+seg-gap.ts
+#EXT-X-DISCONTINUITY
+#EXTINF:4,
+seg-next.ts
+"#;
+
+        let parsed = MediaPlaylist::create(
+            Cursor::new(playlist),
+            Url::new("https://example.com/media.m3u8".to_owned()),
+            None,
+            &MediaPlaylistContext::default(),
+        )
+        .unwrap();
+
+        let segments = parsed.segment_list().media();
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].discontinuity_sequence(), 7);
     }
 }

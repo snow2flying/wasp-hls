@@ -32,8 +32,10 @@ import {
   SegmentParsingErrorCode,
 } from "../wasm/index.js";
 import type {
+  SegmentHints,
   HostBindings,
   InspectSegmentValue,
+  ISafeU64,
   MediaPlaylistParsingErrorCode,
   MultivariantPlaylistParsingErrorCode,
   OtherErrorCode,
@@ -52,10 +54,9 @@ import {
 } from "./globals.ts";
 import type { RequestId, ResourceId, TimerId } from "./globals.ts";
 import {
-  getDurationFromTrun,
   getIsoBmffCodecs,
-  getMDHDTimescale,
-  getTrackFragmentDecodeTime,
+  getInitTrackInfo,
+  getIsobmfTimeInfo,
 } from "./isobmff-utils.js";
 import postMessageToMain from "./postMessage.js";
 import { getTransmuxedType, createTransmuxer } from "./transmux.js";
@@ -788,7 +789,7 @@ export function addSourceBuffer(
       }
       const sourceBufferId = nextSourceBufferId;
       sourceBuffers.push({
-        lastInitTimescale: undefined,
+        lastInitTrackInfoByTrackId: undefined,
         id: sourceBufferId,
         transmuxer: mimeType === typ ? null : createTransmuxer(),
         sourceBuffer: null,
@@ -836,7 +837,7 @@ export function addSourceBuffer(
       const sourceBufferId = nextSourceBufferId;
       const queuedSourceBuffer = new QueuedSourceBuffer(sourceBuffer);
       sourceBuffers.push({
-        lastInitTimescale: undefined,
+        lastInitTrackInfoByTrackId: undefined,
         id: sourceBufferId,
         sourceBuffer: queuedSourceBuffer,
         transmuxer: mimeType === typ ? null : createTransmuxer(),
@@ -875,15 +876,17 @@ export function addSourceBuffer(
 }
 
 /**
- * @param {number} sourceBufferId
- * @param {number} resourceId
- * @param {boolean} parseTimeInformation
+ * @param sourceBufferId - The identifier for the SourceBuffer on which the
+ * segment should be pushed.
+ * @param resourceId - The identifier of the segment to push.
+ * @param segmentHints - Potential supplementary context on the segment to
+ * push, such as its base decode time.
  * @returns {Object}
  */
 export function appendBuffer(
   sourceBufferId: SourceBufferId,
   resourceId: ResourceId,
-  parseTimeInformation?: boolean,
+  segmentHints: SegmentHints,
 ): AppendBufferResult {
   let segment = jsMemoryResources.get(resourceId);
   const mediaSourceObj = getMediaSourceObj();
@@ -905,20 +908,65 @@ export function appendBuffer(
   const sourceBufferObjIdx = mediaSourceObj.sourceBuffers.findIndex(
     ({ id }) => id === sourceBufferId,
   );
-  if (sourceBufferObjIdx < -1) {
+  if (sourceBufferObjIdx < 0) {
     return AppendBufferResult.error(
       SegmentParsingErrorCode.NoSourceBuffer,
       "Segment preparation error: No SourceBuffer with the given `SourceBufferId`",
     );
   }
 
+  let segmentPreciseTiming:
+    | {
+        start: ISafeU64;
+        end: ISafeU64 | undefined;
+        timescale: number;
+      }
+    | undefined;
+
   const sourceBufferObj = mediaSourceObj.sourceBuffers[sourceBufferObjIdx];
   if (sourceBufferObj.transmuxer !== null) {
     try {
-      const transmuxedData =
-        sourceBufferObj.transmuxer.transmuxSegment(segment);
+      const dtsHint = combineSafeTimeValue(
+        segmentHints.baseDecodeTimeStartHi,
+        segmentHints.baseDecodeTimeStartLo,
+      );
+      const transmuxedData = sourceBufferObj.transmuxer.transmuxSegment(
+        segment,
+        {
+          reset: segmentHints.resetTransmuxerState,
+          baseMediaDecodeTimeSeed: {
+            value: dtsHint,
+            timescale: segmentHints.baseDecodeTimeStartTimescale,
+          },
+        },
+      );
       if (transmuxedData !== null) {
-        segment = transmuxedData;
+        segment = transmuxedData.data;
+        if (transmuxedData.timingInfo !== undefined) {
+          if (logger.hasLevel(LogLevel.Debug)) {
+            const startString = (
+              transmuxedData.timingInfo.start /
+              transmuxedData.timingInfo.timescale
+            ).toFixed(3);
+            const endString = (
+              transmuxedData.timingInfo.end /
+              transmuxedData.timingInfo.timescale
+            ).toFixed(3);
+            const hint = (
+              dtsHint / segmentHints.baseDecodeTimeStartTimescale
+            ).toFixed(3);
+            logger.debug(
+              `Worker: transmuxed segment with start=${startString} end=${endString} hinted=${hint}`,
+            );
+          }
+          segmentPreciseTiming = {
+            start: splitTimeValue(transmuxedData.timingInfo.start),
+            end: splitTimeValue(transmuxedData.timingInfo.end),
+            timescale: transmuxedData.timingInfo.timescale,
+          };
+        } else {
+          logger.warn("Worker: transmuxed segment with no timing info");
+        }
       } else {
         return AppendBufferResult.error(
           SegmentParsingErrorCode.TransmuxerError,
@@ -937,18 +985,31 @@ export function appendBuffer(
     }
   }
 
-  // TODO Check if mp4 first and if init segment?
-  let timescale = getMDHDTimescale(segment);
-  if (timescale !== undefined) {
-    sourceBufferObj.lastInitTimescale = timescale;
-  } else {
-    timescale = sourceBufferObj.lastInitTimescale;
+  const initTrackInfoByTrackId = getInitTrackInfo(segment);
+  if (initTrackInfoByTrackId !== undefined) {
+    // TODO: In transmuxing step when possible?
+    sourceBufferObj.lastInitTrackInfoByTrackId = initTrackInfoByTrackId;
   }
 
-  let timeInfo;
-  if (parseTimeInformation === true && timescale !== undefined) {
-    // TODO Check if mp4 first
-    timeInfo = getTimeInformationFromMp4(segment, timescale);
+  if (
+    segmentPreciseTiming === undefined &&
+    sourceBufferObj.lastInitTrackInfoByTrackId
+  ) {
+    const timeInfo = getTimeInformationFromMp4(
+      segment,
+      sourceBufferObj.lastInitTrackInfoByTrackId,
+    );
+
+    if (timeInfo) {
+      segmentPreciseTiming = {
+        start: splitTimeValue(timeInfo.time),
+        timescale: timeInfo.timescale,
+        end:
+          timeInfo.duration !== undefined
+            ? splitTimeValue(timeInfo.time + timeInfo.duration)
+            : undefined,
+      };
+    }
   }
   const transferableSegment = new Uint8Array(segment);
   try {
@@ -1022,7 +1083,11 @@ export function appendBuffer(
   } catch (_err) {
     return AppendBufferResult.error(SegmentParsingErrorCode.UnknownError);
   }
-  return AppendBufferResult.success(timeInfo?.time, timeInfo?.duration);
+  return AppendBufferResult.success(
+    segmentPreciseTiming?.start,
+    segmentPreciseTiming?.end,
+    segmentPreciseTiming?.timescale,
+  );
 }
 
 /**
@@ -1082,8 +1147,9 @@ function inspectProbeSegment(
   if (transmuxedSegment === null) {
     return undefined;
   }
-  const transmuxedCodecs = getIsoBmffCodecs(transmuxedSegment);
+  const transmuxedCodecs = getIsoBmffCodecs(transmuxedSegment.data);
   if (transmuxedCodecs.length === 0) {
+    logger.error("Worker: transmuxed segment is null");
     return undefined;
   }
   const mediaType = inferMediaTypeFromCodecs(transmuxedCodecs);
@@ -1335,23 +1401,28 @@ export function freeResource(resourceId: ResourceId): boolean {
 
 /**
  * @param {Uint8Array} segment
- * @param {number} initTimescale
+ * @param {Map<number, Object>} initTrackInfoByTrackId
  * @returns {Object|null}
  */
 function getTimeInformationFromMp4(
   segment: Uint8Array,
-  initTimescale: number,
-): { time: number; duration: number | undefined } | null {
-  const baseDecodeTime = getTrackFragmentDecodeTime(segment);
-  if (baseDecodeTime === undefined) {
-    return null;
-  }
-  const trunDuration = getDurationFromTrun(segment);
+  initTrackInfoByTrackId: Map<
+    number,
+    { timescale: number; type: "audio" | "video" | "other" }
+  >,
+): { time: number; duration: number | undefined; timescale: number } | null {
+  return getIsobmfTimeInfo(segment, initTrackInfoByTrackId);
+}
+
+function splitTimeValue(value: number): ISafeU64 {
   return {
-    time: baseDecodeTime / initTimescale,
-    duration:
-      trunDuration === undefined ? undefined : trunDuration / initTimescale,
+    hi: Math.floor(value / 0x100000000),
+    lo: value >>> 0,
   };
+}
+
+function combineSafeTimeValue(hi: number, lo: number): number {
+  return hi * 0x100000000 + lo;
 }
 
 /**

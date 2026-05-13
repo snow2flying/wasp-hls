@@ -42,7 +42,7 @@ interface ElementaryPacketBase {
 
 export interface MetadataElementaryPacketTrack {
   timelineStartInfo: {
-    baseMediaDecodeTime: number;
+    baseMediaDecodeTime?: number;
   };
   id: number;
   codec: string;
@@ -139,9 +139,7 @@ export default class ElementaryPacketParser {
         // translate audio and video streams to tracks
         if (programMapTable.video !== null) {
           packet.tracks.push({
-            timelineStartInfo: {
-              baseMediaDecodeTime: 0,
-            },
+            timelineStartInfo: {},
             id: +programMapTable.video,
             codec: "avc",
             type: "video",
@@ -149,9 +147,7 @@ export default class ElementaryPacketParser {
         }
         if (programMapTable.audio !== null) {
           packet.tracks.push({
-            timelineStartInfo: {
-              baseMediaDecodeTime: 0,
-            },
+            timelineStartInfo: {},
             id: +programMapTable.audio,
             codec: "adts",
             type: "audio",
@@ -321,9 +317,7 @@ export default class ElementaryPacketParser {
       // translate audio and video streams to tracks
       if (programMapTable.video !== null) {
         pmt.tracks.push({
-          timelineStartInfo: {
-            baseMediaDecodeTime: 0,
-          },
+          timelineStartInfo: {},
           id: +programMapTable.video,
           codec: "avc",
           type: "video",
@@ -332,9 +326,7 @@ export default class ElementaryPacketParser {
 
       if (programMapTable.audio !== null) {
         pmt.tracks.push({
-          timelineStartInfo: {
-            baseMediaDecodeTime: 0,
-          },
+          timelineStartInfo: {},
           id: +programMapTable.audio,
           codec: "adts",
           type: "audio",

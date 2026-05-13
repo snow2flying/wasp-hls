@@ -70,12 +70,12 @@ pub(super) fn is_stale_segment_request_context(
     match context {
         PendingSegmentRequest::Media {
             media_type,
-            sequence,
+            sequence_number,
             ..
         } => playlist_store
             .as_ref()
             .and_then(|pl_store| pl_store.curr_media_playlist(*media_type))
-            .is_some_and(|playlist| !playlist.contains_sequence(*sequence)),
+            .is_some_and(|playlist| !playlist.contains_sequence(*sequence_number)),
 
         PendingSegmentRequest::Probe {
             probe_segment:

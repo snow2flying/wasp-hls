@@ -174,27 +174,42 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         return 0;
       },
       __js_func__append_buffer(
+        // params
         sourceBufferId: number,
         resourceId: number,
-        parseTimeInformation: number,
+        baseDecodeTimeStartHi: number,
+        baseDecodeTimeStartLo: number,
+        baseDecodeTimeStartTimescale: number,
+        reset_transmuxer_state: number,
+
+        // Return value
         hasStartOut: number,
-        startOut: number,
-        hasDurationOut: number,
-        durationOut: number,
+        startValueHiOut: number,
+        startValueLoOut: number,
+        hasEndOut: number,
+        endValueHiOut: number,
+        endValueLoOut: number,
+        timescale: number,
+
         errCodeOut: number,
         errDescPtrOut: number,
         errDescLenOut: number,
       ): number {
         return writeAppendBufferResult(
-          bindings.appendBuffer(
-            sourceBufferId,
-            resourceId,
-            parseTimeInformation !== 0,
-          ),
+          bindings.appendBuffer(sourceBufferId, resourceId, {
+            baseDecodeTimeStartHi,
+            baseDecodeTimeStartLo,
+            baseDecodeTimeStartTimescale,
+            resetTransmuxerState: reset_transmuxer_state !== 0,
+          }),
+
           hasStartOut,
-          startOut,
-          hasDurationOut,
-          durationOut,
+          startValueHiOut,
+          startValueLoOut,
+          hasEndOut,
+          endValueHiOut,
+          endValueLoOut,
+          timescale,
           errCodeOut,
           errDescPtrOut,
           errDescLenOut,

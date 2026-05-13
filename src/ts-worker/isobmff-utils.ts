@@ -9,22 +9,9 @@
  * @returns {Number | undefined}
  */
 function getTrackFragmentDecodeTime(buffer: Uint8Array): number | undefined {
-  const traf = getTRAF(buffer);
-  if (traf === null) {
-    return undefined;
-  }
-  const tfdt = getBoxContent(traf, 0x74666474 /* tfdt */);
-  if (tfdt === null) {
-    return undefined;
-  }
-  const version = tfdt[0];
-  if (version === 1) {
-    return be8toi(tfdt, 4);
-  }
-  if (version === 0) {
-    return be4toi(tfdt, 4);
-  }
-  return undefined;
+  return getTRAFs(buffer)
+    .map(getTrackFragmentDecodeTimeFromTRAF)
+    .find((decodeTime) => decodeTime !== undefined);
 }
 
 /**
@@ -43,101 +30,161 @@ function getDurationFromTrun(buffer: Uint8Array): number | undefined {
 
   let completeDuration: number = 0;
   for (const traf of trafs) {
-    const trun = getBoxContent(traf, 0x7472756e /* trun */);
-    if (trun === null) {
+    const truns = getBoxesContent(traf, 0x7472756e /* trun */);
+    if (truns.length === 0) {
       return undefined;
     }
-    let cursor = 0;
-    const version = trun[cursor];
-    cursor += 1;
-    if (version > 1) {
-      return undefined;
-    }
-
-    const flags = be3toi(trun, cursor);
-    cursor += 3;
-    const hasSampleDuration = (flags & 0x000100) > 0;
-
-    let defaultDuration: number | undefined = 0;
-    if (!hasSampleDuration) {
-      defaultDuration = getDefaultDurationFromTFHDInTRAF(traf);
-      if (defaultDuration === undefined) {
+    for (const trun of truns) {
+      const duration = getDurationFromSingleTrun(traf, trun);
+      if (duration === undefined) {
         return undefined;
       }
+      completeDuration += duration;
     }
-
-    const hasDataOffset = (flags & 0x000001) > 0;
-    const hasFirstSampleFlags = (flags & 0x000004) > 0;
-    const hasSampleSize = (flags & 0x000200) > 0;
-    const hasSampleFlags = (flags & 0x000400) > 0;
-    const hasSampleCompositionOffset = (flags & 0x000800) > 0;
-
-    const sampleCounts = be4toi(trun, cursor);
-    cursor += 4;
-
-    if (hasDataOffset) {
-      cursor += 4;
-    }
-    if (hasFirstSampleFlags) {
-      cursor += 4;
-    }
-
-    let i = sampleCounts;
-    let duration = 0;
-    while (i-- > 0) {
-      if (hasSampleDuration) {
-        duration += be4toi(trun, cursor);
-        cursor += 4;
-      } else {
-        duration += defaultDuration;
-      }
-      if (hasSampleSize) {
-        cursor += 4;
-      }
-      if (hasSampleFlags) {
-        cursor += 4;
-      }
-      if (hasSampleCompositionOffset) {
-        cursor += 4;
-      }
-    }
-
-    completeDuration += duration;
   }
   return completeDuration;
 }
 
+function getInitTrackInfo(
+  buffer: Uint8Array,
+):
+  | Map<number, { timescale: number; type: "audio" | "video" | "other" }>
+  | undefined {
+  const moov = getBoxContent(buffer, 0x6d6f6f76 /* moov */);
+  if (moov === null) {
+    return undefined;
+  }
+
+  const traks = getBoxesContent(moov, 0x7472616b /* trak */);
+  if (traks.length === 0) {
+    return undefined;
+  }
+
+  const trackInfo = new Map<
+    number,
+    { timescale: number; type: "audio" | "video" | "other" }
+  >();
+  for (const trak of traks) {
+    const trackId = getTrackIdFromTRAK(trak);
+    const mdia = getBoxContent(trak, 0x6d646961 /* mdia */);
+    if (trackId === undefined || mdia === null) {
+      continue;
+    }
+    const timescale = getTimescaleFromMDIA(mdia);
+    if (timescale !== undefined) {
+      trackInfo.set(trackId, {
+        timescale,
+        type: getTrackTypeFromTRAK(trak),
+      });
+    }
+  }
+
+  return trackInfo.size === 0 ? undefined : trackInfo;
+}
+
 /**
- * Get timescale information from a movie header box. Found in init segments.
+ * Get timescale information from the first movie track. Found in init segments.
  * `undefined` if not found or not parsed.
- *
- * This timescale is the default timescale used for segments.
  * @param {Uint8Array} buffer
  * @returns {Number | undefined}
  */
 function getMDHDTimescale(buffer: Uint8Array): number | undefined {
-  const mdia = getMDIA(buffer);
-  if (mdia === null) {
+  const trackInfo = getInitTrackInfo(buffer);
+  if (trackInfo === undefined) {
     return undefined;
   }
-
-  const mdhd = getBoxContent(mdia, 0x6d646864 /* "mdhd" */);
-  if (mdhd === null) {
-    return undefined;
-  }
-
-  let cursor = 0;
-  const version = mdhd[cursor];
-  cursor += 4;
-  if (version === 1) {
-    return be4toi(mdhd, cursor + 16);
-  }
-  if (version === 0) {
-    return be4toi(mdhd, cursor + 8);
-  }
-  return undefined;
+  return trackInfo.values().next().value?.timescale;
 }
 
+function getIsobmfTimeInfo(
+  buffer: Uint8Array,
+  initTrackInfoByTrackId: Map<
+    number,
+    { timescale: number; type: "audio" | "video" | "other" }
+  >,
+): { time: number; duration: number | undefined; timescale: number } | null {
+  const trafs = getTRAFs(buffer);
+  if (trafs.length === 0) {
+    return null;
+  }
+
+  const candidates = trafs
+    .map((traf) => {
+      const trackId = getTrackIdFromTFHDInTRAF(traf);
+      const decodeTime = getTrackFragmentDecodeTimeFromTRAF(traf);
+      if (trackId === undefined || decodeTime === undefined) {
+        return null;
+      }
+      const initTrackInfo = initTrackInfoByTrackId.get(trackId);
+      if (initTrackInfo === undefined) {
+        return null;
+      }
+      const duration = getDurationFromTRAF(traf);
+      if (duration === undefined) {
+        return null;
+      }
+
+      return {
+        time: decodeTime,
+        duration,
+        timescale: initTrackInfo.timescale,
+        trackType: initTrackInfo.type,
+      };
+    })
+    .filter(isTrackTimeCandidate);
+
+  const bestCandidate =
+    candidates.find((candidate) => candidate.trackType === "video") ??
+    candidates.find((candidate) => candidate.trackType === "audio") ??
+    candidates[0];
+
+  if (bestCandidate === undefined) {
+    return null;
+  }
+
+  return {
+    time: bestCandidate.time,
+    duration: bestCandidate.duration,
+    timescale: bestCandidate.timescale,
+  };
+}
+
+function isTrackTimeCandidate(
+  candidate: {
+    time: number;
+    duration: number;
+    timescale: number;
+    trackType: "audio" | "video" | "other";
+  } | null,
+): candidate is {
+  time: number;
+  duration: number;
+  timescale: number;
+  trackType: "audio" | "video" | "other";
+} {
+  return candidate !== null;
+}
+
+function getTrackTypeFromTRAK(trak: Uint8Array): "audio" | "video" | "other" {
+  const mdia = getBoxContent(trak, 0x6d646961 /* mdia */);
+  if (mdia === null) {
+    return "other";
+  }
+
+  const hdlr = getBoxContent(mdia, 0x68646c72 /* hdlr */);
+  if (hdlr === null || hdlr.length < 12) {
+    return "other";
+  }
+
+  const handlerType = be4toi(hdlr, 8);
+  if (handlerType === 0x76696465 /* vide */) {
+    return "video";
+  }
+  if (handlerType === 0x736f756e /* soun */) {
+    return "audio";
+  }
+  return "other";
+}
 /**
  * Extract RFC 6381 codec strings from the initialization metadata contained in
  * the given ISOBMFF data.
@@ -645,19 +692,83 @@ function getDefaultDurationFromTFHDInTRAF(
   return defaultDuration;
 }
 
-/**
- * Returns the content of the first "traf" box encountered in the given ISOBMFF
- * data.
- * Returns null if not found.
- * @param {Uint8Array} buffer
- * @returns {Uint8Array|null}
- */
-function getTRAF(buffer: Uint8Array): Uint8Array | null {
-  const moof = getBoxContent(buffer, 0x6d6f6f66 /* moof */);
-  if (moof === null) {
-    return null;
+function getDurationFromTRAF(traf: Uint8Array): number | undefined {
+  const truns = getBoxesContent(traf, 0x7472756e /* trun */);
+  if (truns.length === 0) {
+    return undefined;
   }
-  return getBoxContent(moof, 0x74726166 /* traf */);
+
+  let totalDuration = 0;
+  for (const trun of truns) {
+    const duration = getDurationFromSingleTrun(traf, trun);
+    if (duration === undefined) {
+      return undefined;
+    }
+    totalDuration += duration;
+  }
+  return totalDuration;
+}
+
+function getDurationFromSingleTrun(
+  traf: Uint8Array,
+  trun: Uint8Array,
+): number | undefined {
+  let cursor = 0;
+  const version = trun[cursor];
+  cursor += 1;
+  if (version > 1) {
+    return undefined;
+  }
+
+  const flags = be3toi(trun, cursor);
+  cursor += 3;
+  const hasSampleDuration = (flags & 0x000100) > 0;
+
+  let defaultDuration: number | undefined = 0;
+  if (!hasSampleDuration) {
+    defaultDuration = getDefaultDurationFromTFHDInTRAF(traf);
+    if (defaultDuration === undefined) {
+      return undefined;
+    }
+  }
+
+  const hasDataOffset = (flags & 0x000001) > 0;
+  const hasFirstSampleFlags = (flags & 0x000004) > 0;
+  const hasSampleSize = (flags & 0x000200) > 0;
+  const hasSampleFlags = (flags & 0x000400) > 0;
+  const hasSampleCompositionOffset = (flags & 0x000800) > 0;
+
+  const sampleCounts = be4toi(trun, cursor);
+  cursor += 4;
+
+  if (hasDataOffset) {
+    cursor += 4;
+  }
+  if (hasFirstSampleFlags) {
+    cursor += 4;
+  }
+
+  let i = sampleCounts;
+  let duration = 0;
+  while (i-- > 0) {
+    if (hasSampleDuration) {
+      duration += be4toi(trun, cursor);
+      cursor += 4;
+    } else {
+      duration += defaultDuration;
+    }
+    if (hasSampleSize) {
+      cursor += 4;
+    }
+    if (hasSampleFlags) {
+      cursor += 4;
+    }
+    if (hasSampleCompositionOffset) {
+      cursor += 4;
+    }
+  }
+
+  return duration;
 }
 
 /**
@@ -671,33 +782,67 @@ function getTRAF(buffer: Uint8Array): Uint8Array | null {
 function getTRAFs(buffer: Uint8Array): Uint8Array[] {
   const moofs = getBoxesContent(buffer, 0x6d6f6f66 /* moof */);
   return moofs.reduce((acc: Uint8Array[], moof: Uint8Array) => {
-    const traf = getBoxContent(moof, 0x74726166 /* traf */);
-    if (traf !== null) {
-      acc.push(traf);
-    }
+    acc.push(...getBoxesContent(moof, 0x74726166 /* traf */));
     return acc;
   }, []);
 }
 
-/**
- * Returns the content of the first "mdia" box encountered in the given ISOBMFF
- * data.
- * Returns null if not found.
- * @param {Uint8Array} buf
- * @returns {Uint8Array|null}
- */
-function getMDIA(buf: Uint8Array): Uint8Array | null {
-  const moov = getBoxContent(buf, 0x6d6f6f76 /* moov */);
-  if (moov === null) {
-    return null;
+function getTrackIdFromTRAK(trak: Uint8Array): number | undefined {
+  const tkhd = getBoxContent(trak, 0x746b6864 /* tkhd */);
+  if (tkhd === null) {
+    return undefined;
+  }
+  const version = tkhd[0];
+  if (version === 1) {
+    return be4toi(tkhd, 20);
+  }
+  if (version === 0) {
+    return be4toi(tkhd, 12);
+  }
+  return undefined;
+}
+
+function getTimescaleFromMDIA(mdia: Uint8Array): number | undefined {
+  const mdhd = getBoxContent(mdia, 0x6d646864 /* mdhd */);
+  if (mdhd === null) {
+    return undefined;
   }
 
-  const trak = getBoxContent(moov, 0x7472616b /* "trak" */);
-  if (trak === null) {
-    return null;
+  let cursor = 0;
+  const version = mdhd[cursor];
+  cursor += 4;
+  if (version === 1) {
+    return be4toi(mdhd, cursor + 16);
   }
+  if (version === 0) {
+    return be4toi(mdhd, cursor + 8);
+  }
+  return undefined;
+}
 
-  return getBoxContent(trak, 0x6d646961 /* "mdia" */);
+function getTrackIdFromTFHDInTRAF(traf: Uint8Array): number | undefined {
+  const tfhd = getBoxContent(traf, 0x74666864 /* tfhd */);
+  if (tfhd === null || tfhd.length < 8) {
+    return undefined;
+  }
+  return be4toi(tfhd, 4);
+}
+
+function getTrackFragmentDecodeTimeFromTRAF(
+  traf: Uint8Array,
+): number | undefined {
+  const tfdt = getBoxContent(traf, 0x74666474 /* tfdt */);
+  if (tfdt === null) {
+    return undefined;
+  }
+  const version = tfdt[0];
+  if (version === 1) {
+    return be8toi(tfdt, 4);
+  }
+  if (version === 0) {
+    return be4toi(tfdt, 4);
+  }
+  return undefined;
 }
 
 /**
@@ -857,6 +1002,8 @@ function be8toi(bytes: Uint8Array, offset: number): number {
 
 export {
   getDurationFromTrun,
+  getInitTrackInfo,
+  getIsobmfTimeInfo,
   getTrackFragmentDecodeTime,
   getMDHDTimescale,
   getIsoBmffCodecs,

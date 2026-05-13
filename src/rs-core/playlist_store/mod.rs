@@ -32,6 +32,8 @@ pub(crate) enum ProbeSegmentContext {
     Media {
         /// Sequence number identifying that segment in the playlist.
         sequence: u32,
+        /// Discontinuity sequence associated with that segment in the playlist.
+        discontinuity_sequence: u32,
         /// Timing information linked to that media segment
         time_info: SegmentTimeInfo,
     },
@@ -432,6 +434,7 @@ impl PlaylistStore {
                 byte_range: media_segment.byte_range().cloned(),
                 context: ProbeSegmentContext::Media {
                     sequence: media_segment.sequence(),
+                    discontinuity_sequence: media_segment.discontinuity_sequence(),
                     time_info: media_segment.time_info().clone(),
                 },
             })

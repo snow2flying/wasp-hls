@@ -14,8 +14,8 @@ use crate::{
         OtherErrorCode, PushedSegmentErrorCode, RequestId, SourceBufferId, TimerId,
     },
     dispatcher::segment_request_contexts::PendingSegmentRequest,
-    media_element::SegmentQualityContext,
-    parser::{SegmentTimeInfo, TopLevelPlaylist, TopLevelPlaylistParsingError},
+    media_element::SegmentPushMetadata,
+    parser::{TopLevelPlaylist, TopLevelPlaylistParsingError},
     playlist_store::{
         LockVariantResponse, MediaPlaylistPermanentId, PlaylistStore, ProbeSegmentMetadata,
         SetAudioTrackResponse, VariantUpdateResult,
@@ -803,13 +803,16 @@ impl Dispatcher {
                         req_id,
                     );
                 } else if let Some(seg) = most_needed_segment.media_segment() {
+                    let init_segment_id = seg_info.0.init_for(seg).map(|i| i.id());
                     let req_id =
                         self.segment_request_contexts
                             .insert(PendingSegmentRequest::Media {
                                 media_type,
                                 time_info: seg.time_info().clone(),
-                                sequence: seg.sequence(),
+                                init_segment_id,
                                 quality_context: seg_info.1,
+                                sequence_number: seg.sequence(),
+                                discontinuity_sequence: seg.discontinuity_sequence(),
                             });
                     self.requester
                         .request_media_segment(media_type, seg, req_id);
@@ -828,6 +831,7 @@ impl Dispatcher {
                 return;
             }
         };
+
         self.handle_media_playlist_update(&changed_media_types, flush || has_worsened, flush);
         if let Some(pl_store) = self.playlist_store.as_mut() {
             jsAnnounceVariantUpdate(pl_store.curr_variant().map(|v| v.id()));
@@ -921,14 +925,25 @@ impl Dispatcher {
         match req_ctxt {
             PendingSegmentRequest::Media {
                 media_type: req_media_type,
+                init_segment_id,
                 time_info,
                 quality_context,
+                sequence_number,
+                discontinuity_sequence,
                 ..
             } => {
                 if Some(req_media_type) != media_type {
                     Logger::warn("Loaded media segment with mismatched media type context.");
                 }
-                self.on_media_segment_loaded(result, req_media_type, time_info, quality_context);
+                self.on_media_segment_loaded(SegmentPushMetadata {
+                    data: result,
+                    media_type: req_media_type,
+                    init_segment_id,
+                    time_info,
+                    context: quality_context,
+                    sequence_number,
+                    discontinuity_sequence,
+                });
             }
             PendingSegmentRequest::Init {
                 media_type: req_media_type,
@@ -946,18 +961,13 @@ impl Dispatcher {
         }
     }
 
-    fn on_media_segment_loaded(
-        &mut self,
-        data: JsMemoryBlob,
-        media_type: MediaType,
-        time_info: SegmentTimeInfo,
-        context: SegmentQualityContext,
-    ) {
-        let segment_start = time_info.start();
-        let segment_end = time_info.end();
+    fn on_media_segment_loaded(&mut self, push_md: SegmentPushMetadata) {
+        let segment_start = push_md.time_info.start();
+        let segment_end = push_md.time_info.end();
+        let media_type = push_md.media_type;
         let prepared_data = self
             .media_element_ref
-            .announce_incoming_media_segment(media_type, data, time_info, context);
+            .announce_incoming_media_segment(push_md);
 
         // Check next segment BEFORE actually pushing, as the pushing operation could take in the
         // tens of ms or even in the hundreds depending on segment size and platform performance.

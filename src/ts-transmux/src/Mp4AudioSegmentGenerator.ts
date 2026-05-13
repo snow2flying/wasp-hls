@@ -13,9 +13,21 @@ import {
 } from "./track-utils.ts";
 import type { TrackInfo } from "./types.ts";
 
+/** Product of the `MP4AudioSegmentGenerator` */
 export interface Mp4AudioSegmentData {
+  /** Extracted information about the current audio track. */
   trackInfo: TrackInfo;
+  /** Constructed audio-related ISOBMFF boxes for that segment. */
   boxes: Uint8Array;
+  /** Timing metadata included in that segment. */
+  timingInfo: {
+    /** Start time, in timescale. */
+    start: number;
+    /** End time, in timescale. */
+    end: number;
+    /** The timescale used for start and end. */
+    timescale: number;
+  };
 }
 
 /**
@@ -69,6 +81,12 @@ export class Mp4AudioSegmentGenerator {
       earliestAllowedDts,
     );
 
+    if (frames.length === 0) {
+      this._aacFrames = [];
+      clearDtsInfo(this._trackInfo);
+      return null;
+    }
+
     this._trackInfo.baseMediaDecodeTime = calculateTrackBaseMediaDecodeTime(
       this._trackInfo,
       keepOriginalTimestamps,
@@ -102,9 +120,24 @@ export class Mp4AudioSegmentGenerator {
     boxes.set(moof);
     boxes.set(mdat, moof.byteLength);
 
+    const continuityStart = this._trackInfo.baseMediaDecodeTime;
+    const duration = (this._trackInfo.samples ?? []).reduce(
+      (acc: number, sample: { duration: number }) => acc + sample.duration,
+      0,
+    );
+    const continuityEnd = continuityStart + duration;
+
     clearDtsInfo(this._trackInfo);
 
-    return { trackInfo: this._trackInfo, boxes };
+    return {
+      trackInfo: this._trackInfo,
+      boxes,
+      timingInfo: {
+        start: continuityStart,
+        end: continuityEnd,
+        timescale: this._trackInfo.samplerate,
+      },
+    };
   }
 
   public cancel(): void {

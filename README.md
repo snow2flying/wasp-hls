@@ -330,6 +330,8 @@ most of them are not needed for playback):
 - [x] EXT-X-DEFINE (Used in variable substitutions)
 - [x] EXT-X-START: Used to determine a default start time in the content.
 - [x] EXT-X-MEDIA-SEQUENCE
+- [x] EXT-X-DISCONTINUITY
+- [x] EXT-X-DISCONTINUITY-SEQUENCE
 - EXT-X-MAP:
   - [x] URI: Used to fetch the initialization segment if one is present
   - [x] BYTERANGE: To perform a range request for the initialization segment
@@ -395,10 +397,6 @@ most of them are not needed for playback):
 - [ ] EXT-X-SESSION-KEY
 - [ ] EXT-X-CONTENT-STEERING
 - [ ] EXT-X-KEY: decryption and related tags are very low priority
-- [ ] EXT-X-DISCONTINUITY: For now discontinuities are handled in a reactive
-      way, not proactive, so I don't rely on this. To check if there are
-      advantages I did not see.
-- [ ] EXT-X-DISCONTINUITY-SEQUENCE: See `EXT-X-DISCONTINUITY` handling.
 
 ## Contributing
 

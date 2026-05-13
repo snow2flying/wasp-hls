@@ -3,7 +3,7 @@ use self::source_buffers::SourceBufferQueueElement;
 use crate::bindings::{
     jsAttachMediaSource, jsEndOfStream, jsRemoveMediaSource, jsSeek, jsSetMediaOffset,
     jsSetPlaybackRate, jsStartRebuffering, jsStopRebuffering, AddSourceBufferErrorCode,
-    AttachMediaSourceErrorCode, MediaType, SourceBufferId,
+    AttachMediaSourceErrorCode, MediaType, SourceBufferId, TimescaledTimestamp,
 };
 use crate::dispatcher::{JsMemoryBlob, JsTimeRanges, MediaObservation, MediaSourceReadyState};
 use crate::parser::SegmentTimeInfo;
@@ -11,7 +11,7 @@ use crate::Logger;
 pub(crate) use source_buffers::{PushSegmentError, RemoveDataError};
 
 pub(crate) use self::segment_inventory::{BufferedChunk, SegmentQualityContext};
-pub(crate) use source_buffers::MediaSegmentPushData;
+pub(crate) use source_buffers::{MediaSequenceIdentity, PreparedPushData, SegmentHints};
 
 mod segment_inventory;
 mod source_buffers;
@@ -320,25 +320,38 @@ impl MediaElementReference {
     ///      not care much as all urgent tasks have been done in the previous point.
     pub(crate) fn announce_incoming_media_segment(
         &mut self,
-        media_type: MediaType,
-        segment_data: JsMemoryBlob,
-        time_info: SegmentTimeInfo,
-        context: SegmentQualityContext,
-    ) -> MediaSegmentPushData {
-        let metadata_start = time_info.start();
-        let metadata_end = time_info.end();
+        md: SegmentPushMetadata,
+    ) -> PreparedPushData {
+        let dts_hint =
+            self.infer_probable_base_dts(md.media_type, &md.time_info, md.discontinuity_sequence);
+        let metadata_start = md.time_info.start();
+        let metadata_end = md.time_info.end();
+        let media_sequence_identity = MediaSequenceIdentity::new(
+            md.context.media_id(),
+            md.discontinuity_sequence,
+            md.init_segment_id,
+        );
         let inventory_metadata = BufferedSegmentMetadata {
             start: metadata_start,
             end: metadata_end,
-            context,
+            context: md.context,
+            discontinuity_sequence: md.discontinuity_sequence,
             playlist_start: metadata_start,
             playlist_end: metadata_end,
         };
-        let id = match media_type {
+        let id = match md.media_type {
             MediaType::Audio => self.audio_inventory.insert_segment(inventory_metadata),
             MediaType::Video => self.video_inventory.insert_segment(inventory_metadata),
         };
-        MediaSegmentPushData::new(id, segment_data, time_info)
+        PreparedPushData {
+            id,
+            segment_data: md.data,
+            time_info: md.time_info,
+            base_dts_hint: dts_hint,
+            media_sequence_identity,
+            sequence_number: md.sequence_number,
+            discontinuity_sequence: md.discontinuity_sequence,
+        }
     }
 
     /// Push a media segment to the SourceBuffer of the media type given.
@@ -354,22 +367,32 @@ impl MediaElementReference {
     pub(crate) fn push_media_segment(
         &mut self,
         media_type: MediaType,
-        metadata: MediaSegmentPushData,
+        metadata: PreparedPushData,
     ) -> Result<(), PushSegmentError> {
-        let has_media_offset = self.media_offset.is_some();
         match self.buffer_mut_for(media_type) {
             None => Err(PushSegmentError::NoSourceBuffer(media_type)),
 
             Some(sb) => {
-                let metadata_start = metadata.start();
-                let do_time_parsing = !has_media_offset
-                    && (media_type == MediaType::Audio || media_type == MediaType::Video);
-                let response = sb.push_media_segment(metadata, do_time_parsing)?;
+                let metadata_start = metadata.time_info.start();
+                let seg_id = metadata.id;
+                let response = sb.push_media_segment(metadata)?;
+                match media_type {
+                    MediaType::Audio => self.audio_inventory.update_precise_timing(
+                        seg_id,
+                        response.precise_start(),
+                        response.precise_end(),
+                    ),
+                    MediaType::Video => self.video_inventory.update_precise_timing(
+                        seg_id,
+                        response.precise_start(),
+                        response.precise_end(),
+                    ),
+                }
                 if let Some(media_start) = response.media_start() {
                     let media_offset = media_start - metadata_start;
                     Logger::info(&format!(
                         "Setting media offset: {}",
-                        media_start - metadata_start
+                        media_start - metadata_start,
                     ));
                     self.media_offset = Some(media_offset);
                     jsSetMediaOffset(media_offset);
@@ -377,6 +400,26 @@ impl MediaElementReference {
                 }
                 Ok(())
             }
+        }
+    }
+
+    fn infer_probable_base_dts(
+        &self,
+        media_type: MediaType,
+        time_info: &SegmentTimeInfo,
+        discontinuity_sequence: u32,
+    ) -> Option<TimescaledTimestamp> {
+        match media_type {
+            MediaType::Audio => self.audio_inventory.infer_probable_base_dts(
+                time_info.start(),
+                time_info.end(),
+                discontinuity_sequence,
+            ),
+            MediaType::Video => self.video_inventory.infer_probable_base_dts(
+                time_info.start(),
+                time_info.end(),
+                discontinuity_sequence,
+            ),
         }
     }
 
@@ -534,7 +577,7 @@ impl MediaElementReference {
                 } else {
                     sb.cancel_current_operations()
                 };
-                if let Some(SourceBufferQueueElement::PushMedia((_, id))) = queue_elt {
+                if let Some(SourceBufferQueueElement::PushMedia { id, .. }) = queue_elt {
                     if let Some(media_offset) = self.media_offset {
                         self.audio_inventory.reconcile_push_result(
                             id,
@@ -553,7 +596,7 @@ impl MediaElementReference {
                 } else {
                     sb.cancel_current_operations()
                 };
-                if let Some(SourceBufferQueueElement::PushMedia((_, id))) = queue_elt {
+                if let Some(SourceBufferQueueElement::PushMedia { id, .. }) = queue_elt {
                     if let Some(media_offset) = self.media_offset {
                         self.video_inventory.reconcile_push_result(
                             id,
@@ -746,6 +789,56 @@ impl MediaElementReference {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::MediaElementReference;
+    use crate::{
+        bindings::{MediaType, TimescaledTimestamp},
+        media_element::{segment_inventory::BufferedSegmentMetadata, SegmentQualityContext},
+        parser::SegmentTimeInfo,
+    };
+
+    fn metadata(start: f64, end: f64) -> BufferedSegmentMetadata {
+        BufferedSegmentMetadata {
+            start,
+            end,
+            playlist_start: start,
+            playlist_end: end,
+            discontinuity_sequence: 0,
+            context: SegmentQualityContext::new(1.0, 1),
+        }
+    }
+
+    #[test]
+    fn infer_dts_hint_before_insert_keeps_replaced_overlap_anchor() {
+        let mut media_element = MediaElementReference::new();
+        let old_seg_id = media_element
+            .video_inventory
+            .insert_segment(metadata(10.0, 20.0));
+        media_element.video_inventory.update_precise_timing(
+            old_seg_id,
+            Some(TimescaledTimestamp::new(950_000, 90_000)),
+            Some(TimescaledTimestamp::new(1_850_000, 90_000)),
+        );
+
+        let time_info = SegmentTimeInfo::new(10.0, 10.0);
+
+        let hint_before_insert = media_element
+            .infer_probable_base_dts(MediaType::Video, &time_info, 0)
+            .expect("expected overlap anchor before replacement");
+        assert_eq!(hint_before_insert.value(), 950_000);
+        assert_eq!(hint_before_insert.timescale(), 90_000);
+
+        media_element
+            .video_inventory
+            .insert_segment(metadata(10.0, 20.0));
+
+        let hint_after_insert =
+            media_element.infer_probable_base_dts(MediaType::Video, &time_info, 0);
+        assert!(hint_after_insert.is_none());
+    }
+}
+
 use thiserror::Error;
 
 /// Error that may be returned by a `create_source_buffer` call.
@@ -825,4 +918,30 @@ fn get_buffer_gap(observation: &MediaObservation) -> Option<f64> {
         .into_iter()
         .find(|b| current_time >= b.0 && current_time < b.1);
     Some(current_buffered?.1 - current_time)
+}
+
+// Arguments required when asking to do a media segment push operation
+pub(crate) struct SegmentPushMetadata {
+    /// Raw data of the segment to push.
+    pub(crate) data: JsMemoryBlob,
+
+    /// Type of data to push
+    pub(crate) media_type: MediaType,
+
+    /// Id of the init segment linked to that segment
+    pub(crate) init_segment_id: Option<f64>,
+
+    /// Time information for that segment as sourced from the media playlist.
+    pub(crate) time_info: SegmentTimeInfo,
+
+    /// Media sequence number associated with this segment. Used to detect contiguous/non-contiguous
+    /// segments.
+    pub(crate) sequence_number: u32,
+
+    /// Discontinuity sequence (from the HLS playlist) associated with this segment.
+    /// Used to detect contiguous/non-contiguous segments or state reset from previous segment.
+    pub(super) discontinuity_sequence: u32,
+
+    /// Context from the rendition this segment is attached to
+    pub(crate) context: SegmentQualityContext,
 }

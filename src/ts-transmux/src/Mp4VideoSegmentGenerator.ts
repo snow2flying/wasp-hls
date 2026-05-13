@@ -15,9 +15,21 @@ import {
 } from "./track-utils.ts";
 import type { TrackInfo } from "./types.ts";
 
+/** Product of the `MP4VideoSegmentGenerator` */
 export interface Mp4VideoSegmentData {
+  /** Extracted information about the current video track. */
   trackInfo: TrackInfo;
+  /** Constructed video-related ISOBMFF boxes for that segment. */
   boxes: Uint8Array;
+  /** Timing metadata included in that segment. */
+  timingInfo: {
+    /** Start time, in timescale. */
+    start: number;
+    /** End time, in timescale. */
+    end: number;
+    /** The timescale used for start and end. */
+    timescale: number;
+  };
 }
 
 /**
@@ -255,9 +267,21 @@ export default class Mp4VideoSegmentGenerator {
     boxes.set(moof);
     boxes.set(mdat, moof.byteLength);
 
+    const duration = (this._trackInfo.samples ?? []).reduce(
+      (acc: number, sample: { duration: number }) => acc + sample.duration,
+      0,
+    );
     const trackInfo = { ...this._trackInfo };
     this.resetStream_();
-    return { trackInfo, boxes };
+    return {
+      trackInfo,
+      boxes,
+      timingInfo: {
+        start: trackInfo.baseMediaDecodeTime,
+        end: trackInfo.baseMediaDecodeTime + duration,
+        timescale: 90000,
+      },
+    };
   }
 
   public cancel(): void {
@@ -281,6 +305,12 @@ export default class Mp4VideoSegmentGenerator {
   public _getGopForFusion(nalUnit: ParsedNalUnit): any {
     const halfSecond = 45000; // Half-a-second in a 90khz clock
     const allowableOverlap = 10000; // About 3 frames @ 30fps
+    const baseMediaDecodeTime = calculateTrackBaseMediaDecodeTime(
+      this._trackInfo,
+      this._keepOriginalTimestamps,
+    );
+    const earliestAllowedDts =
+      this._trackInfo.minSegmentDts - baseMediaDecodeTime;
     let nearestDistance = Infinity;
     let nearestGopObj: any;
 
@@ -304,8 +334,8 @@ export default class Mp4VideoSegmentGenerator {
         return;
       }
 
-      // Reject Gops that would require a negative baseMediaDecodeTime
-      if (currentGop.dts < this._trackInfo.timelineStartInfo.dts) {
+      // Reject Gops that would require a negative baseMediaDecodeTime.
+      if (currentGop.dts < earliestAllowedDts) {
         return;
       }
 
