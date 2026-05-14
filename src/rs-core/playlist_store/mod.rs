@@ -8,7 +8,7 @@ use crate::{
     utils::url::Url,
     Logger,
 };
-use std::{cmp::Ordering, io::BufRead};
+use std::{cmp::Ordering, collections::HashMap, io::BufRead};
 
 use crate::parser::ByteRange;
 pub(crate) use crate::parser::MediaPlaylistPermanentId;
@@ -112,6 +112,9 @@ pub(crate) struct PlaylistStore {
     /// This bool is set to `true` once the currently selected media has had its support
     /// resolved.
     multivariant_support_resolved: bool,
+
+    /// Runtime support cache for variants in the current multivariant playlist.
+    variant_support: HashMap<u32, bool>,
 }
 
 impl PlaylistStore {
@@ -160,6 +163,7 @@ impl PlaylistStore {
             is_variant_locked: false,
             last_bandwidth: 0.,
             multivariant_support_resolved: false,
+            variant_support: HashMap::new(),
         })
     }
 
@@ -210,8 +214,7 @@ impl PlaylistStore {
 
         let is_multivariant_support_resolved;
 
-        // Borrow playlist immutably first to get the mutable reference after
-        let playlist = match &mut self.playlist {
+        let playlist = match &self.playlist {
             TopLevelPlaylist::Multivariant(playlist) => playlist,
             TopLevelPlaylist::DirectMedia(_) => {
                 return Ok(true);
@@ -219,9 +222,10 @@ impl PlaylistStore {
         };
 
         let mut current_variant_resolved = true;
-        'variant: for v in playlist.variants_mut().iter_mut() {
+        let mut support_updates = Vec::new();
+        'variant: for v in playlist.all_variants() {
             // If support was already determined for this variant, reuse it.
-            if v.supported().is_some() {
+            if self.variant_support(v.id()).is_some() {
                 continue;
             }
 
@@ -257,7 +261,7 @@ impl PlaylistStore {
 
                 match jsIsTypeSupported(mt, &codec) {
                     Some(false) => {
-                        v.update_support(false);
+                        support_updates.push((v.id(), false));
                         continue 'variant;
                     }
                     Some(true) => variant_is_supported = true,
@@ -271,16 +275,18 @@ impl PlaylistStore {
             }
 
             if variant_is_supported {
-                v.update_support(true);
+                support_updates.push((v.id(), true));
             } else if is_current_variant && !saw_codec {
                 current_variant_resolved = false;
             }
         }
 
+        support_updates
+            .into_iter()
+            .for_each(|(variant_id, supported)| self.set_variant_support(variant_id, supported));
+
         let curr_variant_id = self.curr_variant_id.unwrap();
-        let curr_variant_support = playlist
-            .variant(curr_variant_id)
-            .and_then(|v| v.supported());
+        let curr_variant_support = self.variant_support(curr_variant_id);
 
         if curr_variant_support == Some(false) {
             if let Some(variant_id) = self.next_best_variant_id() {
@@ -579,7 +585,7 @@ impl PlaylistStore {
             TopLevelPlaylist::Multivariant(playlist) => playlist
                 .all_variants()
                 .iter()
-                .filter(|v| v.supported() != Some(false))
+                .filter(|v| self.variant_support(v.id()) != Some(false))
                 .collect(),
             TopLevelPlaylist::DirectMedia(_) => vec![],
         }
@@ -588,7 +594,11 @@ impl PlaylistStore {
     /// Returns vec describing all available variant streams in the current MultivariantPlaylist.
     pub(crate) fn supported_variants(&self) -> Vec<&VariantStream> {
         match &self.playlist {
-            TopLevelPlaylist::Multivariant(playlist) => playlist.supported_variants(),
+            TopLevelPlaylist::Multivariant(playlist) => playlist
+                .all_variants()
+                .iter()
+                .filter(|v| self.variant_support(v.id()) == Some(true))
+                .collect(),
             TopLevelPlaylist::DirectMedia(_) => vec![],
         }
     }
@@ -602,21 +612,21 @@ impl PlaylistStore {
                     playlist
                         .variants_for_audio(track_id)
                         .into_iter()
-                        .filter(|v| v.supported() != Some(false))
+                        .filter(|v| self.variant_support(v.id()) != Some(false))
                         .collect()
                 } else if let Some(track_id) = self.curr_audio_track_id() {
                     // Else do in function of the current audio track
                     playlist
                         .variants_for_audio(track_id)
                         .into_iter()
-                        .filter(|v| v.supported() != Some(false))
+                        .filter(|v| self.variant_support(v.id()) != Some(false))
                         .collect()
                 } else {
                     // No current audio track: choose from anything
                     playlist
                         .all_variants()
                         .iter()
-                        .filter(|v| v.supported() != Some(false))
+                        .filter(|v| self.variant_support(v.id()) != Some(false))
                         .collect()
                 }
             }
@@ -1041,13 +1051,10 @@ impl PlaylistStore {
     }
 
     fn clear_variant_supports(&mut self) {
-        let TopLevelPlaylist::Multivariant(playlist) = &mut self.playlist else {
+        let TopLevelPlaylist::Multivariant(_) = &self.playlist else {
             return;
         };
-        playlist
-            .variants_mut()
-            .iter_mut()
-            .for_each(VariantStream::clear_support);
+        self.variant_support.clear();
         self.multivariant_support_resolved = false;
     }
 
@@ -1060,6 +1067,14 @@ impl PlaylistStore {
         } else {
             fallback_variant_id(self.selectable_variants_for_curr_track().into_iter())
         }
+    }
+
+    fn variant_support(&self, variant_id: u32) -> Option<bool> {
+        self.variant_support.get(&variant_id).copied()
+    }
+
+    fn set_variant_support(&mut self, variant_id: u32, supported: bool) {
+        self.variant_support.insert(variant_id, supported);
     }
 }
 

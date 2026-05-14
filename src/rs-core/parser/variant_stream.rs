@@ -176,8 +176,6 @@ pub struct VariantStream {
     /// Pathway.
     pathway_id: Option<String>,
 
-    supported: Option<bool>,
-
     context: Option<MediaPlaylistContext>,
     // TODO
     // ALLOWED-CPC
@@ -231,18 +229,6 @@ pub enum VariantParsingError {
 }
 
 impl VariantStream {
-    pub(crate) fn supported(&self) -> Option<bool> {
-        self.supported
-    }
-
-    pub(crate) fn update_support(&mut self, supported: bool) {
-        self.supported = Some(supported);
-    }
-
-    pub(crate) fn clear_support(&mut self) {
-        self.supported = None;
-    }
-
     pub(crate) fn has_type(&self, media_type: MediaType) -> bool {
         if self.codecs.len() == 0 {
             // No codec listed => Assume there's video for now
@@ -540,7 +526,6 @@ impl VariantStream {
                 video,
                 video_range,
                 context: None,
-                supported: None,
             })
         } else {
             Err(VariantParsingError::MissingBandwidth)
