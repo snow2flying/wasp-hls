@@ -630,7 +630,7 @@ impl Dispatcher {
                         // TODO: ugly
                         let direct_media_refresh = pl_store
                             .direct_media_playlist()
-                            .map(|(id, playlist)| (id.clone(), playlist.refresh_interval()));
+                            .map(|(id, playlist)| (*id, playlist.refresh_interval()));
 
                         self.playlist_store = Some(pl_store);
                         if let Some((playlist_id, refresh_interval)) = direct_media_refresh {
@@ -654,7 +654,7 @@ impl Dispatcher {
         refresh_interval: Option<f64>,
     ) {
         self.playlist_refresh_timers
-            .set_timer(playlist_id.clone(), refresh_interval);
+            .set_timer(playlist_id, refresh_interval);
 
         let Some(playlist_store) = self.playlist_store.as_ref() else {
             return;
@@ -904,7 +904,7 @@ impl Dispatcher {
                 if pl_store.curr_media_playlist(mt).is_some() {
                     None
                 } else {
-                    let id = pl_store.curr_media_playlist_id(mt)?.clone();
+                    let id = *pl_store.curr_media_playlist_id(mt)?;
                     let url = pl_store.media_playlist_url(&id)?.clone();
                     Some((id, url))
                 }

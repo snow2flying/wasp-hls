@@ -509,7 +509,7 @@ impl PlaylistStore {
     pub(crate) fn set_direct_media_info(&mut self, media_info: DirectMediaInfo) {
         match &mut self.playlist {
             TopLevelPlaylist::DirectMedia(playlist) => {
-                let direct_media_id = playlist.id().clone();
+                let direct_media_id = *playlist.id();
                 match media_info.media_type {
                     MediaType::Audio => {
                         self.curr_audio_id = Some(direct_media_id);
@@ -540,10 +540,7 @@ impl PlaylistStore {
         let Some(wanted_id) = wanted_id else {
             return;
         };
-        let entry = self
-            .multivariant_media_info
-            .entry(wanted_id.clone())
-            .or_default();
+        let entry = self.multivariant_media_info.entry(*wanted_id).or_default();
         match media_type {
             MediaType::Audio => entry.audio = Some(media_info),
             MediaType::Video => entry.video = Some(media_info),
@@ -1036,8 +1033,8 @@ impl PlaylistStore {
         if Some(new_id) != self.curr_variant_id {
             let prev_bandwidth = self.curr_variant().map(|v| v.bandwidth());
             let new_bandwidth = playlist.variant(new_id).map(|v| v.bandwidth());
-            let prev_audio_id = self.curr_audio_id.clone();
-            let prev_video_id = self.curr_video_id.clone();
+            let prev_audio_id = self.curr_audio_id;
+            let prev_video_id = self.curr_video_id;
             self.set_curr_variant_and_media_id(new_id.to_owned());
 
             let mut updates = vec![];
@@ -1082,8 +1079,8 @@ impl PlaylistStore {
     }
 
     pub(crate) fn switch_startup_variant(&mut self, variant_id: u32) -> Vec<MediaType> {
-        let prev_audio_id = self.curr_audio_id.clone();
-        let prev_video_id = self.curr_video_id.clone();
+        let prev_audio_id = self.curr_audio_id;
+        let prev_video_id = self.curr_video_id;
         self.set_curr_variant_and_media_id(variant_id);
 
         let mut changed_media_types = Vec::new();
@@ -1296,7 +1293,10 @@ seg.ts
             },
         );
 
-        assert_eq!(store.current_codec(MediaType::Audio).as_deref(), Some("mp4a.40.2"));
+        assert_eq!(
+            store.current_codec(MediaType::Audio).as_deref(),
+            Some("mp4a.40.2")
+        );
         assert_eq!(store.current_codec(MediaType::Video), None);
         match store.startup_status(0.).unwrap() {
             StartupStatus::NeedsProbes(probes) => {

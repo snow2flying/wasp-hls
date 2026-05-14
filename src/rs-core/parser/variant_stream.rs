@@ -230,7 +230,7 @@ pub enum VariantParsingError {
 
 impl VariantStream {
     pub(crate) fn has_type(&self, media_type: MediaType) -> bool {
-        if self.codecs.len() == 0 {
+        if self.codecs.is_empty() {
             // No codec listed => Assume there's video for now
             media_type == MediaType::Video
         } else {

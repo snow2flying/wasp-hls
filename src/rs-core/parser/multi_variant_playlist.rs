@@ -669,7 +669,7 @@ impl From<MediaPlaylistParsingError> for MediaPlaylistUpdateError {
 }
 
 /// Identifier allowing to identify a given MediaPlaylist
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct MediaPlaylistPermanentId {
     location: MediaPlaylistUrlLocation,
     id: u32,
