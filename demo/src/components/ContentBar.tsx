@@ -91,16 +91,16 @@ export default React.memo(function ContentBar({
 
 const DEFAULT_CONTENT_LIST = [
   {
-    name: "Angel One (fmp4, multi-audio, multi-variants)",
+    name: "Angel One (fmp4, multi-audio, ABR)",
     url: "https://storage.googleapis.com/shaka-demo-assets/angel-one-hls/hls.m3u8",
   },
   {
-    name: "Big Buck Bunny (mpeg-ts, multi-variants, 10s segments)",
+    name: "Big Buck Bunny (mpeg-ts, ABR, 10s segments)",
     url: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
   },
   {
-    name: "HLS Bitmovin (fmp4, multi-variants, 4s segments)",
-    url: "https://bitdash-a.akamaihd.net/content/MI201109210084_1/m3u8s-fmp4/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.m3u8",
+    name: "China documentary Arte (mpeg-ts, ABR, no playlist codec)",
+    url: "https://test-streams.mux.dev/test_001/stream.m3u8",
   },
 ];
 
