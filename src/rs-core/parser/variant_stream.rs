@@ -239,6 +239,10 @@ impl VariantStream {
         self.supported = Some(supported);
     }
 
+    pub(crate) fn clear_support(&mut self) {
+        self.supported = None;
+    }
+
     pub(crate) fn has_type(&self, media_type: MediaType) -> bool {
         if self.codecs.len() == 0 {
             // No codec listed => Assume there's video for now

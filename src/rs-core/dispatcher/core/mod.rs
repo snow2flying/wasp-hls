@@ -199,7 +199,9 @@ impl Dispatcher {
                 status,
             } => {
                 let req_ctxt = self.segment_request_contexts.take(s.id());
-                if let Some(media_type) = req_ctxt.as_ref().and_then(|ctxt| ctxt.requested_media_type())
+                if let Some(media_type) = req_ctxt
+                    .as_ref()
+                    .and_then(|ctxt| ctxt.requested_media_type())
                 {
                     self.ready_probe_segments.clear_media_type(media_type);
                 }
@@ -457,6 +459,16 @@ impl Dispatcher {
     /// be requested (when a request finished, when a media playlist has been updated, when the
     /// playhead advances etc.).
     pub(super) fn check_segments_to_request(&mut self) {
+        if self
+            .playlist_store
+            .as_ref()
+            .is_some_and(|pl_store| !pl_store.are_playlists_ready())
+        {
+            return;
+        }
+        if !startup::ensure_current_streams_ready(self, self.media_element_ref.wanted_position()) {
+            return;
+        }
         let was_already_locked = self.requester.lock_segment_requests();
         [MediaType::Video, MediaType::Audio]
             .into_iter()

@@ -1,6 +1,6 @@
 use crate::{
-    bindings::MediaType,
     adaptive::AdaptiveQualitySelector,
+    bindings::MediaType,
     dispatcher::playlist_refresh_timers::PlaylistRefreshTimers,
     media_element::MediaElementReference,
     playlist_store::{PlaylistStore, ProbeSegmentMetadata},

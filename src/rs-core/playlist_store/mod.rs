@@ -109,8 +109,8 @@ pub(crate) struct PlaylistStore {
     /// Before actually playing a multivariant content, supported codecs need to be checked
     /// to avoid mistakenly choosing an unsupported variant.
     ///
-    /// This bool is set to `true` only once ALL variants in the
-    /// `MultivariantPlaylist` have had their support resolved.
+    /// This bool is set to `true` once the currently selected media has had its support
+    /// resolved.
     multivariant_support_resolved: bool,
 }
 
@@ -129,6 +129,7 @@ impl PlaylistStore {
         let (curr_variant_id, curr_audio_id, curr_video_id) = match &playlist {
             TopLevelPlaylist::Multivariant(playlist) => {
                 let variants = playlist.all_variants();
+
                 let initial_variant = if let Some(variant_id) =
                     best_variant_id(variants.iter(), initial_bandwidth)
                 {
@@ -140,6 +141,7 @@ impl PlaylistStore {
                     Logger::error("PS: Found no variant in the given MultivariantPlaylist");
                     return Err(PlaylistStoreError::NoInitialVariant);
                 };
+
                 (
                     Some(initial_variant.id()),
                     playlist.audio_media_playlist_id_for(initial_variant, None),
@@ -216,7 +218,7 @@ impl PlaylistStore {
             }
         };
 
-        let mut all_resolved = true;
+        let mut current_variant_resolved = true;
         'variant: for v in playlist.variants_mut().iter_mut() {
             // If support was already determined for this variant, reuse it.
             if v.supported().is_some() {
@@ -246,7 +248,7 @@ impl PlaylistStore {
                             MediaType::Video => curr_video_required,
                         };
                     if media_required {
-                        all_resolved = false;
+                        current_variant_resolved = false;
                         continue 'variant;
                     }
                     continue;
@@ -260,7 +262,9 @@ impl PlaylistStore {
                     }
                     Some(true) => variant_is_supported = true,
                     None => {
-                        all_resolved = false;
+                        if is_current_variant {
+                            current_variant_resolved = false;
+                        }
                         continue 'variant;
                     }
                 }
@@ -268,35 +272,38 @@ impl PlaylistStore {
 
             if variant_is_supported {
                 v.update_support(true);
-            } else if !saw_codec {
-                all_resolved = false;
+            } else if is_current_variant && !saw_codec {
+                current_variant_resolved = false;
             }
         }
 
-        // If any variant returned None, multi-variant support is not yet resolved.
-        is_multivariant_support_resolved = all_resolved;
+        let curr_variant_id = self.curr_variant_id.unwrap();
+        let curr_variant_support = playlist
+            .variant(curr_variant_id)
+            .and_then(|v| v.supported());
+
+        if curr_variant_support == Some(false) {
+            if let Some(variant_id) = self.next_best_variant_id() {
+                // XXX TODO: No variantUpdate event triggered when we do that here... We should
+                // probably return the issue to the dispatcher instead?
+                self.set_curr_variant_and_media_id(variant_id);
+                self.multivariant_support_resolved = false;
+                return Ok(false);
+            } else {
+                Logger::error("PS: No supported variant in the given MultivariantPlaylist");
+                return Err(PlaylistStoreError::NoSupportedVariant);
+            }
+        }
+
+        is_multivariant_support_resolved =
+            current_variant_resolved && curr_variant_support == Some(true);
 
         self.multivariant_support_resolved = is_multivariant_support_resolved;
 
         if is_multivariant_support_resolved {
-            Logger::info("PS: Support has been resolved for all multivariant variants");
-            let curr_variant_id = self.curr_variant_id.unwrap();
-            let curr_variant_still_here = playlist
-                .supported_variants()
-                .iter()
-                .any(|v| v.id() == curr_variant_id);
-
-            if !curr_variant_still_here {
-                let new_variant_id = playlist.supported_variants().first().map(|v| v.id());
-                if let Some(variant_id) = new_variant_id {
-                    self.set_curr_variant_and_media_id(variant_id);
-                } else {
-                    Logger::error("PS: No supported variant in the given MultivariantPlaylist");
-                    return Err(PlaylistStoreError::NoSupportedVariant);
-                }
-            }
+            Logger::info("PS: Support has been resolved for the current multivariant startup path");
         } else {
-            Logger::info("PS: Some multivariant variants still need asynchronous support checks");
+            Logger::info("PS: Current multivariant startup path still needs support resolution");
         }
         Ok(is_multivariant_support_resolved)
     }
@@ -565,6 +572,19 @@ impl PlaylistStore {
         }
     }
 
+    /// Returns vec describing all variant streams in the current `MultivariantPlaylist`,
+    /// excluding variants known to be unsupported.
+    pub(crate) fn available_variants(&self) -> Vec<&VariantStream> {
+        match &self.playlist {
+            TopLevelPlaylist::Multivariant(playlist) => playlist
+                .all_variants()
+                .iter()
+                .filter(|v| v.supported() != Some(false))
+                .collect(),
+            TopLevelPlaylist::DirectMedia(_) => vec![],
+        }
+    }
+
     /// Returns vec describing all available variant streams in the current MultivariantPlaylist.
     pub(crate) fn supported_variants(&self) -> Vec<&VariantStream> {
         match &self.playlist {
@@ -573,16 +593,31 @@ impl PlaylistStore {
         }
     }
 
-    /// Returns vec describing all available variant streams in the current MultivariantPlaylist.
-    pub(crate) fn variants_for_curr_track(&self) -> Vec<&VariantStream> {
+    /// Returns vec describing all non-rejected variants compatible with the current track choice.
+    fn selectable_variants_for_curr_track(&self) -> Vec<&VariantStream> {
         match &self.playlist {
             TopLevelPlaylist::Multivariant(playlist) => {
                 if let Some(track_id) = self.curr_audio_track {
-                    playlist.supported_variants_for_audio(track_id)
+                    // There's an explicitly set audio track id, get variants linked to it
+                    playlist
+                        .variants_for_audio(track_id)
+                        .into_iter()
+                        .filter(|v| v.supported() != Some(false))
+                        .collect()
                 } else if let Some(track_id) = self.curr_audio_track_id() {
-                    playlist.supported_variants_for_audio(track_id)
+                    // Else do in function of the current audio track
+                    playlist
+                        .variants_for_audio(track_id)
+                        .into_iter()
+                        .filter(|v| v.supported() != Some(false))
+                        .collect()
                 } else {
-                    playlist.supported_variants()
+                    // No current audio track: choose from anything
+                    playlist
+                        .all_variants()
+                        .iter()
+                        .filter(|v| v.supported() != Some(false))
+                        .collect()
                 }
             }
             TopLevelPlaylist::DirectMedia(_) => vec![],
@@ -695,7 +730,7 @@ impl PlaylistStore {
         if self.curr_variant_id.is_none() {
             return LockVariantResponse::NoVariantWithId;
         }
-        let variants = self.supported_variants();
+        let variants = self.selectable_variants_for_curr_track();
         let pos = variants.iter().find(|x| x.id() == variant_id);
 
         if pos.is_some() {
@@ -911,6 +946,7 @@ impl PlaylistStore {
             return SetAudioTrackResponse::NoUpdate;
         }
         self.curr_audio_track = track_id;
+        self.clear_variant_supports();
 
         if let Some(variant) = self.curr_variant() {
             let new_audio_id = match &self.playlist {
@@ -950,13 +986,14 @@ impl PlaylistStore {
         let new_id = if let Some(id) = variant_id {
             id
         } else {
-            let wanted_variants = self.variants_for_curr_track();
+            let wanted_variants = self.selectable_variants_for_curr_track();
             if let Some(id) = best_variant_id(wanted_variants.into_iter(), self.last_bandwidth) {
                 id
-            } else if let Some(id) = fallback_variant_id(self.variants_for_curr_track().into_iter())
+            } else if let Some(id) =
+                fallback_variant_id(self.selectable_variants_for_curr_track().into_iter())
             {
                 Logger::info(
-                    "PS: Found no bandwidth-compatible variant amongst supported variants",
+                    "PS: Found no bandwidth-compatible variant amongst selectable variants",
                 );
                 id
             } else {
@@ -1000,6 +1037,29 @@ impl PlaylistStore {
         self.curr_variant_id = Some(variant_id);
         self.curr_video_id = playlist.video_media_playlist_id_for(variant);
         self.curr_audio_id = playlist.audio_media_playlist_id_for(variant, self.curr_audio_track);
+        self.multivariant_support_resolved = false;
+    }
+
+    fn clear_variant_supports(&mut self) {
+        let TopLevelPlaylist::Multivariant(playlist) = &mut self.playlist else {
+            return;
+        };
+        playlist
+            .variants_mut()
+            .iter_mut()
+            .for_each(VariantStream::clear_support);
+        self.multivariant_support_resolved = false;
+    }
+
+    fn next_best_variant_id(&self) -> Option<u32> {
+        if let Some(id) = best_variant_id(
+            self.selectable_variants_for_curr_track().into_iter(),
+            self.last_bandwidth,
+        ) {
+            Some(id)
+        } else {
+            fallback_variant_id(self.selectable_variants_for_curr_track().into_iter())
+        }
     }
 }
 
