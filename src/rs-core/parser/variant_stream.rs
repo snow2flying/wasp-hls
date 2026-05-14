@@ -240,9 +240,14 @@ impl VariantStream {
     }
 
     pub(crate) fn has_type(&self, media_type: MediaType) -> bool {
-        self.codecs
-            .iter()
-            .any(|c| matches!(c.0, Some(x) if x == media_type))
+        if self.codecs.len() == 0 {
+            // No codec listed => Assume there's video for now
+            media_type == MediaType::Video
+        } else {
+            self.codecs
+                .iter()
+                .any(|c| matches!(c.0, Some(x) if x == media_type))
+        }
     }
 
     pub(crate) fn codecs(&self, media_type: MediaType) -> Option<String> {
