@@ -76,12 +76,6 @@ enum MultivariantStartupStatus {
     Ready,
 }
 
-#[derive(Default)]
-struct ProbedMediaInfo {
-    audio: Option<DirectMediaInfo>,
-    video: Option<DirectMediaInfo>,
-}
-
 /// Stores information about the current loaded Multivariant Playlist and its sub-playlists:
 ///   - Information on the Multivariant Playlist itself.
 ///   - On the current variant selected.
@@ -132,10 +126,7 @@ pub(crate) struct PlaylistStore {
     variant_support: HashMap<u32, bool>,
 
     /// Probe metadata inferred for currently known multivariant media playlists.
-    /// XXX TODO: If it's per-media playlist, why would it be needed to separate audio and
-    /// video? Aren't both in the same segment anyway? In that case, isn't `isTypeSupported` and
-    /// `addSourceBuffer` supposed to accept both at once?
-    multivariant_media_info: HashMap<MediaPlaylistPermanentId, ProbedMediaInfo>,
+    multivariant_media_info: HashMap<MediaPlaylistPermanentId, DirectMediaInfo>,
 }
 
 impl PlaylistStore {
@@ -544,11 +535,7 @@ impl PlaylistStore {
         let Some(wanted_id) = wanted_id else {
             return;
         };
-        let entry = self.multivariant_media_info.entry(*wanted_id).or_default();
-        match media_type {
-            MediaType::Audio => entry.audio = Some(media_info),
-            MediaType::Video => entry.video = Some(media_info),
-        }
+        self.multivariant_media_info.insert(*wanted_id, media_info);
     }
 
     /// Returns probe segment metadata for a direct Media Playlist associated to
@@ -1118,11 +1105,7 @@ impl PlaylistStore {
 
     fn curr_multivariant_media_info(&self, media_type: MediaType) -> Option<&DirectMediaInfo> {
         let playlist_id = self.curr_media_playlist_id(media_type)?;
-        let info = self.multivariant_media_info.get(playlist_id)?;
-        match media_type {
-            MediaType::Audio => info.audio.as_ref(),
-            MediaType::Video => info.video.as_ref(),
-        }
+        self.multivariant_media_info.get(playlist_id)
     }
 }
 
@@ -1246,7 +1229,7 @@ pub(crate) enum PlaylistStoreError {
 
 #[cfg(test)]
 mod tests {
-    use super::{PlaylistStore, StartupStatus};
+    use super::PlaylistStore;
     use crate::{
         bindings::MediaType,
         parser::{DirectMediaInfo, TopLevelPlaylist},
@@ -1258,7 +1241,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_multivariant_playlist_keeps_probe_metadata_per_media_type() {
+    fn shared_multivariant_playlist_reuses_probe_metadata_for_both_media_types() {
         let multivariant = r#"#EXTM3U
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="Main",DEFAULT=YES,AUTOSELECT=YES
 #EXT-X-STREAM-INF:BANDWIDTH=1000,AUDIO="aud"
@@ -1301,13 +1284,9 @@ seg.ts
             store.current_codec(MediaType::Audio).as_deref(),
             Some("mp4a.40.2")
         );
-        assert_eq!(store.current_codec(MediaType::Video), None);
-        match store.startup_status(0.).unwrap() {
-            StartupStatus::NeedsProbes(probes) => {
-                assert_eq!(probes.len(), 1);
-                assert_eq!(probes[0].1, Some(MediaType::Video));
-            }
-            _ => panic!("expected a remaining video probe"),
-        }
+        assert_eq!(
+            store.current_codec(MediaType::Video).as_deref(),
+            Some("mp4a.40.2")
+        );
     }
 }
