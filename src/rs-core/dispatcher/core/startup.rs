@@ -38,19 +38,11 @@ impl Dispatcher {
     }
 
     pub(super) fn ready_to_load_segments(&mut self) -> bool {
-        if self
-            .playlist_store
-            .as_ref()
-            .is_some_and(|pl_store| !pl_store.are_playlists_ready())
-        {
-            false // Playlist(s) not yet fetched
-        } else {
-            ensure_ready_playlist_store(self, self.media_element_ref.wanted_position())
-        }
+        ensure_ready_playlists(self, self.media_element_ref.wanted_position())
     }
 }
 
-fn ensure_ready_playlist_store(dispatcher: &mut Dispatcher, wanted_position: f64) -> bool {
+fn ensure_ready_playlists(dispatcher: &mut Dispatcher, wanted_position: f64) -> bool {
     let Some(playlist_store) = dispatcher.playlist_store.as_mut() else {
         return false;
     };
@@ -65,6 +57,7 @@ fn ensure_ready_playlist_store(dispatcher: &mut Dispatcher, wanted_position: f64
 
     match status {
         StartupStatus::Ready => true,
+        StartupStatus::AwaitingPlaylists => false,
         StartupStatus::AwaitingSupportCheck => false,
         StartupStatus::VariantSwitchNeeded { variant_id } => {
             jsAnnounceVariantUpdate(Some(variant_id));
@@ -106,88 +99,79 @@ fn advance_awaiting_playlist_info_state(dispatcher: &mut Dispatcher) {
         _ => return,
     };
 
-    let (wanted_position, are_playlists_ready) = {
-        let Some(playlist_store) = dispatcher.playlist_store.as_mut() else {
-            return;
-        };
-        let wanted_position = utils::get_initial_position(playlist_store, starting_position);
-
-        // Start fetching initial media playlists if needed
-        for mt in [MediaType::Video, MediaType::Audio] {
-            if playlist_store.curr_media_playlist(mt).is_some() {
-                continue; // Already fetched
-            }
-            if let Some(id) = playlist_store.curr_media_playlist_id(mt) {
-                if let Some(url) = playlist_store.media_playlist_url(id) {
-                    let url = url.clone();
-                    dispatcher.requester.fetch_playlist(
-                        url,
-                        PlaylistFileType::MediaPlaylist {
-                            id: *id,
-                            media_type: mt,
-                        },
-                    );
-                }
-            }
-        }
-
-        // Now "Announce" lifecycle events if needed
-
-        // SAFETY: The following lines are unsafe because they may actually define raw pointers
-        // to point to Rust's heap memory and put it in the returned values.
-        //
-        // However, we're calling the JS binding function it is communicated to directly
-        // after and thus before the corresponding underlying data had a chance to be
-        // dropped.
-        //
-        // Because one of the rules of those bindings is to copy all pointed data
-        // synchronously on call, we should not encounter any issue.
-        let (variants_info, audio_tracks_info) =
-            if playlist_store.playlist_kind() == PlaylistType::MediaPlaylist {
-                let has_audio_track = playlist_store.has_media_type(MediaType::Audio);
-                (
-                    unsafe { format_direct_media_variants_info_for_js() },
-                    unsafe { format_direct_media_audio_tracks_for_js(has_audio_track) },
-                )
-            } else {
-                (
-                    unsafe {
-                        format_variants_info_for_js(playlist_store.available_variants().as_slice())
-                    },
-                    unsafe { format_audio_tracks_for_js(playlist_store.audio_tracks()) },
-                )
-            };
-        let selected_audio_track = playlist_store.selected_audio_track_id();
-        let is_selected = selected_audio_track.is_some();
-        let curr_audio_track = if let Some(selected) = selected_audio_track {
-            Some(selected)
-        } else if playlist_store.playlist_kind() == PlaylistType::MediaPlaylist
-            && playlist_store.has_media_type(MediaType::Audio)
-        {
-            Some(DIRECT_MEDIA_AUDIO_TRACK_ID)
-        } else {
-            playlist_store.curr_audio_track_id()
-        };
-        let curr_variant = if playlist_store.playlist_kind() == PlaylistType::MediaPlaylist {
-            Some(DIRECT_MEDIA_VARIANT_ID)
-        } else {
-            playlist_store.curr_variant().map(|v| v.id())
-        };
-        let playlist_kind = playlist_store.playlist_kind();
-        let are_playlists_ready = playlist_store.are_playlists_ready();
-
-        jsAnnounceFetchedContent(playlist_kind, variants_info, audio_tracks_info);
-        jsAnnounceVariantUpdate(curr_variant);
-        jsAnnounceTrackUpdate(MediaType::Audio, curr_audio_track, is_selected);
-
-        (wanted_position, are_playlists_ready)
+    let Some(playlist_store) = dispatcher.playlist_store.as_mut() else {
+        return;
     };
 
-    if !are_playlists_ready {
-        return;
+    let wanted_position = utils::get_initial_position(playlist_store, starting_position);
+
+    // Start fetching initial media playlists if needed
+    for mt in [MediaType::Video, MediaType::Audio] {
+        if playlist_store.curr_media_playlist(mt).is_some() {
+            continue; // Already fetched
+        }
+        if let Some(id) = playlist_store.curr_media_playlist_id(mt) {
+            if let Some(url) = playlist_store.media_playlist_url(id) {
+                let url = url.clone();
+                dispatcher.requester.fetch_playlist(
+                    url,
+                    PlaylistFileType::MediaPlaylist {
+                        id: *id,
+                        media_type: mt,
+                    },
+                );
+            }
+        }
     }
 
-    if !ensure_ready_playlist_store(dispatcher, wanted_position) {
+    // Now "Announce" lifecycle events if needed
+
+    // SAFETY: The following lines are unsafe because they may actually define raw pointers
+    // to point to Rust's heap memory and put it in the returned values.
+    //
+    // However, we're calling the JS binding function it is communicated to directly
+    // after and thus before the corresponding underlying data had a chance to be
+    // dropped.
+    //
+    // Because one of the rules of those bindings is to copy all pointed data
+    // synchronously on call, we should not encounter any issue.
+    let (variants_info, audio_tracks_info) = if playlist_store.playlist_kind()
+        == PlaylistType::MediaPlaylist
+    {
+        let has_audio_track = playlist_store.has_media_type(MediaType::Audio);
+        (
+            unsafe { format_direct_media_variants_info_for_js() },
+            unsafe { format_direct_media_audio_tracks_for_js(has_audio_track) },
+        )
+    } else {
+        (
+            unsafe { format_variants_info_for_js(playlist_store.available_variants().as_slice()) },
+            unsafe { format_audio_tracks_for_js(playlist_store.audio_tracks()) },
+        )
+    };
+    let selected_audio_track = playlist_store.selected_audio_track_id();
+    let is_selected = selected_audio_track.is_some();
+    let curr_audio_track = if let Some(selected) = selected_audio_track {
+        Some(selected)
+    } else if playlist_store.playlist_kind() == PlaylistType::MediaPlaylist
+        && playlist_store.has_media_type(MediaType::Audio)
+    {
+        Some(DIRECT_MEDIA_AUDIO_TRACK_ID)
+    } else {
+        playlist_store.curr_audio_track_id()
+    };
+    let curr_variant = if playlist_store.playlist_kind() == PlaylistType::MediaPlaylist {
+        Some(DIRECT_MEDIA_VARIANT_ID)
+    } else {
+        playlist_store.curr_variant().map(|v| v.id())
+    };
+    let playlist_kind = playlist_store.playlist_kind();
+
+    jsAnnounceFetchedContent(playlist_kind, variants_info, audio_tracks_info);
+    jsAnnounceVariantUpdate(curr_variant);
+    jsAnnounceTrackUpdate(MediaType::Audio, curr_audio_track, is_selected);
+
+    if !ensure_ready_playlists(dispatcher, wanted_position) {
         return;
     }
 

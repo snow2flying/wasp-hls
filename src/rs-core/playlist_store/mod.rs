@@ -46,6 +46,12 @@ pub(crate) enum ProbeSegmentContext {
 /// playlists are supported, which can necessitate a segment request and other async API
 /// calls.
 pub(crate) enum StartupStatus {
+    /// The currently selected startup variant is unsupported and another one should be selected.
+    VariantSwitchNeeded { variant_id: u32 },
+    /// The currently-selected media playlists are not all loaded yet.
+    /// TODO: Allow segment fetching for already loaded playlists even if the other one
+    /// is still pending?
+    AwaitingPlaylists,
     /// A "probe segment" must be loaded and inspected for supplementary
     /// playlist information before playback can start.
     ///
@@ -60,12 +66,11 @@ pub(crate) enum StartupStatus {
     /// - `None` if the `MediaType` isn't known or is not important (e.g. Direct Media
     ///   Playlist cases)
     NeedsProbes(Vec<(ProbeSegmentMetadata, Option<MediaType>)>),
-    /// Codecs are currently in their way to be checked by the platform.
+    /// Codecs linked to the contents are known but are currently in their way to be
+    /// checked by the platform.
     ///
     /// Once known, it should be communicated back to the `PlaylistStore`.
     AwaitingSupportCheck,
-    /// The currently selected startup variant is unsupported and another one should be selected.
-    VariantSwitchNeeded { variant_id: u32 },
     /// The top level playlist can now be fully exploited for playback.
     Ready,
 }
@@ -379,13 +384,6 @@ impl PlaylistStore {
         self.curr_media_playlist(media_type).is_some()
     }
 
-    /// Returns `true` only if all media playlists currently selected have been loaded.
-    pub(crate) fn are_playlists_ready(&self) -> bool {
-        [MediaType::Audio, MediaType::Video]
-            .into_iter()
-            .all(|t| !self.has_media_type(t) || self.is_media_playlist_ready(t))
-    }
-
     /// Returns true if a MediaPlaylist for the given `MediaType` has been selected, regardless if
     /// that playlist has been loaded or not.
     pub(crate) fn has_media_type(&self, media_type: MediaType) -> bool {
@@ -471,6 +469,15 @@ impl PlaylistStore {
                 }
             }
             TopLevelPlaylist::Multivariant(_) => {
+                if [MediaType::Audio, MediaType::Video]
+                    .into_iter()
+                    .any(|media_type| {
+                        self.has_media_type(media_type)
+                            && self.curr_media_playlist(media_type).is_none()
+                    })
+                {
+                    return Ok(StartupStatus::AwaitingPlaylists);
+                }
                 let probe_requests = [MediaType::Audio, MediaType::Video]
                     .into_iter()
                     .filter(|media_type| {
@@ -1117,6 +1124,7 @@ impl PlaylistStore {
         self.variant_support.insert(variant_id, supported);
     }
 
+    // TODO: This method is kind of ugly. Better handle muxed Audio/Video identifiers
     fn normalize_selected_media_ids(
         audio_id: Option<MediaPlaylistPermanentId>,
         video_id: Option<MediaPlaylistPermanentId>,
@@ -1250,14 +1258,13 @@ pub(crate) enum PlaylistStoreError {
     NoInitialVariant,
     #[error("No probe segment was available to determine startup metadata")]
     NoProbeSegment,
-    // XXX TODO: We deleted MissingSelectedStreamMetadata. See if that broke the API contract
     #[error("No supported startup stream was found for the current content")]
     UnsupportedStartupStream,
 }
 
 #[cfg(test)]
 mod tests {
-    use super::PlaylistStore;
+    use super::{PlaylistStore, PlaylistStoreError, StartupStatus};
     use crate::{
         bindings::MediaType,
         parser::{ExternalMediaInfo, TopLevelPlaylist},
@@ -1311,5 +1318,59 @@ seg.ts
             store.current_codec(MediaType::Video).as_deref(),
             Some("avc1.4d401e,mp4a.40.2")
         );
+    }
+
+    #[test]
+    fn startup_status_waits_for_selected_multivariant_playlists_to_load() {
+        let multivariant = r#"#EXTM3U
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="Main",DEFAULT=YES,AUTOSELECT=YES,URI="audio.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=1000,AUDIO="aud"
+video.m3u8
+"#;
+
+        let playlist = TopLevelPlaylist::parse(
+            multivariant.as_bytes(),
+            parse_url("https://example.com/master.m3u8"),
+        )
+        .unwrap();
+        let mut store = PlaylistStore::try_new(playlist, 10_000.).unwrap();
+
+        assert!(store.curr_media_playlist_id(MediaType::Audio).is_some());
+        assert!(store.curr_media_playlist_id(MediaType::Video).is_some());
+        assert!(matches!(
+            store.startup_status(0.),
+            Ok(StartupStatus::AwaitingPlaylists)
+        ));
+    }
+
+    #[test]
+    fn startup_status_errors_when_loaded_multivariant_playlist_has_no_probe_segment() {
+        let multivariant = r#"#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+video.m3u8
+"#;
+        let empty_media = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+"#;
+
+        let playlist = TopLevelPlaylist::parse(
+            multivariant.as_bytes(),
+            parse_url("https://example.com/master.m3u8"),
+        )
+        .unwrap();
+        let mut store = PlaylistStore::try_new(playlist, 10_000.).unwrap();
+        let video_id = *store.curr_media_playlist_id(MediaType::Video).unwrap();
+        store
+            .update_media_playlist(
+                &video_id,
+                empty_media.as_bytes(),
+                parse_url("https://example.com/video.m3u8"),
+            )
+            .unwrap();
+
+        assert!(matches!(
+            store.startup_status(0.),
+            Err(PlaylistStoreError::NoProbeSegment)
+        ));
     }
 }
