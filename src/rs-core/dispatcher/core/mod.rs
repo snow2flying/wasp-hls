@@ -10,8 +10,9 @@ use crate::{
         jsSendMultivariantPlaylistParsingError, jsSendMultivariantPlaylistRequestError,
         jsSendOtherError, jsSendPushedSegmentError, jsSendRemoveBufferError,
         jsSendSegmentParsingError, jsSendSegmentRequestError, jsSendSourceBufferCreationError,
-        jsStopObservingPlayback, jsUpdateContentInfo, AddSourceBufferErrorCode, MediaType,
-        OtherErrorCode, PushedSegmentErrorCode, RequestId, SourceBufferId, TimerId,
+        jsSetMediaSourceDuration, jsStopObservingPlayback, jsUpdateContentInfo,
+        AddSourceBufferErrorCode, MediaType, OtherErrorCode, PlaylistNature,
+        PushedSegmentErrorCode, RequestId, SourceBufferId, TimerId,
     },
     dispatcher::segment_request_contexts::PendingSegmentRequest,
     media_element::SegmentPushMetadata,
@@ -532,6 +533,7 @@ impl Dispatcher {
             playlist_store.curr_max_position(),
             playlist_store.playlist_type(),
         );
+        sync_media_source_duration(playlist_store);
 
         // Store segment for future playback
         self.ready_probe_segments.insert(ReadyProbeSegment {
@@ -661,6 +663,7 @@ impl Dispatcher {
             playlist_store.curr_max_position(),
             playlist_store.playlist_type(),
         );
+        sync_media_source_duration(playlist_store);
         self.recheck_player_state();
     }
 
@@ -1064,5 +1067,15 @@ impl Dispatcher {
         } else {
             self.playlist_refresh_timers.clear_all_timers();
         }
+    }
+}
+
+fn sync_media_source_duration(playlist_store: &PlaylistStore) {
+    if playlist_store.playlist_type() != PlaylistNature::VoD {
+        let _ = jsSetMediaSourceDuration(u32::MAX as f64);
+    } else if let Some(duration) = playlist_store.curr_duration() {
+        let _ = jsSetMediaSourceDuration(duration);
+    } else {
+        Logger::warn("Core: Unknown content duration");
     }
 }

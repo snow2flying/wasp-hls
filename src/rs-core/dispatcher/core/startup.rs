@@ -1,5 +1,5 @@
 use super::super::segment_request_contexts::PendingSegmentRequest;
-use super::{utils, Dispatcher, PlayerReadyState, ReadyProbeSegment};
+use super::{sync_media_source_duration, utils, Dispatcher, PlayerReadyState, ReadyProbeSegment};
 use crate::media_element::SegmentPushMetadata;
 use crate::playlist_store::ProbeSegmentMetadata;
 use crate::{
@@ -10,14 +10,12 @@ use crate::{
             format_variants_info_for_js, DIRECT_MEDIA_AUDIO_TRACK_ID, DIRECT_MEDIA_VARIANT_ID,
         },
         jsAnnounceFetchedContent, jsAnnounceTrackUpdate, jsAnnounceVariantUpdate, jsSendOtherError,
-        jsSendSegmentParsingError, jsSendSourceBufferCreationError, jsSetMediaSourceDuration,
-        jsStartObservingPlayback, MediaSourceReadyState, MediaType, OtherErrorCode, PlaylistNature,
-        PlaylistType,
+        jsSendSegmentParsingError, jsSendSourceBufferCreationError, jsStartObservingPlayback,
+        MediaSourceReadyState, MediaType, OtherErrorCode, PlaylistType,
     },
     media_element::SourceBufferCreationError,
     playlist_store::{ProbeSegmentContext, StartupStatus},
     requester::{PlaylistFileType, RequestLaneTag},
-    Logger,
 };
 
 impl Dispatcher {
@@ -220,13 +218,7 @@ fn advance_awaiting_media_source_state(dispatcher: &mut Dispatcher) {
     }
 
     dispatcher.ready_state = PlayerReadyState::AwaitingSegments;
-    if playlist_store.playlist_type() != PlaylistNature::VoD {
-        let _ = jsSetMediaSourceDuration(u32::MAX as f64);
-    } else if let Some(duration) = playlist_store.curr_duration() {
-        let _ = jsSetMediaSourceDuration(duration);
-    } else {
-        Logger::warn("Core: Unknown content duration");
-    }
+    sync_media_source_duration(playlist_store);
 
     if let Some(Err(e)) = init_source_buffer(dispatcher, MediaType::Audio) {
         let (code, msg) = format_source_buffer_creation_err_for_js(e);
