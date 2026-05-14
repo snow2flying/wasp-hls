@@ -157,11 +157,11 @@ impl PlaylistStore {
                     return Err(PlaylistStoreError::NoInitialVariant);
                 };
 
-                (
-                    Some(initial_variant.id()),
+                let (curr_audio_id, curr_video_id) = Self::normalize_selected_media_ids(
                     playlist.audio_media_playlist_id_for(initial_variant, None),
                     playlist.video_media_playlist_id_for(initial_variant),
-                )
+                );
+                (Some(initial_variant.id()), curr_audio_id, curr_video_id)
             }
             TopLevelPlaylist::DirectMedia(_) => (None, None, None),
         };
@@ -414,10 +414,14 @@ impl PlaylistStore {
 
     pub(crate) fn current_codec(&self, media_type: MediaType) -> Option<String> {
         match &self.playlist {
-            TopLevelPlaylist::Multivariant(_) => self
-                .curr_multivariant_media_info(media_type)
-                .map(|info| info.codec.clone())
-                .or_else(|| self.curr_variant()?.codecs(media_type)),
+            TopLevelPlaylist::Multivariant(_) => {
+                if !self.has_media_type(media_type) {
+                    return None;
+                }
+                self.curr_multivariant_media_info(media_type)
+                    .map(|info| info.codec.clone())
+                    .or_else(|| self.curr_variant()?.codecs(media_type))
+            }
             TopLevelPlaylist::DirectMedia(playlist) => playlist
                 .external_media_info()
                 .filter(|info| info.media_type == media_type)
@@ -427,13 +431,17 @@ impl PlaylistStore {
 
     pub(crate) fn current_mime_type(&self, media_type: MediaType) -> Option<String> {
         match &self.playlist {
-            TopLevelPlaylist::Multivariant(_) => self
-                .curr_multivariant_media_info(media_type)
-                .map(|info| info.mime_type.clone())
-                .or_else(|| {
-                    self.curr_media_playlist(media_type)
-                        .map(|playlist| playlist.mime_type(media_type).unwrap_or("").to_string())
-                }),
+            TopLevelPlaylist::Multivariant(_) => {
+                if !self.has_media_type(media_type) {
+                    return None;
+                }
+                self.curr_multivariant_media_info(media_type)
+                    .map(|info| info.mime_type.clone())
+                    .or_else(|| {
+                        self.curr_media_playlist(media_type)
+                            .map(|playlist| playlist.mime_type(media_type).unwrap_or("").to_string())
+                    })
+            }
             TopLevelPlaylist::DirectMedia(playlist) => playlist
                 .external_media_info()
                 .filter(|info| info.media_type == media_type)
@@ -970,12 +978,14 @@ impl PlaylistStore {
         self.clear_variant_supports();
 
         if let Some(variant) = self.curr_variant() {
-            let new_audio_id = match &self.playlist {
+            let raw_new_audio_id = match &self.playlist {
                 TopLevelPlaylist::Multivariant(playlist) => {
                     playlist.audio_media_playlist_id_for(variant, self.curr_audio_track)
                 }
                 TopLevelPlaylist::DirectMedia(_) => None,
             };
+            let (new_audio_id, _) =
+                Self::normalize_selected_media_ids(raw_new_audio_id, self.curr_video_id);
 
             if new_audio_id.is_none() && self.curr_audio_id.is_some() {
                 // We may be in a case where the choosen track is not available in the
@@ -1056,8 +1066,12 @@ impl PlaylistStore {
         };
         let variant = playlist.variant(variant_id).unwrap();
         self.curr_variant_id = Some(variant_id);
-        self.curr_video_id = playlist.video_media_playlist_id_for(variant);
-        self.curr_audio_id = playlist.audio_media_playlist_id_for(variant, self.curr_audio_track);
+        let (curr_audio_id, curr_video_id) = Self::normalize_selected_media_ids(
+            playlist.audio_media_playlist_id_for(variant, self.curr_audio_track),
+            playlist.video_media_playlist_id_for(variant),
+        );
+        self.curr_video_id = curr_video_id;
+        self.curr_audio_id = curr_audio_id;
         self.multivariant_support_resolved = false;
     }
 
@@ -1101,6 +1115,20 @@ impl PlaylistStore {
 
     fn set_variant_support(&mut self, variant_id: u32, supported: bool) {
         self.variant_support.insert(variant_id, supported);
+    }
+
+    fn normalize_selected_media_ids(
+        audio_id: Option<MediaPlaylistPermanentId>,
+        video_id: Option<MediaPlaylistPermanentId>,
+    ) -> (
+        Option<MediaPlaylistPermanentId>,
+        Option<MediaPlaylistPermanentId>,
+    ) {
+        if audio_id.is_some() && audio_id == video_id {
+            (None, video_id)
+        } else {
+            (audio_id, video_id)
+        }
     }
 
     fn curr_multivariant_media_info(&self, media_type: MediaType) -> Option<&DirectMediaInfo> {
@@ -1241,7 +1269,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_multivariant_playlist_reuses_probe_metadata_for_both_media_types() {
+    fn shared_multivariant_playlist_is_selected_as_video_only() {
         let multivariant = r#"#EXTM3U
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="Main",DEFAULT=YES,AUTOSELECT=YES
 #EXT-X-STREAM-INF:BANDWIDTH=1000,AUDIO="aud"
@@ -1259,10 +1287,8 @@ seg.ts
         )
         .unwrap();
         let mut store = PlaylistStore::try_new(playlist, 10_000.).unwrap();
-        let shared_id = store
-            .curr_media_playlist_id(MediaType::Audio)
-            .cloned()
-            .unwrap();
+        assert_eq!(store.curr_media_playlist_id(MediaType::Audio), None);
+        let shared_id = *store.curr_media_playlist_id(MediaType::Video).unwrap();
         store
             .update_media_playlist(
                 &shared_id,
@@ -1272,21 +1298,18 @@ seg.ts
             .unwrap();
 
         store.set_multivariant_media_info(
-            MediaType::Audio,
+            MediaType::Video,
             DirectMediaInfo {
-                mime_type: "audio/mp4".to_string(),
-                media_type: MediaType::Audio,
-                codec: "mp4a.40.2".to_string(),
+                mime_type: "video/mp4".to_string(),
+                media_type: MediaType::Video,
+                codec: "avc1.4d401e,mp4a.40.2".to_string(),
             },
         );
 
-        assert_eq!(
-            store.current_codec(MediaType::Audio).as_deref(),
-            Some("mp4a.40.2")
-        );
+        assert_eq!(store.current_codec(MediaType::Audio), None);
         assert_eq!(
             store.current_codec(MediaType::Video).as_deref(),
-            Some("mp4a.40.2")
+            Some("avc1.4d401e,mp4a.40.2")
         );
     }
 }
