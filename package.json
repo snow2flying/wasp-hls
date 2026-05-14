@@ -77,11 +77,11 @@
   "author": "peaberberian",
   "license": "MIT",
   "devDependencies": {
+    "@canalplus/readme.doc": "0.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.59.1",
     "@typescript-eslint/parser": "^8.59.1",
-    "docgen.ico": "^0.2.3",
     "esbuild": "^0.28.0",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",

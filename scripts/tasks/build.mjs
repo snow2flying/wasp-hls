@@ -2,10 +2,9 @@
  * Build helpers for wasm, worker, main-thread, demo, and package artifacts.
  */
 
-import { copyFileSync, mkdirSync, rmSync } from "fs";
+import { copyFileSync, mkdirSync, readFileSync, rmSync } from "fs";
 import { dirname, join } from "path";
 import { exec } from "../utils/exec.mjs";
-import { cleanBuildDirectory } from "../utils/fs.mjs";
 import { checkPackageExports } from "./check-package-exports.mjs";
 import { reportStep } from "./report.mjs";
 
@@ -155,7 +154,17 @@ export async function buildDocs(root) {
   reportStep("BUILD", "removing previous generated doc...");
   rmSync(join(root, "doc", "generated"), { force: true, recursive: true });
   reportStep("BUILD", "generating new doc...");
-  await exec("docgen.ico", ["doc", "build/doc"], { cwd: root });
+  const packageJson = JSON.parse(
+    readFileSync(join(root, "package.json"), "utf8"),
+  );
+  const version = packageJson.version;
+  await exec(
+    "readme.doc",
+    ["--input", "doc", "--output", "build/doc", "-p", version],
+    {
+      cwd: root,
+    },
+  );
 }
 
 /**
