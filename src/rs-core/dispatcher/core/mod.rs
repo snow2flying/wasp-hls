@@ -682,47 +682,34 @@ impl Dispatcher {
             self.requester.unlock_segment_requests();
         }
 
-        if self.media_element_ref.is_rebuffering() {
-            match self.next_scheduled_segment_start() {
-                None => {}
-                Some(val) => {
-                    let buffer_gap = self.media_element_ref.last_buffer_gap();
-                    if wanted_pos + buffer_gap < val {
-                        Logger::warn(&format!(
-                            "Core: Found a skippable discontinuity (p:{}, bg:{}, n:{})",
-                            wanted_pos, buffer_gap, val
-                        ));
-                        self.media_element_ref.seek(val + 0.01);
-                    }
-                }
-            };
-        }
+        self.check_gap_jumping_after_segment_scheduling(wanted_pos);
     }
 
-    fn next_scheduled_segment_start(&self) -> Option<f64> {
-        let wanted_pos = self.media_element_ref.wanted_position();
-        let req_min = self.requester.earliest_media_segment_pending();
-        let mut seg_min = None;
-        [MediaType::Video, MediaType::Audio]
-            .into_iter()
-            .for_each(|mt| {
-                let inventory = self.media_element_ref.inventory(mt);
-                let next_segment = inventory
-                    .iter()
-                    .find(|s| s.last_buffered_end() > wanted_pos);
-                if let Some(seg) = next_segment {
-                    seg_min = Some(
-                        seg_min
-                            .map(|m| f64::max(m, seg.last_buffered_start()))
-                            .unwrap_or(seg.last_buffered_start()),
-                    );
-                }
-            });
-        match (req_min, seg_min) {
-            (None, None) => None,
-            (Some(rm), None) => Some(rm),
-            (None, Some(sm)) => Some(sm),
-            (Some(rm), Some(sm)) => Some(f64::min(rm, sm)),
+    /// Once every segments have been scheduled for the current tick, check if gap jumping (jumping
+    /// after holes in the buffer) is needed. If so, seek over it.
+    fn check_gap_jumping_after_segment_scheduling(&mut self, wanted_pos: f64) {
+        if !self.media_element_ref.is_rebuffering() {
+            return; // We can play, no point in skipping anything
+        }
+        if !self.ready_to_load_segments() {
+            return; // ensure everything is ready before doing anything
+        }
+        let playable_until = self
+            .media_element_ref
+            .current_buffered_range()
+            .map(|(_, end)| end)
+            .unwrap_or(wanted_pos);
+
+        if let Some(next_range_start) = self.media_element_ref.next_buffered_range().map(|x| x.0) {
+            if next_range_start - playable_until >= 0.
+                && !self.requester.has_pending_segment_before(next_range_start)
+            {
+                Logger::warn(&format!(
+                    "Core: Jumping over a browser buffer hole (p:{}, e:{}, n:{})",
+                    wanted_pos, playable_until, next_range_start
+                ));
+                self.media_element_ref.seek(next_range_start + 0.01);
+            }
         }
     }
 

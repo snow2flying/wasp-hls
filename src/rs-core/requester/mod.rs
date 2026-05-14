@@ -644,16 +644,15 @@ impl Requester {
         }
     }
 
-    pub(crate) fn earliest_media_segment_pending(&self) -> Option<f64> {
-        if let Some(min) = min_media_segment_time(self.pending_segment_requests.as_slice()) {
-            if let Some(min2) = min_media_segment_time(self.segment_waiting_queue.as_slice()) {
-                Some(f64::min(min, min2))
-            } else {
-                Some(min)
-            }
-        } else {
-            min_media_segment_time(self.segment_waiting_queue.as_slice())
-        }
+    /// Returns `true` if there is still in-flight segment work that could plausibly fill a hole
+    /// before the given buffered range start.
+    ///
+    /// Media requests starting before `range_start` are treated as hole fillers. Initialization
+    /// requests for audio/video are also treated conservatively, because they may be a prerequisite
+    /// for a segment that would close that hole.
+    pub(crate) fn has_pending_segment_before(&self, range_start: f64) -> bool {
+        pending_segment_could_fill_before(self.pending_segment_requests.as_slice(), range_start)
+            || pending_segment_could_fill_before(self.segment_waiting_queue.as_slice(), range_start)
     }
 
     pub(crate) fn abort_all(&mut self) {
@@ -1010,18 +1009,60 @@ fn log_segment_abort(seg: &impl RequesterSegmentInfo) {
     });
 }
 
-fn min_media_segment_time(segs: &[impl RequesterSegmentInfo]) -> Option<f64> {
-    segs.iter().fold(None, |acc, r| {
-        if let Some(init) = acc {
-            if let Some(start) = r.start_time() {
-                Some(f64::min(start, init))
-            } else {
-                Some(init)
-            }
-        } else {
-            Some(r.start_time()?)
+fn pending_segment_could_fill_before<T: RequesterSegmentInfo>(
+    requests: &[T],
+    range_start: f64,
+) -> bool {
+    requests.iter().any(
+        |req| match (req.lane_tag().media_type(), req.start_time()) {
+            (Some(_), None) => true,
+            (Some(_), Some(start)) => start < range_start,
+            (None, _) => false,
+        },
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{pending_segment_could_fill_before, WaitingSegmentInfo};
+    use crate::{parser::SegmentTimeInfo, requester::RequestLaneTag, utils::url::Url};
+
+    fn waiting_media(start: f64) -> WaitingSegmentInfo {
+        WaitingSegmentInfo {
+            lane_tag: RequestLaneTag::Video,
+            url: Url::new("https://example.com/seg.ts".to_string()),
+            byte_range: None,
+            time_info: Some(SegmentTimeInfo::new(start, 2.0)),
+            caller_id: 0,
         }
-    })
+    }
+
+    fn waiting_init() -> WaitingSegmentInfo {
+        WaitingSegmentInfo {
+            lane_tag: RequestLaneTag::Video,
+            url: Url::new("https://example.com/init.mp4".to_string()),
+            byte_range: None,
+            time_info: None,
+            caller_id: 0,
+        }
+    }
+
+    #[test]
+    fn pending_media_before_range_blocks_gap_jump() {
+        assert!(pending_segment_could_fill_before(
+            &[waiting_media(9.5)],
+            12.0
+        ));
+        assert!(!pending_segment_could_fill_before(
+            &[waiting_media(12.0)],
+            12.0
+        ));
+    }
+
+    #[test]
+    fn pending_init_blocks_gap_jump_conservatively() {
+        assert!(pending_segment_could_fill_before(&[waiting_init()], 12.0));
+    }
 }
 
 fn get_waiting_delay(retry_attempt: u32, base: f64, max: f64) -> f64 {

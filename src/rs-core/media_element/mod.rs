@@ -169,11 +169,24 @@ impl MediaElementReference {
     /// Returns the buffered range where the currently wanted position resides
     /// as a tuple of its start and end values in seconds.
     ///
-    /// Returns `null` if the wanted_position is not yet present in a buffered range.
-    pub(crate) fn current_range(&self) -> Option<(f64, f64)> {
+    /// Returns `None` if the wanted_position is not yet present in a buffered range.
+    pub(crate) fn current_buffered_range(&self) -> Option<(f64, f64)> {
         self.last_observation
             .as_ref()
             .and_then(|o| o.buffered().range_for(self.wanted_position()))
+    }
+
+    /// Returns the next buffered range that starts strictly after the currently wanted position
+    /// as a tuple of its start and end values in seconds.
+    ///
+    /// Returns `None` if there is no buffered range beyond the wanted position.
+    pub(crate) fn next_buffered_range(&self) -> Option<(f64, f64)> {
+        let wanted_pos = self.wanted_position();
+        self.last_observation
+            .as_ref()?
+            .buffered()
+            .into_iter()
+            .find_map(|range| (range.0 > wanted_pos).then_some(range))
     }
 
     /// Returns the difference between the last position of the last known
@@ -794,6 +807,7 @@ mod tests {
     use super::MediaElementReference;
     use crate::{
         bindings::{MediaType, TimescaledTimestamp},
+        dispatcher::{JsTimeRanges, MediaObservation, PlaybackTickReason},
         media_element::{segment_inventory::BufferedSegmentMetadata, SegmentQualityContext},
         parser::SegmentTimeInfo,
     };
@@ -836,6 +850,63 @@ mod tests {
         let hint_after_insert =
             media_element.infer_probable_base_dts(MediaType::Video, &time_info, 0);
         assert!(hint_after_insert.is_none());
+    }
+
+    #[test]
+    fn next_buffered_range_returns_following_range_when_in_buffer() {
+        let mut media_element = MediaElementReference::new();
+        media_element.last_observation = Some(MediaObservation::new(
+            PlaybackTickReason::RegularInterval,
+            9.8,
+            4,
+            JsTimeRanges::new(vec![0.0, 10.0, 12.0, 18.0]),
+            false,
+            false,
+            false,
+            18.0,
+            None,
+            None,
+        ));
+
+        assert_eq!(media_element.next_buffered_range(), Some((12.0, 18.0)));
+    }
+
+    #[test]
+    fn next_buffered_range_returns_following_range_when_in_hole() {
+        let mut media_element = MediaElementReference::new();
+        media_element.last_observation = Some(MediaObservation::new(
+            PlaybackTickReason::RegularInterval,
+            10.5,
+            4,
+            JsTimeRanges::new(vec![0.0, 10.0, 12.0, 18.0]),
+            false,
+            false,
+            false,
+            18.0,
+            None,
+            None,
+        ));
+
+        assert_eq!(media_element.next_buffered_range(), Some((12.0, 18.0)));
+    }
+
+    #[test]
+    fn next_buffered_range_is_none_without_future_range() {
+        let mut media_element = MediaElementReference::new();
+        media_element.last_observation = Some(MediaObservation::new(
+            PlaybackTickReason::RegularInterval,
+            10.5,
+            4,
+            JsTimeRanges::new(vec![0.0, 10.0]),
+            false,
+            false,
+            false,
+            10.0,
+            None,
+            None,
+        ));
+
+        assert_eq!(media_element.next_buffered_range(), None);
     }
 }
 
