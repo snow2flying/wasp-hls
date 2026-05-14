@@ -1,6 +1,6 @@
 use super::{
     multi_variant_playlist::MediaPlaylistContext,
-    top_level_playlist::DirectMediaInfo,
+    top_level_playlist::ExternalMediaInfo,
     value_parsers::{
         parse_byte_range, parse_decimal_floating_point, parse_decimal_integer,
         parse_start_attribute, ByteRange,
@@ -278,7 +278,7 @@ pub struct MediaPlaylist {
     /// URL at which this Media Playlist may be updated.
     url: Url,
     /// Metadata inferred from one of this playlist's segments when HLS signaling is incomplete.
-    external_media_info: Option<DirectMediaInfo>,
+    external_media_info: Option<ExternalMediaInfo>,
     // TODO
     // pub server_control: ServerControl,
     // pub part_inf: Option<f64>,
@@ -710,11 +710,11 @@ impl MediaPlaylist {
         &self.url
     }
 
-    pub(crate) fn external_media_info(&self) -> Option<&DirectMediaInfo> {
+    pub(crate) fn external_media_info(&self) -> Option<&ExternalMediaInfo> {
         self.external_media_info.as_ref()
     }
 
-    pub(crate) fn set_external_media_info(&mut self, media_info: DirectMediaInfo) {
+    pub(crate) fn set_external_media_info(&mut self, media_info: ExternalMediaInfo) {
         self.external_media_info = Some(media_info);
     }
 

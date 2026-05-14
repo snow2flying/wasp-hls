@@ -25,7 +25,7 @@ pub(crate) struct DirectMediaPlaylist {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DirectMediaInfo {
+pub(crate) struct ExternalMediaInfo {
     pub(crate) mime_type: String,
     pub(crate) media_type: crate::bindings::MediaType,
     pub(crate) codec: String,
@@ -89,11 +89,11 @@ impl DirectMediaPlaylist {
         &mut self.playlist
     }
 
-    pub(crate) fn external_media_info(&self) -> Option<&DirectMediaInfo> {
+    pub(crate) fn external_media_info(&self) -> Option<&ExternalMediaInfo> {
         self.playlist.external_media_info()
     }
 
-    pub(crate) fn set_external_media_info(&mut self, external_media_info: DirectMediaInfo) {
+    pub(crate) fn set_external_media_info(&mut self, external_media_info: ExternalMediaInfo) {
         self.playlist.set_external_media_info(external_media_info);
     }
 

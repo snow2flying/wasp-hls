@@ -36,12 +36,21 @@ impl Dispatcher {
             }
         };
     }
+
+    pub(super) fn ready_to_load_segments(&mut self) -> bool {
+        if self
+            .playlist_store
+            .as_ref()
+            .is_some_and(|pl_store| !pl_store.are_playlists_ready())
+        {
+            false // Playlist(s) not yet fetched
+        } else {
+            ensure_ready_playlist_store(self, self.media_element_ref.wanted_position())
+        }
+    }
 }
 
-pub(super) fn ensure_current_streams_ready(
-    dispatcher: &mut Dispatcher,
-    wanted_position: f64,
-) -> bool {
+fn ensure_ready_playlist_store(dispatcher: &mut Dispatcher, wanted_position: f64) -> bool {
     let Some(playlist_store) = dispatcher.playlist_store.as_mut() else {
         return false;
     };
@@ -58,17 +67,23 @@ pub(super) fn ensure_current_streams_ready(
         StartupStatus::Ready => true,
         StartupStatus::AwaitingSupportCheck => false,
         StartupStatus::VariantSwitchNeeded { variant_id } => {
-            let Some(playlist_store) = dispatcher.playlist_store.as_mut() else {
-                return false;
-            };
-            let changed_media_types = playlist_store.switch_startup_variant(variant_id);
             jsAnnounceVariantUpdate(Some(variant_id));
+
+            let changed_media_types = playlist_store.switch_startup_variant(variant_id);
             dispatcher.handle_media_playlist_update(&changed_media_types, false, false);
             false
         }
-        StartupStatus::NeedsProbes(probe_requests) => {
-            let error_media_type = probe_error_media_type(&probe_requests);
-            if start_probe_segment_requests(dispatcher, probe_requests) {
+        StartupStatus::NeedsProbes(probe_metadata) => {
+            let error_media_type = if probe_metadata.len() == 1 {
+                probe_metadata[0].1
+            } else {
+                None
+            };
+
+            if probe_metadata
+                .into_iter()
+                .all(|probe_request| start_probe_segment_request(dispatcher, probe_request))
+            {
                 false
             } else {
                 jsSendSegmentParsingError(
@@ -81,16 +96,6 @@ pub(super) fn ensure_current_streams_ready(
                 false
             }
         }
-    }
-}
-
-fn probe_error_media_type(
-    probe_requests: &[(ProbeSegmentMetadata, Option<MediaType>)],
-) -> Option<MediaType> {
-    if probe_requests.len() == 1 {
-        probe_requests[0].1
-    } else {
-        None
     }
 }
 
@@ -182,7 +187,7 @@ fn advance_awaiting_playlist_info_state(dispatcher: &mut Dispatcher) {
         return;
     }
 
-    if !ensure_current_streams_ready(dispatcher, wanted_position) {
+    if !ensure_ready_playlist_store(dispatcher, wanted_position) {
         return;
     }
 
@@ -253,24 +258,6 @@ fn advance_awaiting_media_source_state(dispatcher: &mut Dispatcher) {
     }
     jsStartObservingPlayback();
     consume_probe_segments(dispatcher);
-}
-
-/// Start a startup probe request if not already in progress.
-///
-/// Probe segment requests are segment requests with the goal of obtaining more
-/// information not found in the playlist(s): which codecs is it and other attributes.
-///
-/// # Returns
-///
-/// Returns `true` if the probe process has been started, or `false` if we
-/// cannot do that.
-fn start_probe_segment_requests(
-    dispatcher: &mut Dispatcher,
-    probe_requests: Vec<(ProbeSegmentMetadata, Option<MediaType>)>,
-) -> bool {
-    probe_requests
-        .into_iter()
-        .all(|probe_request| start_probe_segment_request(dispatcher, probe_request))
 }
 
 fn start_probe_segment_request(

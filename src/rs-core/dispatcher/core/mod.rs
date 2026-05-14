@@ -459,16 +459,10 @@ impl Dispatcher {
     /// be requested (when a request finished, when a media playlist has been updated, when the
     /// playhead advances etc.).
     pub(super) fn check_segments_to_request(&mut self) {
-        if self
-            .playlist_store
-            .as_ref()
-            .is_some_and(|pl_store| !pl_store.are_playlists_ready())
-        {
+        if !self.ready_to_load_segments() {
             return;
         }
-        if !startup::ensure_current_streams_ready(self, self.media_element_ref.wanted_position()) {
-            return;
-        }
+
         let was_already_locked = self.requester.lock_segment_requests();
         [MediaType::Video, MediaType::Audio]
             .into_iter()
@@ -512,32 +506,25 @@ impl Dispatcher {
             }
         };
 
-        // Update playlist information with inspection result
-        let media_info = crate::parser::DirectMediaInfo {
+        // NOTE: we prefer giving the requested media type than what the segment turned out to be
+        // because if what was assumed to be a Video playlist turns out to be finally an audio-only
+        // one, the `PlaylistStore` will be completely lost when we tell him to update the `Audio`
+        // playlist where all it can see is a `Video` playlist.
+        // We could consider that this case needs to be fixed but it's for a condition that is so
+        // rare that I don't think we really gain in doing a complex playlist-type-change path.
+        let considered_media_type = if let Some(media_type) = requested_media_type {
+            media_type
+        } else {
+            inspection.media_type
+        };
+
+        // Now update playlist information with inspection result
+        let media_info = crate::parser::ExternalMediaInfo {
             mime_type: inspection.mime_type,
             media_type: inspection.media_type,
             codec: inspection.codec,
         };
-        let resolved_media_type = match playlist_store.playlist_kind() {
-            crate::bindings::PlaylistType::MediaPlaylist => {
-                let media_type = media_info.media_type;
-                playlist_store.set_direct_media_info(media_info);
-                media_type
-            }
-            crate::bindings::PlaylistType::MultivariantPlaylist => {
-                let Some(media_type) = requested_media_type else {
-                    jsSendOtherError(
-                        true,
-                        OtherErrorCode::Unknown,
-                        "Missing media type for multivariant probe result",
-                    );
-                    self.stop_current_content();
-                    return;
-                };
-                playlist_store.set_multivariant_media_info(media_type, media_info);
-                media_type
-            }
-        };
+        playlist_store.set_external_media_info(media_info, considered_media_type);
 
         // That might have led to more timing-related information
         jsUpdateContentInfo(
@@ -549,7 +536,7 @@ impl Dispatcher {
         // Store segment for future playback
         self.ready_probe_segments.insert(ReadyProbeSegment {
             request: probe_segment,
-            media_type: resolved_media_type,
+            media_type: considered_media_type,
             data,
         });
     }
@@ -627,7 +614,6 @@ impl Dispatcher {
                 let estimate = self.adaptive_selector.get_estimate();
                 match PlaylistStore::try_new(pl, estimate) {
                     Ok(pl_store) => {
-                        // TODO: ugly
                         let direct_media_refresh = pl_store
                             .direct_media_playlist()
                             .map(|(id, playlist)| (*id, playlist.refresh_interval()));

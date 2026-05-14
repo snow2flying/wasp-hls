@@ -2,7 +2,7 @@ use crate::{
     bindings::{jsIsTypeSupported, MediaType, PlaylistNature},
     media_element::SegmentQualityContext,
     parser::{
-        AudioTrack, DirectMediaInfo, MediaPlaylist, MediaPlaylistUpdateError, SegmentList,
+        AudioTrack, ExternalMediaInfo, MediaPlaylist, MediaPlaylistUpdateError, SegmentList,
         SegmentTimeInfo, TopLevelPlaylist, VariantStream,
     },
     utils::url::Url,
@@ -50,7 +50,7 @@ pub(crate) enum StartupStatus {
     /// playlist information before playback can start.
     ///
     /// Once the supplementary information is extracted, is should be communicated to the
-    /// `PlaylistStore` (e.g. through `set_direct_media_info`).
+    /// `PlaylistStore` (e.g. through `set_external_media_info`).
     ///
     /// The second value of that tuple is either:
     ///
@@ -126,7 +126,7 @@ pub(crate) struct PlaylistStore {
     variant_support: HashMap<u32, bool>,
 
     /// Probe metadata inferred for currently known multivariant media playlists.
-    multivariant_media_info: HashMap<MediaPlaylistPermanentId, DirectMediaInfo>,
+    multivariant_media_info: HashMap<MediaPlaylistPermanentId, ExternalMediaInfo>,
 }
 
 impl PlaylistStore {
@@ -438,8 +438,9 @@ impl PlaylistStore {
                 self.curr_multivariant_media_info(media_type)
                     .map(|info| info.mime_type.clone())
                     .or_else(|| {
-                        self.curr_media_playlist(media_type)
-                            .map(|playlist| playlist.mime_type(media_type).unwrap_or("").to_string())
+                        self.curr_media_playlist(media_type).map(|playlist| {
+                            playlist.mime_type(media_type).unwrap_or("").to_string()
+                        })
                     })
             }
             TopLevelPlaylist::DirectMedia(playlist) => playlist
@@ -509,11 +510,17 @@ impl PlaylistStore {
         }
     }
 
-    pub(crate) fn set_direct_media_info(&mut self, media_info: DirectMediaInfo) {
+    /// Communicate back precise information probed from a probe segment alongside the `MediaType`
+    /// concerned.
+    pub(crate) fn set_external_media_info(
+        &mut self,
+        media_info: ExternalMediaInfo,
+        media_type: MediaType,
+    ) {
         match &mut self.playlist {
             TopLevelPlaylist::DirectMedia(playlist) => {
                 let direct_media_id = *playlist.id();
-                match media_info.media_type {
+                match media_type {
                     MediaType::Audio => {
                         self.curr_audio_id = Some(direct_media_id);
                         self.curr_video_id = None;
@@ -525,25 +532,18 @@ impl PlaylistStore {
                 }
                 playlist.set_external_media_info(media_info);
             }
-            TopLevelPlaylist::Multivariant(_) => {}
-        }
-    }
+            TopLevelPlaylist::Multivariant(_) => {
+                let wanted_id = match media_type {
+                    MediaType::Audio => self.curr_audio_id.as_ref(),
+                    MediaType::Video => self.curr_video_id.as_ref(),
+                };
 
-    // XXX TODO: Maybe this can be merged with the direct media one? We have enough
-    // context here
-    pub(crate) fn set_multivariant_media_info(
-        &mut self,
-        media_type: MediaType,
-        media_info: DirectMediaInfo,
-    ) {
-        let wanted_id = match media_type {
-            MediaType::Audio => self.curr_audio_id.as_ref(),
-            MediaType::Video => self.curr_video_id.as_ref(),
-        };
-        let Some(wanted_id) = wanted_id else {
-            return;
-        };
-        self.multivariant_media_info.insert(*wanted_id, media_info);
+                let Some(wanted_id) = wanted_id else {
+                    return; // There's no track choosen for that type
+                };
+                self.multivariant_media_info.insert(*wanted_id, media_info);
+            }
+        }
     }
 
     /// Returns probe segment metadata for a direct Media Playlist associated to
@@ -1131,7 +1131,7 @@ impl PlaylistStore {
         }
     }
 
-    fn curr_multivariant_media_info(&self, media_type: MediaType) -> Option<&DirectMediaInfo> {
+    fn curr_multivariant_media_info(&self, media_type: MediaType) -> Option<&ExternalMediaInfo> {
         let playlist_id = self.curr_media_playlist_id(media_type)?;
         self.multivariant_media_info.get(playlist_id)
     }
@@ -1260,7 +1260,7 @@ mod tests {
     use super::PlaylistStore;
     use crate::{
         bindings::MediaType,
-        parser::{DirectMediaInfo, TopLevelPlaylist},
+        parser::{ExternalMediaInfo, TopLevelPlaylist},
         utils::url::Url,
     };
 
@@ -1297,13 +1297,13 @@ seg.ts
             )
             .unwrap();
 
-        store.set_multivariant_media_info(
-            MediaType::Video,
-            DirectMediaInfo {
+        store.set_external_media_info(
+            ExternalMediaInfo {
                 mime_type: "video/mp4".to_string(),
                 media_type: MediaType::Video,
                 codec: "avc1.4d401e,mp4a.40.2".to_string(),
             },
+            MediaType::Video,
         );
 
         assert_eq!(store.current_codec(MediaType::Audio), None);
