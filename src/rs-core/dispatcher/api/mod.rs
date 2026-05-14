@@ -32,7 +32,7 @@ impl Dispatcher {
             segment_selectors: NextSegmentSelectors::new(0., 30.),
             segment_request_contexts: SegmentRequestContexts::new(),
             playlist_refresh_timers: PlaylistRefreshTimers::new(),
-            ready_probe_segment: None,
+            ready_probe_segments: Default::default(),
         }
     }
 

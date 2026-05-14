@@ -40,7 +40,7 @@ impl Dispatcher {
         self.media_element_ref.reset();
         self.segment_selectors.reset_selectors(0.);
         self.playlist_store = None;
-        self.ready_probe_segment = None;
+        self.ready_probe_segments.clear();
         self.last_position = 0.;
         self.clean_up_playlist_refresh_timers();
         self.ready_state = PlayerReadyState::Stopped;
@@ -199,11 +199,11 @@ impl Dispatcher {
                 status,
             } => {
                 let req_ctxt = self.segment_request_contexts.take(s.id());
-                if req_ctxt
+                if let Some(media_type) = req_ctxt
                     .as_ref()
-                    .is_some_and(PendingSegmentRequest::is_probe)
+                    .and_then(|ctxt| ctxt.requested_media_type())
                 {
-                    self.ready_probe_segment = None;
+                    self.ready_probe_segments.clear_media_type(media_type);
                 }
 
                 if status.is_some_and(|s| s == 404 || s == 410)
@@ -459,6 +459,10 @@ impl Dispatcher {
     /// be requested (when a request finished, when a media playlist has been updated, when the
     /// playhead advances etc.).
     pub(super) fn check_segments_to_request(&mut self) {
+        if !self.ready_to_load_segments() {
+            return;
+        }
+
         let was_already_locked = self.requester.lock_segment_requests();
         [MediaType::Video, MediaType::Audio]
             .into_iter()
@@ -478,7 +482,7 @@ impl Dispatcher {
     fn do_probe_segment_inspection(
         &mut self,
         probe_segment: ProbeSegmentMetadata,
-        segment_media_type: Option<MediaType>,
+        requested_media_type: Option<MediaType>,
         data: JsMemoryBlob,
     ) {
         let Some(playlist_store) = self.playlist_store.as_mut() else {
@@ -492,7 +496,7 @@ impl Dispatcher {
                 jsSendSegmentParsingError(
                     true,
                     code,
-                    segment_media_type,
+                    requested_media_type,
                     message
                         .as_deref()
                         .unwrap_or("Unknown probe segment parsing error"),
@@ -502,12 +506,25 @@ impl Dispatcher {
             }
         };
 
-        // Update playlist information with inspection result
-        playlist_store.set_direct_media_info(crate::parser::DirectMediaInfo {
+        // NOTE: we prefer giving the requested media type than what the segment turned out to be
+        // because if what was assumed to be a Video playlist turns out to be finally an audio-only
+        // one, the `PlaylistStore` will be completely lost when we tell him to update the `Audio`
+        // playlist where all it can see is a `Video` playlist.
+        // We could consider that this case needs to be fixed but it's for a condition that is so
+        // rare that I don't think we really gain in doing a complex playlist-type-change path.
+        let considered_media_type = if let Some(media_type) = requested_media_type {
+            media_type
+        } else {
+            inspection.media_type
+        };
+
+        // Now update playlist information with inspection result
+        let media_info = crate::parser::ExternalMediaInfo {
             mime_type: inspection.mime_type,
             media_type: inspection.media_type,
             codec: inspection.codec,
-        });
+        };
+        playlist_store.set_external_media_info(media_info, considered_media_type);
 
         // That might have led to more timing-related information
         jsUpdateContentInfo(
@@ -517,8 +534,9 @@ impl Dispatcher {
         );
 
         // Store segment for future playback
-        self.ready_probe_segment = Some(ReadyProbeSegment {
+        self.ready_probe_segments.insert(ReadyProbeSegment {
             request: probe_segment,
+            media_type: considered_media_type,
             data,
         });
     }
@@ -596,10 +614,9 @@ impl Dispatcher {
                 let estimate = self.adaptive_selector.get_estimate();
                 match PlaylistStore::try_new(pl, estimate) {
                     Ok(pl_store) => {
-                        // TODO: ugly
                         let direct_media_refresh = pl_store
                             .direct_media_playlist()
-                            .map(|(id, playlist)| (id.clone(), playlist.refresh_interval()));
+                            .map(|(id, playlist)| (*id, playlist.refresh_interval()));
 
                         self.playlist_store = Some(pl_store);
                         if let Some((playlist_id, refresh_interval)) = direct_media_refresh {
@@ -623,7 +640,7 @@ impl Dispatcher {
         refresh_interval: Option<f64>,
     ) {
         self.playlist_refresh_timers
-            .set_timer(playlist_id.clone(), refresh_interval);
+            .set_timer(playlist_id, refresh_interval);
 
         let Some(playlist_store) = self.playlist_store.as_ref() else {
             return;
@@ -852,6 +869,7 @@ impl Dispatcher {
 
         for mt in changed_media_types.iter().copied() {
             Logger::info(&format!("Core: {} MediaPlaylist changed", mt));
+            self.ready_probe_segments.clear_media_type(mt);
 
             if abort_prev {
                 self.abort_segment_requests_with_type(mt);
@@ -872,7 +890,7 @@ impl Dispatcher {
                 if pl_store.curr_media_playlist(mt).is_some() {
                     None
                 } else {
-                    let id = pl_store.curr_media_playlist_id(mt)?.clone();
+                    let id = *pl_store.curr_media_playlist_id(mt)?;
                     let url = pl_store.media_playlist_url(&id)?.clone();
                     Some((id, url))
                 }
@@ -954,8 +972,11 @@ impl Dispatcher {
                 }
                 self.on_init_segment_loaded(result, req_media_type, init_segment_id);
             }
-            PendingSegmentRequest::Probe { probe_segment } => {
-                self.do_probe_segment_inspection(probe_segment, media_type, result);
+            PendingSegmentRequest::Probe {
+                probe_segment,
+                requested_media_type,
+            } => {
+                self.do_probe_segment_inspection(probe_segment, requested_media_type, result);
                 self.recheck_player_state();
             }
         }
@@ -1024,12 +1045,12 @@ impl Dispatcher {
     fn abort_segment_requests_with_type(&mut self, media_type: MediaType) {
         let aborted_reqs = self.requester.abort_segments_with_type(media_type);
         for req_id in aborted_reqs {
-            if self
+            if let Some(media_type) = self
                 .segment_request_contexts
                 .take(req_id)
-                .is_some_and(|ctxt| ctxt.is_probe())
+                .and_then(|ctxt| ctxt.requested_media_type())
             {
-                self.ready_probe_segment = None;
+                self.ready_probe_segments.clear_media_type(media_type);
             }
         }
     }

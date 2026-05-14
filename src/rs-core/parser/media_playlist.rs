@@ -1,5 +1,6 @@
 use super::{
     multi_variant_playlist::MediaPlaylistContext,
+    top_level_playlist::ExternalMediaInfo,
     value_parsers::{
         parse_byte_range, parse_decimal_floating_point, parse_decimal_integer,
         parse_start_attribute, ByteRange,
@@ -276,12 +277,11 @@ pub struct MediaPlaylist {
     segment_list: SegmentList,
     /// URL at which this Media Playlist may be updated.
     url: Url,
+    /// Metadata inferred from one of this playlist's segments when HLS signaling is incomplete.
+    external_media_info: Option<ExternalMediaInfo>,
     // TODO
     // pub server_control: ServerControl,
     // pub part_inf: Option<f64>,
-
-    // ignored
-    // pub discontinuity_sequence: Option<u32>;
 }
 
 impl MediaPlaylist {
@@ -547,6 +547,7 @@ impl MediaPlaylist {
             i_frames_only,
             segment_list: SegmentList::new(maps_info, media_segments),
             url,
+            external_media_info: prev_playlist.and_then(|p| p.external_media_info.clone()),
             // TODO
             // server_control,
             // part_inf,
@@ -707,6 +708,14 @@ impl MediaPlaylist {
     /// Returns the URL at which this Media Playlist may be requested.
     pub(super) fn url(&self) -> &Url {
         &self.url
+    }
+
+    pub(crate) fn external_media_info(&self) -> Option<&ExternalMediaInfo> {
+        self.external_media_info.as_ref()
+    }
+
+    pub(crate) fn set_external_media_info(&mut self, media_info: ExternalMediaInfo) {
+        self.external_media_info = Some(media_info);
     }
 
     /// Returns the "extension" part of the media segments referenced in this Media Playlist (e.g.

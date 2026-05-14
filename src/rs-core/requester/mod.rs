@@ -23,7 +23,7 @@ pub(crate) enum RequestLaneTag {
 }
 
 impl RequestLaneTag {
-    fn from_media_type(media_type: MediaType) -> Self {
+    pub(crate) fn from_media_type(media_type: MediaType) -> Self {
         match media_type {
             MediaType::Audio => Self::Audio,
             MediaType::Video => Self::Video,
@@ -509,12 +509,18 @@ impl Requester {
         self.request_segment_now(url, byte_range, lane_tag, time_info, caller_id);
     }
 
+    /// Prevent new requests from being started until `unlock_segment_requests` is called.
+    ///
+    /// This allows to schedule multiple segment request at once, then allowing the `Requester`'s
+    /// priorization algorithm take care of which request to do first, instead of just doing
+    /// immediately the first one that is scheduled.
     pub(crate) fn lock_segment_requests(&mut self) -> bool {
         let was_locked = self.segment_request_locked;
         self.segment_request_locked = true;
         was_locked
     }
 
+    /// Allow new requests to be started again (after having called `lock_segment_requests`).
     pub(crate) fn unlock_segment_requests(&mut self) {
         self.segment_request_locked = false;
         self.check_segment_queue();

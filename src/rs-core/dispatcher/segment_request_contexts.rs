@@ -100,7 +100,10 @@ pub(crate) enum PendingSegmentRequest {
     },
     /// This request concerns a "probe" request: we're loading a segment to know about a media's
     /// characteristics
-    Probe { probe_segment: ProbeSegmentMetadata },
+    Probe {
+        probe_segment: ProbeSegmentMetadata,
+        requested_media_type: Option<MediaType>,
+    },
 }
 
 impl PendingSegmentRequest {
@@ -112,5 +115,15 @@ impl PendingSegmentRequest {
     }
     pub(crate) fn is_init(&self) -> bool {
         matches!(self, Self::Init { .. })
+    }
+
+    pub(crate) fn requested_media_type(&self) -> Option<MediaType> {
+        match self {
+            Self::Init { media_type, .. } | Self::Media { media_type, .. } => Some(*media_type),
+            Self::Probe {
+                requested_media_type,
+                ..
+            } => *requested_media_type,
+        }
     }
 }
