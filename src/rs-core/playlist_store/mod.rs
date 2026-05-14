@@ -128,9 +128,13 @@ pub(crate) struct PlaylistStore {
     multivariant_support_resolved: bool,
 
     /// Runtime support cache for variants in the current multivariant playlist.
+    /// Key is the variant id, bool is `true` if supported, `false` if not.
     variant_support: HashMap<u32, bool>,
 
     /// Probe metadata inferred for currently known multivariant media playlists.
+    /// XXX TODO: If it's per-media playlist, why would it be needed to separate audio and
+    /// video? Aren't both in the same segment anyway? In that case, isn't `isTypeSupported` and
+    /// `addSourceBuffer` supposed to accept both at once?
     multivariant_media_info: HashMap<MediaPlaylistPermanentId, ProbedMediaInfo>,
 }
 
