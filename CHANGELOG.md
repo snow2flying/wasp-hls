@@ -9,6 +9,7 @@
 ### Features
 
 - It is now possible to play media playlists directly instead of always going through a multivariant playlist URL
+- It is now possible to play Multivariant Playlists that do not announce their variants' `CODECS` attributes
 - Add optional `bitDepth` and `sampleRate` properties to `getAudioTrackList`, `getCurrentAudioTrack`methods plus `audioTrackUpdate` and `audioTrackListUpdate` events reflecting respectively the bit depth of audio samples and the audio audio sample rate for the corresponding audio tracks if they're invariant for all renditions of that track.
 - Add optional `bitDephs` and `sampleRates` array properties to `getAudioTrackList`, `getCurrentAudioTrack`methods plus `audioTrackUpdate` and `audioTrackListUpdate` events listing respectively the known various bit depts and rates of audio samples in all renditions of that track.
 - Add `characteristics` property to `getAudioTrackList`, `getCurrentAudioTrack`methods plus `audioTrackUpdate` and `audioTrackListUpdate` events reflecting the `CHARACTERISTICS` of the original playlist, e.g. for audio-description audio tracks.
@@ -25,6 +26,7 @@
 
 - `SourceBufferAlreadyCreatedWithSameType` mistakenly also regrouped other kinds of SourceBuffer-related bug than what's documented. This is now fixed.
 - Better handle edge speed settings: negative speeds, non-finite speeds, `NaN` speed
+- Better handling of gap jumping, previous behavior could skip legitimate data
 
 ### Other
 
