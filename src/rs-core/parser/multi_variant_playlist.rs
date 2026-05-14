@@ -669,7 +669,7 @@ impl From<MediaPlaylistParsingError> for MediaPlaylistUpdateError {
 }
 
 /// Identifier allowing to identify a given MediaPlaylist
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct MediaPlaylistPermanentId {
     location: MediaPlaylistUrlLocation,
     id: u32,
@@ -693,7 +693,7 @@ impl MediaPlaylistPermanentId {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum MediaPlaylistUrlLocation {
     /// This Media Playlist's URL is defined by a variant in the `MultivariantPlaylist` object.
     Variant,

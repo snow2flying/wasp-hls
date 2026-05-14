@@ -45,14 +45,6 @@ pub(super) fn ensure_current_streams_ready(
     let Some(playlist_store) = dispatcher.playlist_store.as_mut() else {
         return false;
     };
-    let prev_variant_id = playlist_store.curr_variant().map(|v| v.id());
-    let prev_audio_id = playlist_store
-        .curr_media_playlist_id(MediaType::Audio)
-        .cloned();
-    let prev_video_id = playlist_store
-        .curr_media_playlist_id(MediaType::Video)
-        .cloned();
-
     let status = match playlist_store.startup_status(wanted_position) {
         Ok(status) => status,
         Err(err) => {
@@ -62,50 +54,43 @@ pub(super) fn ensure_current_streams_ready(
         }
     };
 
-    let Some(playlist_store) = dispatcher.playlist_store.as_ref() else {
-        return false;
-    };
-    let curr_variant_id = playlist_store.curr_variant().map(|v| v.id());
-    let curr_audio_id = playlist_store
-        .curr_media_playlist_id(MediaType::Audio)
-        .cloned();
-    let curr_video_id = playlist_store
-        .curr_media_playlist_id(MediaType::Video)
-        .cloned();
-    if curr_variant_id != prev_variant_id
-        || curr_audio_id != prev_audio_id
-        || curr_video_id != prev_video_id
-    {
-        let mut changed_media_types = vec![];
-        if curr_audio_id != prev_audio_id {
-            changed_media_types.push(MediaType::Audio);
-        }
-        if curr_video_id != prev_video_id {
-            changed_media_types.push(MediaType::Video);
-        }
-
-        jsAnnounceVariantUpdate(curr_variant_id);
-        dispatcher.handle_media_playlist_update(&changed_media_types, false, false);
-        return false;
-    }
-
     match status {
         StartupStatus::Ready => true,
         StartupStatus::AwaitingSupportCheck => false,
+        StartupStatus::VariantSwitchNeeded { variant_id } => {
+            let Some(playlist_store) = dispatcher.playlist_store.as_mut() else {
+                return false;
+            };
+            let changed_media_types = playlist_store.switch_startup_variant(variant_id);
+            jsAnnounceVariantUpdate(Some(variant_id));
+            dispatcher.handle_media_playlist_update(&changed_media_types, false, false);
+            false
+        }
         StartupStatus::NeedsProbes(probe_requests) => {
+            let error_media_type = probe_error_media_type(&probe_requests);
             if start_probe_segment_requests(dispatcher, probe_requests) {
                 false
             } else {
                 jsSendSegmentParsingError(
                     true,
                     crate::bindings::SegmentParsingErrorCode::UnknownError,
-                    Some(MediaType::Video),
+                    error_media_type,
                     "No probe segment was available to determine startup metadata",
                 );
                 dispatcher.stop_current_content();
                 false
             }
         }
+    }
+}
+
+fn probe_error_media_type(
+    probe_requests: &[(ProbeSegmentMetadata, Option<MediaType>)],
+) -> Option<MediaType> {
+    if probe_requests.len() == 1 {
+        probe_requests[0].1
+    } else {
+        None
     }
 }
 

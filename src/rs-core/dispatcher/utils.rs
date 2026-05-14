@@ -109,7 +109,7 @@ pub(super) fn handle_playlist_store_error(err: PlaylistStoreError) {
         PlaylistStoreError::NoProbeSegment => jsSendSegmentParsingError(
             true,
             crate::bindings::SegmentParsingErrorCode::UnknownError,
-            Some(MediaType::Video),
+            None,
             &err.to_string(),
         ),
         PlaylistStoreError::UnsupportedStartupStream => {
