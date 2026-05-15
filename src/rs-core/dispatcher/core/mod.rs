@@ -127,10 +127,7 @@ impl Dispatcher {
                 id: playlist_id,
                 media_type,
             };
-            if !self
-                .requester
-                .is_requesting_playlist(url, &playlist_type)
-            {
+            if !self.requester.is_requesting_playlist(url, &playlist_type) {
                 self.requester.fetch_playlist(url.clone(), playlist_type);
             }
         } else {
@@ -893,10 +890,7 @@ impl Dispatcher {
                 use PlaylistFileType::*;
                 Logger::debug("Core: Media changed, requesting its media playlist");
                 let playlist_type = MediaPlaylist { id, media_type: mt };
-                if !self
-                    .requester
-                    .is_requesting_playlist(&url, &playlist_type)
-                {
+                if !self.requester.is_requesting_playlist(&url, &playlist_type) {
                     self.requester.fetch_playlist(url, playlist_type);
                 }
             }

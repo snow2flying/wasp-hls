@@ -1038,11 +1038,7 @@ mod tests {
         pending_segment_could_fill_before, PlaylistFileType, PlaylistRequestInfo, Requester,
         WaitingSegmentInfo,
     };
-    use crate::{
-        parser::SegmentTimeInfo,
-        requester::RequestLaneTag,
-        utils::url::Url,
-    };
+    use crate::{parser::SegmentTimeInfo, requester::RequestLaneTag, utils::url::Url};
 
     fn waiting_media(start: f64) -> WaitingSegmentInfo {
         WaitingSegmentInfo {

@@ -597,10 +597,7 @@ impl SegmentCursor {
 #[cfg(test)]
 mod tests {
     use super::SegmentCursor;
-    use crate::{
-        parser::TopLevelPlaylist,
-        utils::url::Url,
-    };
+    use crate::{parser::TopLevelPlaylist, utils::url::Url};
 
     #[test]
     fn segment_cursor_skips_trailing_zero_duration_segment() {
