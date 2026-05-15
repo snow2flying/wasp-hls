@@ -123,13 +123,16 @@ impl Dispatcher {
             playlist_store.media_playlist_url(&playlist_id),
             playlist_store.curr_media_type_for(&playlist_id),
         ) {
-            self.requester.fetch_playlist(
-                url.clone(),
-                PlaylistFileType::MediaPlaylist {
-                    id: playlist_id,
-                    media_type,
-                },
-            );
+            let playlist_type = PlaylistFileType::MediaPlaylist {
+                id: playlist_id,
+                media_type,
+            };
+            if !self
+                .requester
+                .is_requesting_playlist(url, &playlist_type)
+            {
+                self.requester.fetch_playlist(url.clone(), playlist_type);
+            }
         } else {
             Logger::error("Core: Cannot refresh Media Playlist: id not found");
         }
@@ -889,8 +892,13 @@ impl Dispatcher {
             if let Some((id, url)) = playlist_to_fetch {
                 use PlaylistFileType::*;
                 Logger::debug("Core: Media changed, requesting its media playlist");
-                self.requester
-                    .fetch_playlist(url, MediaPlaylist { id, media_type: mt });
+                let playlist_type = MediaPlaylist { id, media_type: mt };
+                if !self
+                    .requester
+                    .is_requesting_playlist(&url, &playlist_type)
+                {
+                    self.requester.fetch_playlist(url, playlist_type);
+                }
             }
         }
 

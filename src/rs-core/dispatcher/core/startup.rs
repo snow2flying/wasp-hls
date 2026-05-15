@@ -111,13 +111,16 @@ fn advance_awaiting_playlist_info_state(dispatcher: &mut Dispatcher) {
         if let Some(id) = playlist_store.curr_media_playlist_id(mt) {
             if let Some(url) = playlist_store.media_playlist_url(id) {
                 let url = url.clone();
-                dispatcher.requester.fetch_playlist(
-                    url,
-                    PlaylistFileType::MediaPlaylist {
-                        id: *id,
-                        media_type: mt,
-                    },
-                );
+                let playlist_type = PlaylistFileType::MediaPlaylist {
+                    id: *id,
+                    media_type: mt,
+                };
+                if !dispatcher
+                    .requester
+                    .is_requesting_playlist(&url, &playlist_type)
+                {
+                    dispatcher.requester.fetch_playlist(url, playlist_type);
+                }
             }
         }
     }

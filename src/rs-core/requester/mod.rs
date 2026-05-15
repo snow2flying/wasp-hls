@@ -419,6 +419,16 @@ impl Requester {
         });
     }
 
+    pub(crate) fn is_requesting_playlist(
+        &self,
+        url: &Url,
+        playlist_type: &PlaylistFileType,
+    ) -> bool {
+        self.pending_playlist_requests
+            .iter()
+            .any(|req| &req.url == url && &req.playlist_type == playlist_type)
+    }
+
     /// Fetch the initialization segment whose metadata is given here add its
     /// `host_id` to `pending_segment_requests`.
     ///
@@ -1024,8 +1034,15 @@ fn pending_segment_could_fill_before<T: RequesterSegmentInfo>(
 
 #[cfg(test)]
 mod tests {
-    use super::{pending_segment_could_fill_before, WaitingSegmentInfo};
-    use crate::{parser::SegmentTimeInfo, requester::RequestLaneTag, utils::url::Url};
+    use super::{
+        pending_segment_could_fill_before, PlaylistFileType, PlaylistRequestInfo, Requester,
+        WaitingSegmentInfo,
+    };
+    use crate::{
+        parser::SegmentTimeInfo,
+        requester::RequestLaneTag,
+        utils::url::Url,
+    };
 
     fn waiting_media(start: f64) -> WaitingSegmentInfo {
         WaitingSegmentInfo {
@@ -1062,6 +1079,29 @@ mod tests {
     #[test]
     fn pending_init_blocks_gap_jump_conservatively() {
         assert!(pending_segment_could_fill_before(&[waiting_init()], 12.0));
+    }
+
+    #[test]
+    fn requesting_playlist_detects_matching_pending_media_playlist() {
+        let url = Url::new("https://example.com/media.m3u8".to_string());
+        let playlist_type = PlaylistFileType::TopLevelPlaylist;
+        let requester = Requester {
+            pending_playlist_requests: vec![PlaylistRequestInfo {
+                host_id: 1,
+                url: url.clone(),
+                playlist_type: PlaylistFileType::TopLevelPlaylist,
+                attempts_failed: 0,
+                is_waiting_for_retry: false,
+            }],
+            pending_segment_requests: vec![],
+            segment_waiting_queue: vec![],
+            retry_timers: vec![],
+            segment_request_locked: false,
+            base_position: None,
+            config: super::RequesterConfiguration::default(),
+        };
+
+        assert!(requester.is_requesting_playlist(&url, &playlist_type));
     }
 }
 
