@@ -131,6 +131,8 @@ impl InitSegmentInfo {
 #[derive(Clone, Debug)]
 pub(crate) struct MediaSegmentInfo {
     /// Media sequence number identifying this segment within the current playlist lineage.
+    /// TODO: Do we associate that one to **every segment** compated to a single base sequence
+    /// number? Seems unnecessary...
     sequence: u32,
     /// Discontinuity sequence number identifying the timeline continuity context of the segment.
     discontinuity_sequence: u32,
@@ -139,8 +141,8 @@ pub(crate) struct MediaSegmentInfo {
     /// It should be exclusive to the time boundaries of all other segments in this Media Playlist.
     time_info: SegmentTimeInfo,
     /// Program date time associated to the segment, in seconds since epoch, if known.
-    /// XXX TODO: Do we associate that one to **every segment**? Seems unneeded (then again,
-    /// `sequence` also has this "issue")
+    /// TODO: Do we associate that one to **every segment** compared to e.g. a single base offset?
+    /// Seems unnecessary...
     program_date_time: Option<f64>,
     /// URL through which that media segment may be requested.
     url: Url,
@@ -250,7 +252,6 @@ impl TimelineReference {
     pub(crate) fn from_playlist(playlist: &MediaPlaylist) -> Self {
         let media = &playlist.segment_list.media;
 
-        // XXX TODO: Isn't that costly for such a simple operation? Is that optimized?
         let middle_pdt_anchor = media
             .iter()
             .filter_map(|segment| {
@@ -264,25 +265,16 @@ impl TimelineReference {
 
         let mut discontinuities: Vec<TimelineReferenceDiscontinuity> = Vec::new();
         for segment in media {
-            // XXX TODO: Here also, this is very rarely needed, though computed every time
-            let pdt_anchor =
-                segment
-                    .program_date_time
-                    .map(|program_date_time| TimelineReferencePdtAnchor {
-                        discontinuity_sequence: segment.discontinuity_sequence,
-                        start: segment.start(),
-                        program_date_time,
-                    });
             match discontinuities.last_mut() {
                 Some(entry) if entry.discontinuity_sequence == segment.discontinuity_sequence => {
                     if entry.program_date_time.is_none() {
-                        entry.program_date_time = pdt_anchor.map(|anchor| anchor.program_date_time);
+                        entry.program_date_time = segment.program_date_time()
                     }
                 }
                 _ => discontinuities.push(TimelineReferenceDiscontinuity {
                     discontinuity_sequence: segment.discontinuity_sequence,
                     start: segment.start(),
-                    program_date_time: pdt_anchor.map(|anchor| anchor.program_date_time),
+                    program_date_time: segment.program_date_time(),
                 }),
             }
         }
@@ -937,8 +929,6 @@ fn strip_query(url: &str) -> &str {
     }
 }
 
-/// XXX TODO: An LLM without full context flagged this as a possibility, to check:
-/// backfill_program_date_time modifies time_info.start in-place for pre-PDT segments, which means it retroactively changes segment timing based on the first PDT encountered. If there's a discontinuity before that first PDT tag, the backfilled times will be wrong — they'll extrapolate backward through a discontinuity boundary as if it were continuous.
 fn backfill_program_date_time(media_segments: &mut [MediaSegmentInfo]) {
     let Some(first_pdt_index) = media_segments
         .iter()
@@ -949,6 +939,8 @@ fn backfill_program_date_time(media_segments: &mut [MediaSegmentInfo]) {
 
     let mut next_program_date_time = media_segments[first_pdt_index].program_date_time.unwrap();
     for seg in media_segments[..first_pdt_index].iter_mut().rev() {
+        // XXX TODO: does that work even when there's a discontinuity? We're only using `duration`
+        // in reverse
         next_program_date_time -= seg.duration();
         seg.program_date_time = Some(next_program_date_time);
         seg.time_info.start = next_program_date_time;
