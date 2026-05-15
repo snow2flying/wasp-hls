@@ -1,7 +1,8 @@
 use super::{
     audio_track_list::AudioTrackList,
-    media_playlist::{MediaPlaylist, MediaPlaylistParsingError, TimelineReference},
+    media_playlist::{MediaPlaylist, MediaPlaylistParsingError},
     media_tag::{MediaTag, MediaTagParsingError},
+    segment_list::TimelineReference,
     value_parsers::{parse_start_attribute, StartAttribute},
     variable_substitution::{
         parse_define_tag, VariableDefinition, VariableDefinitionError, VariableStore,

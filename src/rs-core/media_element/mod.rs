@@ -186,7 +186,7 @@ impl MediaElementReference {
             .as_ref()?
             .buffered()
             .into_iter()
-            .find_map(|range| (range.0 > wanted_pos).then_some(range))
+            .find(|range| (range.0 > wanted_pos))
     }
 
     /// Returns the difference between the last position of the last known

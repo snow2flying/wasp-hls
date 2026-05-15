@@ -1,21 +1,16 @@
 use super::{
+    attribute_list::parse_enumerated_string,
     attribute_list::AttributeListIter,
-    media_playlist::{MediaPlaylist, MediaPlaylistParsingError, TimelineReference},
+    media_playlist::{MediaPlaylist, MediaPlaylistParsingError},
     multi_variant_playlist::MediaPlaylistContext,
+    segment_list::TimelineReference,
+    value_parsers::{parse_decimal_floating_point, parse_decimal_integer, parse_resolution},
     variable_substitution::VariableStore,
-};
-use crate::{
-    bindings::MediaType,
-    parser::{
-        attribute_list::parse_enumerated_string,
-        value_parsers::{parse_decimal_floating_point, parse_decimal_integer, parse_resolution},
-        variable_substitution::{
-            parse_substituted_comma_separated_list, parse_substituted_quoted_string,
-        },
+    variable_substitution::{
+        parse_substituted_comma_separated_list, parse_substituted_quoted_string,
     },
-    utils::url::Url,
-    Logger,
 };
+use crate::{bindings::MediaType, utils::url::Url, Logger};
 use std::io::BufRead;
 
 /// Stucture representing the HLS concept of a "variant stream".
