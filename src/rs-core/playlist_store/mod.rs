@@ -430,6 +430,30 @@ impl PlaylistStore {
         }
     }
 
+    /// An already-fetched Media Playlist may become stale if we did not refresh it for a long time
+    /// (e.g. reference only old segments which are not available anymore).
+    /// Instead of trying to "re-sync" an updated version of it with an older version, it's simpler
+    /// to just remove all references to it and just re-load it from scracth.
+    /// XXX TODO: Is that even needed? What would be the result of refreshing such a stale playlist?
+    fn ensure_playlist_fresh(
+        &mut self,
+        previous_id: Option<MediaPlaylistPermanentId>,
+        next_id: Option<MediaPlaylistPermanentId>,
+    ) {
+        if let Some(id) = next_id {
+            if next_id == previous_id {
+                return;
+            }
+            // Assume the older playlist is stale because we did not keep checking on it
+            // XXX TODO: Only if it updates?
+            match &mut self.playlist {
+                // XXX TODO: Why not just doing it when we switch from that playlist to another?
+                TopLevelPlaylist::Multivariant(playlist) => playlist.clear_media_playlist(&id),
+                TopLevelPlaylist::DirectMedia(_) => {}
+            }
+        }
+    }
+
     pub(crate) fn current_codec(&self, media_type: MediaType) -> Option<String> {
         match &self.playlist {
             TopLevelPlaylist::Multivariant(_) => {
@@ -1025,7 +1049,9 @@ impl PlaylistStore {
                     unlocked_variant: old_variant_locked,
                 }
             } else if new_audio_id != self.curr_audio_id {
+                let prev_audio_id = self.curr_audio_id;
                 self.curr_audio_id = new_audio_id;
+                self.ensure_playlist_fresh(prev_audio_id, self.curr_audio_id);
                 SetAudioTrackResponse::AudioMediaUpdate
             } else {
                 SetAudioTrackResponse::NoUpdate
@@ -1091,6 +1117,8 @@ impl PlaylistStore {
             TopLevelPlaylist::Multivariant(playlist) => playlist,
             TopLevelPlaylist::DirectMedia(_) => return,
         };
+        let prev_audio_id = self.curr_audio_id;
+        let prev_video_id = self.curr_video_id;
         let variant = playlist.variant(variant_id).unwrap();
         self.curr_variant_id = Some(variant_id);
         let (curr_audio_id, curr_video_id) = Self::normalize_selected_media_ids(
@@ -1099,6 +1127,8 @@ impl PlaylistStore {
         );
         self.curr_video_id = curr_video_id;
         self.curr_audio_id = curr_audio_id;
+        self.ensure_playlist_fresh(prev_audio_id, self.curr_audio_id);
+        self.ensure_playlist_fresh(prev_video_id, self.curr_video_id);
         self.multivariant_support_resolved = false;
     }
 
@@ -1284,7 +1314,7 @@ pub(crate) enum PlaylistStoreError {
 
 #[cfg(test)]
 mod tests {
-    use super::{PlaylistStore, PlaylistStoreError, StartupStatus};
+    use super::{PlaylistStore, PlaylistStoreError, SetAudioTrackResponse, StartupStatus};
     use crate::{
         bindings::MediaType,
         parser::{ExternalMediaInfo, TopLevelPlaylist},
@@ -1392,5 +1422,84 @@ video.m3u8
             store.startup_status(0.),
             Err(PlaylistStoreError::NoProbeSegment)
         ));
+    }
+
+    #[test]
+    fn switching_back_to_a_loaded_audio_playlist_invalidates_its_cache() {
+        let multivariant = r#"#EXTM3U
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="English",DEFAULT=YES,AUTOSELECT=YES,URI="audio-en.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="French",AUTOSELECT=YES,URI="audio-fr.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=1000,AUDIO="aud"
+video.m3u8
+"#;
+        let media = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXTINF:4,
+seg.ts
+"#;
+
+        let playlist = TopLevelPlaylist::parse(
+            multivariant.as_bytes(),
+            parse_url("https://example.com/master.m3u8"),
+        )
+        .unwrap();
+        let mut store = PlaylistStore::try_new(playlist, 10_000.).unwrap();
+
+        let video_id = *store.curr_media_playlist_id(MediaType::Video).unwrap();
+        let english_track_id = store
+            .audio_tracks()
+            .iter()
+            .find(|track| track.name() == "English")
+            .unwrap()
+            .id();
+        let french_track_id = store
+            .audio_tracks()
+            .iter()
+            .find(|track| track.name() == "French")
+            .unwrap()
+            .id();
+        let english_playlist_id = *store.curr_media_playlist_id(MediaType::Audio).unwrap();
+
+        store
+            .update_media_playlist(
+                &video_id,
+                media.as_bytes(),
+                parse_url("https://example.com/video.m3u8"),
+            )
+            .unwrap();
+        store
+            .update_media_playlist(
+                &english_playlist_id,
+                media.as_bytes(),
+                parse_url("https://example.com/audio-en.m3u8"),
+            )
+            .unwrap();
+
+        assert!(matches!(
+            store.set_audio_track(Some(french_track_id)),
+            SetAudioTrackResponse::AudioMediaUpdate
+        ));
+        let french_playlist_id = *store.curr_media_playlist_id(MediaType::Audio).unwrap();
+        assert_ne!(french_playlist_id, english_playlist_id);
+        assert!(store.curr_media_playlist(MediaType::Audio).is_none());
+
+        store
+            .update_media_playlist(
+                &french_playlist_id,
+                media.as_bytes(),
+                parse_url("https://example.com/audio-fr.m3u8"),
+            )
+            .unwrap();
+        assert!(store.curr_media_playlist(MediaType::Audio).is_some());
+
+        assert!(matches!(
+            store.set_audio_track(Some(english_track_id)),
+            SetAudioTrackResponse::AudioMediaUpdate
+        ));
+        assert_eq!(
+            *store.curr_media_playlist_id(MediaType::Audio).unwrap(),
+            english_playlist_id
+        );
+        assert!(store.curr_media_playlist(MediaType::Audio).is_none());
     }
 }

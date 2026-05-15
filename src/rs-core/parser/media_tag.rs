@@ -326,6 +326,10 @@ impl MediaTag {
         self.media_playlist.as_mut()
     }
 
+    pub(super) fn clear_media_playlist(&mut self) {
+        self.media_playlist = None;
+    }
+
     pub(crate) fn update(
         &mut self,
         playlist: impl BufRead,

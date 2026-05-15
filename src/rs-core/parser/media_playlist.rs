@@ -214,9 +214,8 @@ struct TimelineReferenceDiscontinuity {
     discontinuity_sequence: u32,
     /// The first post-discontinuity segment's start time in seconds.
     start: f64,
-    /// Corresponding program date time context
-    /// XXX TODO: Isn't only `program_date_time` needed?
-    pdt_anchor: Option<TimelineReferencePdtAnchor>,
+    /// Program date time associated to that discontinuity sequence, if known.
+    program_date_time: Option<f64>,
 }
 
 /// Extracted information from a parsed Media Playlist which can be useful for
@@ -276,14 +275,14 @@ impl TimelineReference {
                     });
             match discontinuities.last_mut() {
                 Some(entry) if entry.discontinuity_sequence == segment.discontinuity_sequence => {
-                    if entry.pdt_anchor.is_none() {
-                        entry.pdt_anchor = pdt_anchor;
+                    if entry.program_date_time.is_none() {
+                        entry.program_date_time = pdt_anchor.map(|anchor| anchor.program_date_time);
                     }
                 }
                 _ => discontinuities.push(TimelineReferenceDiscontinuity {
                     discontinuity_sequence: segment.discontinuity_sequence,
                     start: segment.start(),
-                    pdt_anchor,
+                    program_date_time: pdt_anchor.map(|anchor| anchor.program_date_time),
                 }),
             }
         }
@@ -326,7 +325,13 @@ impl TimelineReference {
         self.discontinuities
             .iter()
             .find(|entry| entry.discontinuity_sequence == discontinuity_sequence)
-            .and_then(|entry| entry.pdt_anchor)
+            .and_then(|entry| {
+                Some(TimelineReferencePdtAnchor {
+                    discontinuity_sequence: entry.discontinuity_sequence,
+                    start: entry.start,
+                    program_date_time: entry.program_date_time?,
+                })
+            })
     }
 
     fn start_for_sequence(&self, sequence: u32) -> Option<f64> {
@@ -1085,14 +1090,11 @@ fn align_by_program_date_time(
     Some(delta)
 }
 
-/// XXX TODO: An LLM without full context flagged this as a possibility, to check:
-/// align_by_sequence_number's last fallback — when new_first.start() == 0., it assumes the new playlist starts at the same point as the reference. That's a weak heuristic; a freshly-loaded playlist genuinely starting at 0 (e.g., a VOD edge case, or a live stream that reset) would be misaligned.
 fn align_by_sequence_number(
     reference_playlist: &TimelineReference,
     media_segments: &[MediaSegmentInfo],
 ) -> Option<f64> {
     let new_first = media_segments.first()?;
-    let ref_first_start = reference_playlist.first_start?;
     let ref_last_sequence = reference_playlist.last_sequence?;
     let ref_last_end = reference_playlist.last_end?;
 
@@ -1109,15 +1111,6 @@ fn align_by_sequence_number(
         let offset = ref_last_end - new_first.start();
         Logger::debug(&format!(
             "Parser: aligning playlist based on first/last media sequence {} (diff:{})",
-            new_first.sequence, offset
-        ));
-        return Some(offset);
-    }
-
-    if new_first.start() == 0. {
-        let offset = ref_first_start - new_first.start();
-        Logger::debug(&format!(
-            "Parser: aligning playlist based on first media sequence {} (diff:{})",
             new_first.sequence, offset
         ));
         return Some(offset);
@@ -1397,6 +1390,52 @@ audio-112.ts
             current.segment_list().media()[1].start()
         );
         assert_eq!(segments[2].end(), current.segment_list().media()[2].end());
+    }
+
+    #[test]
+    fn first_load_of_unrelated_playlist_does_not_align_from_reference_start_only() {
+        let current_playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-MEDIA-SEQUENCE:110
+#EXTINF:4,
+video-110.ts
+#EXTINF:4,
+video-111.ts
+#EXTINF:4,
+video-112.ts
+"#;
+        let unrelated_playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-MEDIA-SEQUENCE:510
+#EXTINF:4,
+audio-510.ts
+#EXTINF:4,
+audio-511.ts
+#EXTINF:4,
+audio-512.ts
+"#;
+
+        let current = MediaPlaylist::create(
+            Cursor::new(current_playlist),
+            Url::new("https://example.com/video.m3u8".to_owned()),
+            None,
+            None,
+            &MediaPlaylistContext::default(),
+        )
+        .unwrap();
+        let timeline_reference = TimelineReference::from_playlist(&current);
+        let selected = MediaPlaylist::create(
+            Cursor::new(unrelated_playlist),
+            Url::new("https://example.com/audio.m3u8".to_owned()),
+            None,
+            Some(&timeline_reference),
+            &MediaPlaylistContext::default(),
+        )
+        .unwrap();
+
+        let segments = selected.segment_list().media();
+        assert_eq!(segments[0].start(), 0.);
+        assert_eq!(segments[2].end(), 12.);
     }
 
     fn refresh_interval_ignores_trailing_zero_duration_segment() {

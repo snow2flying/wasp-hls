@@ -298,6 +298,10 @@ impl VariantStream {
         self.media_playlist.as_mut()
     }
 
+    pub(super) fn clear_media_playlist(&mut self) {
+        self.media_playlist = None;
+    }
+
     pub(super) fn update_media_playlist(
         &mut self,
         playlist: impl BufRead,

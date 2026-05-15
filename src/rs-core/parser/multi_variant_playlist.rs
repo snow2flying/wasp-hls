@@ -433,6 +433,31 @@ impl MultivariantPlaylist {
         }
     }
 
+    pub(crate) fn clear_media_playlist(&mut self, wanted_id: &MediaPlaylistPermanentId) {
+        match wanted_id.location() {
+            MediaPlaylistUrlLocation::Variant => {
+                if let Some(variant) = self.variants.iter_mut().find(|v| v.id() == wanted_id.id()) {
+                    variant.clear_media_playlist();
+                }
+            }
+            MediaPlaylistUrlLocation::AudioTrack => {
+                if let Some(media_tag) = self.audio_tracks.media_tag_mut(wanted_id.id()) {
+                    media_tag.clear_media_playlist();
+                }
+            }
+            MediaPlaylistUrlLocation::OtherMedia => {
+                if let Some(media_tag) = self
+                    .other_media
+                    .iter_mut()
+                    .find(|m| m.id() == wanted_id.id())
+                {
+                    media_tag.clear_media_playlist();
+                }
+            }
+            MediaPlaylistUrlLocation::Direct => {}
+        }
+    }
+
     pub(crate) fn update_media_playlist(
         &mut self,
         id: &MediaPlaylistPermanentId,
@@ -440,18 +465,10 @@ impl MultivariantPlaylist {
         url: Url,
         sync_playlist_id: Option<MediaPlaylistPermanentId>,
     ) -> Result<&MediaPlaylist, MediaPlaylistUpdateError> {
-        // If we didn't previously hear about this playlist, use `sync_playlist_id` to get the
-        // timeline from that Playlist.
-        // XXX TODO: What about very old playlist whose old segments have since disappeared under
-        // timeshift rules?
-        let timeline_reference = if self.media_playlist(id).is_none() {
-            sync_playlist_id
-                .filter(|reference_id| reference_id != id)
-                .and_then(|reference_id| self.media_playlist(&reference_id))
-                .map(TimelineReference::from_playlist)
-        } else {
-            None
-        };
+        let timeline_reference = sync_playlist_id
+            .filter(|reference_id| reference_id != id)
+            .and_then(|reference_id| self.media_playlist(&reference_id))
+            .map(TimelineReference::from_playlist);
         match id.location() {
             MediaPlaylistUrlLocation::Variant => {
                 self.update_variant_media_playlist(id.id(), data, url, timeline_reference.as_ref())
