@@ -618,7 +618,9 @@ impl MediaPlaylist {
             Some(
                 self.segment_list
                     .media()
-                    .last()
+                    .iter()
+                    .rev()
+                    .find(|s| s.duration() > 0.)
                     .map(|s| s.duration() * 1.1)
                     .unwrap_or(f64::from(self.target_duration / 2))
                     * 1000.,
@@ -1002,5 +1004,29 @@ seg-12.ts?token=new
         let segments = refreshed.segment_list().media();
         assert_eq!(segments[0].start(), 4.);
         assert_eq!(segments[1].start(), 8.);
+    }
+
+    fn refresh_interval_ignores_trailing_zero_duration_segment() {
+        let playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:3
+#EXT-X-MEDIA-SEQUENCE:90
+#EXTINF:3.008,
+seg-90.m4s
+#EXTINF:2.98667,
+seg-91.m4s
+#EXTINF:0,
+seg-92.m4s
+"#;
+
+        let parsed = MediaPlaylist::create(
+            Cursor::new(playlist),
+            Url::new("https://example.com/media.m3u8".to_owned()),
+            None,
+            &MediaPlaylistContext::default(),
+        )
+        .unwrap();
+
+        let refresh_interval = parsed.refresh_interval().unwrap();
+        assert!((refresh_interval - (2986.67 * 1.1)).abs() < 0.001);
     }
 }
