@@ -584,10 +584,48 @@ impl SegmentCursor {
         maximum_position: f64,
     ) -> Option<&'a MediaSegmentInfo> {
         let position = self.current_cursor;
-        let next_seg = media_segments.iter().find(|s| (s.end()) > position);
+        let next_seg = media_segments
+            .iter()
+            .find(|s| s.duration() > 0. && (s.end()) > position);
         match next_seg {
             Some(seg) if seg.start() <= maximum_position => next_seg,
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SegmentCursor;
+    use crate::{
+        parser::TopLevelPlaylist,
+        utils::url::Url,
+    };
+
+    #[test]
+    fn segment_cursor_skips_trailing_zero_duration_segment() {
+        let playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:3
+#EXTINF:3,
+seg-0.m4s
+#EXTINF:0,
+seg-1.m4s
+"#;
+        let parsed = TopLevelPlaylist::parse(
+            playlist.as_bytes(),
+            Url::new("https://example.com/media.m3u8".to_owned()),
+        )
+        .unwrap();
+        let TopLevelPlaylist::DirectMedia(ref playlist) = parsed else {
+            panic!("expected direct media playlist");
+        };
+        let segments = playlist.playlist().segment_list().media();
+        let mut cursor = SegmentCursor::new(2.5);
+
+        let next = cursor.get_next(segments, 10.).unwrap();
+        assert_eq!(next.sequence(), 0);
+
+        cursor.move_cursor(3.);
+        assert!(cursor.get_next(segments, 10.).is_none());
     }
 }
