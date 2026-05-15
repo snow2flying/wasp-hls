@@ -1,39 +1,26 @@
 // @ts-check
 
 import { spawn } from "child_process";
-import { existsSync, mkdirSync } from "fs";
+import { mkdirSync } from "fs";
 import { resolve } from "path";
 import {
-  isValidHexKey,
   commandExists,
   outputDirHasMediaFiles,
   cleanupMediaFiles,
 } from "./utils.mjs";
 import { checkPortRange, buildPortMap } from "./ports.mjs";
-import { resolveShakaBinary, waitForShakaReady } from "./shaka_packager.mjs";
-import {
-  createTextTrackAssets,
-  startLiveTextTrackWriters,
-} from "./text_track.mjs";
+import { resolveGpacBinary, waitForGpacReady } from "./gpac_packager.mjs";
 import { buildFfmpegArgs, spawnFfmpeg } from "./ffmpeg.mjs";
 import { showConfigAndConfirm, askConfirmation } from "./ui.mjs";
 import {
-  setShakaProc,
+  setPackagerProc,
   setFfmpegProc,
-  addTextWriterProcs,
   cleanup,
   createChildExitPromise,
 } from "./cleanup.mjs";
-import {
-  SHAKA_STARTUP_POLL_INTERVAL_MS,
-  SHAKA_STARTUP_TIMEOUT_MS,
-  TEXT_TRACK_LANGUAGE,
-} from "./constants.mjs";
 
 /**
  * @typedef {object} PackageConfig
- * @property {string}  [keyId]               - 32-char hex key ID (encrypted streams only).
- * @property {string}  [key]                 - 32-char hex key (encrypted streams only).
  * @property {number}  basePort              - First UDP port used by the pipeline.
  * @property {string}  outputDir             - Directory where packaged content is written.
  * @property {boolean} noConfirm             - Skip interactive confirmation prompts.
@@ -43,25 +30,23 @@ import {
  * @property {number}  timeshiftBufferDepth  - DVR window depth in seconds.
  * @property {"mpegts"|"fmp4"} mediaFormat   - HLS media output format.
  * @property {"none"|"webvtt"|"ttml"} subtitleFormat - HLS subtitle output format.
- * @property {string}  [shakaPath]           - Explicit path to the shaka-packager binary.
- * @property {string}  tmpDir                - Directory used to cache the shaka binary.
- * @property {string}  scriptDir             - Directory containing install_shaka_packager.sh.
+ * @property {string}  [gpacPath]            - Explicit path to the gpac binary.
+ * @property {string}  tmpDir                - Directory used to cache the gpac binary.
+ * @property {string}  scriptDir             - Directory containing install_gpac.sh.
  */
 
 /**
  * Create and package a live HLS stream.
  *
- * Orchestrates ffmpeg (media encoding) and shaka-packager (HLS segmentation),
- * optionally with a synthetic WebVTT text source converted by Shaka to the
- * configured subtitle format. Runs until interrupted or until one of the
- * child processes exits unexpectedly.
+ * Orchestrates ffmpeg (media encoding) and GPAC (HLS segmentation). Runs until
+ * interrupted or until one of the child processes exits unexpectedly.
  *
  * @param {PackageConfig} config
  * @returns {Promise<void>}
  */
 export async function packageLiveContent(config) {
-  validateEncryptionKeys(config);
   validateFormatConfig(config);
+  validateFeatureSupport(config);
 
   const { ok: portRangeOk, conflictDetected: portConflictDetected } =
     checkPortRange(config.basePort);
@@ -81,69 +66,39 @@ export async function packageLiveContent(config) {
     );
   }
 
-  const shakaCmd =
-    config.shakaPath ||
-    (await resolveShakaBinary(
-      config.tmpDir,
-      config.scriptDir,
-      config.noConfirm,
-    ));
+  const gpacCmd = await resolveGpacBinary(
+    config.tmpDir,
+    config.scriptDir,
+    config.noConfirm,
+    config.gpacPath,
+  );
 
   const ports = buildPortMap(config.basePort);
 
-  await showConfigAndConfirm(config, shakaCmd, ports, portConflictDetected);
+  await showConfigAndConfirm(config, gpacCmd, ports, portConflictDetected);
 
   console.log("Starting...");
   console.log("Cleaning up any existing media files before starting...");
   cleanupMediaFiles(config.outputDir);
   ensureOutputDir(config);
 
-  const textTrackAssets = createTextTrackAssets(ports, config.subtitleFormat);
+  const gpacArgs = buildGpacArgs(config, ports);
 
-  const shakaArgs = buildShakaArgs(config, ports, textTrackAssets);
-
-  console.log(`Starting shaka-packager with command: ${shakaCmd}`);
-  const shaka = spawn(shakaCmd, shakaArgs, { stdio: "inherit" });
-  setShakaProc(shaka);
-  console.log(`shaka-packager started with PID: ${shaka.pid}`);
-  const shakaExited = createChildExitPromise(
-    "shaka-packager",
-    shaka,
-    config.outputDir,
-  );
-  /** @type {Promise<void>[]} */
-  let textWriterExited = [];
+  console.log(`Starting GPAC with command: ${gpacCmd}`);
+  const gpac = spawn(gpacCmd, gpacArgs, { stdio: "inherit" });
+  setPackagerProc(gpac);
+  console.log(`GPAC started with PID: ${gpac.pid}`);
+  const gpacExited = createChildExitPromise("gpac", gpac, config.outputDir);
 
   try {
-    const portsToWait = [
+    await waitForGpacReady([
       ports.p720,
       ports.p480,
       ports.p360,
       ports.audio1,
       ports.audio2,
       ports.audio3,
-      ...(textTrackAssets.length > 0 ? [ports.text1] : []),
-    ];
-    await waitForShakaReady(portsToWait);
-
-    if (textTrackAssets.length > 0) {
-      const writers = startLiveTextTrackWriters(
-        textTrackAssets,
-        config.segmentDuration,
-      );
-      addTextWriterProcs(writers);
-      textWriterExited = writers.map((writer, index) =>
-        createChildExitPromise(
-          `text-writer-${index + 1}`,
-          writer,
-          config.outputDir,
-        ),
-      );
-      await Promise.race([
-        waitForTextTracksReady(config.outputDir, textTrackAssets),
-        ...textWriterExited,
-      ]);
-    }
+    ]);
   } catch (err) {
     cleanup(config.outputDir);
     throw err;
@@ -163,25 +118,7 @@ export async function packageLiveContent(config) {
   );
 
   // Run until interrupted or one child crashes.
-  await Promise.race([ffmpegExited, shakaExited, ...textWriterExited]);
-}
-
-/**
- * @param {PackageConfig} config
- */
-function validateEncryptionKeys(config) {
-  if (config.keyId) {
-    config.keyId = config.keyId.toLowerCase();
-    if (!isValidHexKey(config.keyId)) {
-      throw new Error("KEY_ID must be a 32-character hexadecimal string.");
-    }
-  }
-  if (config.key) {
-    config.key = config.key.toLowerCase();
-    if (!isValidHexKey(config.key)) {
-      throw new Error("KEY must be a 32-character hexadecimal string.");
-    }
-  }
+  await Promise.race([ffmpegExited, gpacExited]);
 }
 
 /**
@@ -197,6 +134,17 @@ function validateFormatConfig(config) {
     config.subtitleFormat !== "ttml"
   ) {
     throw new Error(`Unsupported subtitle format: ${config.subtitleFormat}`);
+  }
+}
+
+/**
+ * @param {PackageConfig} config
+ */
+function validateFeatureSupport(config) {
+  if (config.subtitleFormat !== "none") {
+    throw new Error(
+      `GPAC live packaging currently only supports --subtitle-format none. Received: ${config.subtitleFormat}`,
+    );
   }
 }
 
@@ -236,105 +184,86 @@ async function checkIfOutputContainsMediaFiles(outputDir, noConfirm) {
 }
 
 /**
- * Assemble the full shaka-packager argument list.
+ * Assemble the full GPAC argument list.
  *
  * @param {PackageConfig} config
  * @param {ReturnType<import("./ports.mjs").buildPortMap>} ports
- * @param {ReturnType<import("./text_track.mjs").createTextTrackAssets>} textTrackAssets
  * @returns {string[]}
  */
-function buildShakaArgs(config, ports, textTrackAssets) {
+function buildGpacArgs(config, ports) {
   const out = config.outputDir;
-
-  const streamArgs =
-    config.mediaFormat === "fmp4"
-      ? [
-          `in=udp://127.0.0.1:${ports.p720},stream=video,init_segment=${out}/h264_720p_init.mp4,segment_template=${out}/h264_720p_$Number$.m4s,playlist_name=h264_720p.m3u8,iframe_playlist_name=h264_720p_iframe.m3u8`,
-          `in=udp://127.0.0.1:${ports.p480},stream=video,init_segment=${out}/h264_480p_init.mp4,segment_template=${out}/h264_480p_$Number$.m4s,playlist_name=h264_480p.m3u8,iframe_playlist_name=h264_480p_iframe.m3u8`,
-          `in=udp://127.0.0.1:${ports.p360},stream=video,init_segment=${out}/h264_360p_init.mp4,segment_template=${out}/h264_360p_$Number$.m4s,playlist_name=h264_360p.m3u8,iframe_playlist_name=h264_360p_iframe.m3u8`,
-          `in=udp://127.0.0.1:${ports.audio1},stream=audio,init_segment=${out}/audio_eng_init.mp4,segment_template=${out}/audio_eng_$Number$.m4s,playlist_name=audio_eng.m3u8,hls_group_id=audio,hls_name=English`,
-          `in=udp://127.0.0.1:${ports.audio2},stream=audio,init_segment=${out}/audio_fra_init.mp4,segment_template=${out}/audio_fra_$Number$.m4s,playlist_name=audio_fra.m3u8,hls_group_id=audio,hls_name=French`,
-          `in=udp://127.0.0.1:${ports.audio3},stream=audio,init_segment=${out}/audio_arm_init.mp4,segment_template=${out}/audio_arm_$Number$.m4s,playlist_name=audio_arm.m3u8,hls_group_id=audio,hls_name=Armenian`,
-        ]
-      : [
-          `in=udp://127.0.0.1:${ports.p720},stream=video,segment_template=${out}/h264_720p_$Number$.ts,playlist_name=h264_720p.m3u8,iframe_playlist_name=h264_720p_iframe.m3u8`,
-          `in=udp://127.0.0.1:${ports.p480},stream=video,segment_template=${out}/h264_480p_$Number$.ts,playlist_name=h264_480p.m3u8,iframe_playlist_name=h264_480p_iframe.m3u8`,
-          `in=udp://127.0.0.1:${ports.p360},stream=video,segment_template=${out}/h264_360p_$Number$.ts,playlist_name=h264_360p.m3u8,iframe_playlist_name=h264_360p_iframe.m3u8`,
-          `in=udp://127.0.0.1:${ports.audio1},stream=audio,segment_template=${out}/audio_eng_$Number$.aac,playlist_name=audio_eng.m3u8,hls_group_id=audio,hls_name=English`,
-          `in=udp://127.0.0.1:${ports.audio2},stream=audio,segment_template=${out}/audio_fra_$Number$.aac,playlist_name=audio_fra.m3u8,hls_group_id=audio,hls_name=French`,
-          `in=udp://127.0.0.1:${ports.audio3},stream=audio,segment_template=${out}/audio_arm_$Number$.aac,playlist_name=audio_arm.m3u8,hls_group_id=audio,hls_name=Armenian`,
-        ];
-
-  const textArgs = buildTextTrackShakaArgs(textTrackAssets, out).reverse();
-
-  const baseArgs = [
-    "--time_shift_buffer_depth",
-    String(config.timeshiftBufferDepth),
-    "--minimum_update_period",
-    String(config.segmentDuration),
-    "--segment_duration",
-    String(config.segmentDuration),
-    "--fragment_duration",
-    String(config.fragmentDuration),
-    "--hls_playlist_type",
-    "LIVE",
-    "--hls_master_playlist_output",
-    `${out}/master.m3u8`,
+  const inputs = [
+    {
+      port: ports.p720,
+      playlist: "h264_720p.m3u8",
+      representation: "h264_720p",
+      bitrate: "2500000",
+    },
+    {
+      port: ports.p480,
+      playlist: "h264_480p.m3u8",
+      representation: "h264_480p",
+      bitrate: "1200000",
+    },
+    {
+      port: ports.p360,
+      playlist: "h264_360p.m3u8",
+      representation: "h264_360p",
+      bitrate: "600000",
+    },
+    {
+      port: ports.audio1,
+      playlist: "audio_eng.m3u8",
+      representation: "English",
+      bitrate: "128000",
+      language: "en",
+      group: "audio",
+    },
+    {
+      port: ports.audio2,
+      playlist: "audio_fra.m3u8",
+      representation: "French",
+      bitrate: "128000",
+      language: "fr",
+      group: "audio",
+    },
+    {
+      port: ports.audio3,
+      playlist: "audio_arm.m3u8",
+      representation: "Armenian",
+      bitrate: "128000",
+      language: "hy",
+      group: "audio",
+    },
   ];
 
-  const encryptionArgs = config.keyId
-    ? [
-        "--keys",
-        `label=:key_id=${config.keyId}:key=${config.key}`,
-        "--clear_lead",
-        "0",
-        "--protection_scheme",
-        "cenc",
-      ]
-    : [];
+  const inputArgs = inputs.flatMap((input) => {
+    let source =
+      `udp://127.0.0.1:${input.port}` +
+      `:#HLSPL=${input.playlist}` +
+      `:#Representation=${input.representation}` +
+      `:#Bitrate=${input.bitrate}`;
 
-  return [...textArgs, ...streamArgs, ...baseArgs, ...encryptionArgs];
-}
-
-/**
- * Wait until each text-track's first expected output file has been written to
- * disk, or reject after the standard shaka startup timeout.
- *
- * @param {string} outputDir
- * @param {ReturnType<import("./text_track.mjs").createTextTrackAssets>} textTrackAssets
- * @returns {Promise<void>}
- */
-export async function waitForTextTracksReady(outputDir, textTrackAssets) {
-  const expectedFiles = textTrackAssets.flatMap((asset) =>
-    asset.readinessFiles.map((fileName) => resolve(outputDir, fileName)),
-  );
-
-  const deadline = Date.now() + SHAKA_STARTUP_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    if (expectedFiles.every(existsSync)) {
-      return;
+    if (input.group) {
+      source += `:#HLSGroup=${input.group}`;
     }
-    await new Promise((r) => setTimeout(r, SHAKA_STARTUP_POLL_INTERVAL_MS));
-  }
+    if (input.language) {
+      source += `:#Language=${input.language}`;
+    }
 
-  throw new Error(
-    `Timed out waiting for text track output files: ${expectedFiles.join(", ")}`,
-  );
-}
+    return ["-i", source];
+  });
 
-/**
- * Build the shaka-packager input descriptors for a set of text-track assets.
- *
- * @param {ReturnType<import("./text_track.mjs").createTextTrackAssets>} textTrackAssets
- * @param {string} outputDir
- * @returns {string[]}  One descriptor string per asset.
- */
-export function buildTextTrackShakaArgs(textTrackAssets, outputDir) {
-  return textTrackAssets.map(
-    (asset) =>
-      `in=${asset.sourcePath},stream=text,input_format=${asset.inputFormat},` +
-      `language=${TEXT_TRACK_LANGUAGE},` +
-      `playlist_name=${asset.playlistName},hls_group_id=text,hls_name=English,` +
-      asset.outputFields(outputDir),
-  );
+  const outputOptions = [
+    `${out}/master.m3u8` +
+      `:profile=live` +
+      `:dmode=dynamic` +
+      `:segdur=${config.segmentDuration}` +
+      `:cdur=${config.fragmentDuration}` +
+      `:refresh=${config.segmentDuration}` +
+      `:tsb=${config.timeshiftBufferDepth}` +
+      (config.mediaFormat === "mpegts" ? ":muxtype=ts" : ":llhls=br"),
+  ];
+
+  return [...inputArgs, "-o", ...outputOptions];
 }

@@ -53,13 +53,13 @@ function tableSep() {
  * Print a formatted configuration table and optionally prompt for confirmation.
  *
  * @param {import("./live_packager.mjs").PackageConfig} config
- * @param {string} shakaCmd
+ * @param {string} gpacCmd
  * @param {ReturnType<import("./ports.mjs").buildPortMap>} ports
  * @param {boolean} portConflictDetected
  */
 export async function showConfigAndConfirm(
   config,
-  shakaCmd,
+  gpacCmd,
   ports,
   portConflictDetected,
 ) {
@@ -89,7 +89,7 @@ export async function showConfigAndConfirm(
   }
 
   tableSep();
-  tableRow("Shaka-packager command", shakaCmd, BLUE);
+  tableRow("GPAC command", gpacCmd, BLUE);
 
   const lastUsedPort = getLastUsedPort(ports, config.subtitleFormat !== "none");
   const portLabel = portConflictDetected
@@ -100,18 +100,6 @@ export async function showConfigAndConfirm(
 
   tableRow("Output Directory", config.outputDir, GREEN);
   tableRow("Output Manifest", `${config.outputDir}/master.m3u8`, GREEN);
-
-  tableSep();
-
-  if (!config.keyId || !config.key) {
-    tableRow("Encryption Status", "Unencrypted", RED);
-  } else {
-    tableRow("Encryption Status", "Encrypted", GREEN);
-    tableSep();
-    tableRow("  Content", "All audio and video content", WHITE);
-    tableRow("  Key ID", config.keyId, YELLOW);
-    tableRow("  Key", config.key, YELLOW);
-  }
 
   console.log(
     "└─────────────────────────────┴──────────────────────────────────────────┘",

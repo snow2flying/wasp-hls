@@ -14,14 +14,10 @@
 
 // @ts-check
 
-import { resolve, dirname, join } from "path";
-import { fileURLToPath } from "url";
 import { existsSync } from "fs";
 
 import {
   DEFAULT_CONFIG,
-  DEFAULT_KID,
-  DEFAULT_KEY,
   DEFAULT_SEGMENT_DURATION,
   DEFAULT_FRAME_RATE,
   DEFAULT_TIMESHIFT_BUFFER_DEPTH,
@@ -34,14 +30,11 @@ import { getMaxNbPortsUsed } from "./ports.mjs";
 import { packageLiveContent } from "./live_packager.mjs";
 import { cleanup, registerSignalHandlers } from "./cleanup.mjs";
 
-const SCRIPT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
-const TMP_DIR = resolve(SCRIPT_DIR, "..", "tmp");
-
+/**
+ * @type import("./live_packager.mjs").PackageConfig
+ */
 const configObj = {
   ...DEFAULT_CONFIG,
-  outputDir: resolve(TMP_DIR, "testcontents", "live"),
-  tmpDir: TMP_DIR,
-  scriptDir: SCRIPT_DIR,
 };
 
 const args = process.argv.slice(2);
@@ -124,15 +117,15 @@ for (let i = 0; i < args.length; i++) {
       break;
     }
 
-    case "--shaka-path": {
+    case "--gpac-path": {
       const { value, nextIndex } = requireNextArg(arg, i);
       if (!value) {
-        panic("--shaka-path cannot be empty.");
+        panic("--gpac-path cannot be empty.");
       }
       if (!existsSync(value)) {
-        panic(`Shaka-packager binary not found at: ${value}`);
+        panic(`GPAC binary not found at: ${value}`);
       }
-      configObj.shakaPath = value;
+      configObj.gpacPath = value;
       i = nextIndex;
       break;
     }
@@ -141,8 +134,9 @@ for (let i = 0; i < args.length; i++) {
       const { value, nextIndex } = requireNextArg(arg, i);
       if (value !== "mpegts" && value !== "fmp4") {
         panic('--media-format must be either "mpegts" or "fmp4".');
+      } else {
+        configObj.mediaFormat = value;
       }
-      configObj.mediaFormat = value;
       i = nextIndex;
       break;
     }
@@ -151,19 +145,15 @@ for (let i = 0; i < args.length; i++) {
       const { value, nextIndex } = requireNextArg(arg, i);
       if (value !== "none" && value !== "webvtt" && value !== "ttml") {
         panic('--subtitle-format must be "none", "webvtt", or "ttml".');
+      } else {
+        configObj.subtitleFormat = value;
       }
-      configObj.subtitleFormat = value;
       i = nextIndex;
       break;
     }
 
     case "--no-confirmation":
       configObj.noConfirm = true;
-      break;
-
-    case "--encrypted":
-      configObj.keyId = DEFAULT_KID;
-      configObj.key = DEFAULT_KEY;
       break;
 
     case "--help":
@@ -204,8 +194,8 @@ content_packager.mjs
 ------------------------
 
 This script creates and packages a live HLS content from scratch by relying on
-\`ffmpeg\` (which has to be installed locally) and the shaka-packager (which
-will be downloaded if not found locally in a directory called \`tmp\`).
+\`ffmpeg\` (which has to be installed locally) and GPAC (which will be searched
+in PATH and otherwise installed locally in the \`tmp\` directory).
 
 Usage: node main.mjs <OPTIONS>
 
@@ -231,25 +221,27 @@ Options:
   --media-format <format>             HLS media output format.
                                       Accepted values: 'mpegts', 'fmp4'.
                                       Defaults to ${DEFAULT_MEDIA_FORMAT}.
+                                      LL-HLS output is produced in the fMP4 mode
+                                      when --fragment-duration is lower than
+                                      --segment-duration.
 
   --subtitle-format <format>          HLS subtitle output format.
                                       Accepted values: 'none', 'webvtt', 'ttml'.
                                       Defaults to ${DEFAULT_SUBTITLE_FORMAT}.
+                                      The current GPAC live path only supports
+                                      'none'.
 
   --no-confirmation                   Never ask for confirmation; validate all prompts.
                                       Intended for automated scripts.
 
-  --encrypted                         Encrypt all video and audio with the same key.
-                                        key_id = ${DEFAULT_KID}
-                                        key    = ${DEFAULT_KEY}
-
   --base-port <port>                  Base UDP port number where media encoded by ffmpeg will
-                                      be communicated to the shaka-packager.
+                                      be communicated to GPAC.
                                       Up to ${maxNbPortsUsed} consecutive ports starting from this number will be used.
                                       Defaults to ${DEFAULT_BASE_PORT} (ports ${DEFAULT_BASE_PORT}-${DEFAULT_BASE_PORT + maxNbPortsUsed - 1}).
 
-  --shaka-path <path>                 Path to the shaka-packager binary. If not specified,
-                                      the script will search common locations and, as a last
-                                      resort, try to download it (you will be asked to confirm).
+  --gpac-path <path>                  Path to the gpac binary. If not specified,
+                                      the script will search common locations and,
+                                      as a last resort, try to install it locally
+                                      in \`tmp\` (you will be asked to confirm).
 `);
 }

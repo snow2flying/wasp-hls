@@ -6,7 +6,7 @@ import { cleanupMediaFiles } from "./utils.mjs";
 export let ffmpegProc = null;
 
 /** @type {import("child_process").ChildProcess | null} */
-export let shakaProc = null;
+export let packagerProc = null;
 
 /** @type {import("child_process").ChildProcess[]} */
 export const textWriterProcs = [];
@@ -19,8 +19,8 @@ export function setFfmpegProc(proc) {
 }
 
 /** @param {import("child_process").ChildProcess} proc */
-export function setShakaProc(proc) {
-  shakaProc = proc;
+export function setPackagerProc(proc) {
+  packagerProc = proc;
 }
 
 /** @param {import("child_process").ChildProcess[]} procs */
@@ -45,7 +45,7 @@ export function cleanup(outputDir) {
   /** @type {Array.<[string, import("child_process").ChildProcess|null]>} */
   const namedProcs = [
     ["ffmpeg", ffmpegProc],
-    ["shaka-packager", shakaProc],
+    ["gpac", packagerProc],
     ...textWriterProcs.map(
       /**
        * @param {import("child_process").ChildProcess|null} p
@@ -123,7 +123,7 @@ export function registerSignalHandlers(getOutputDir) {
   }
 
   process.on("exit", () => {
-    for (const proc of [ffmpegProc, shakaProc, ...textWriterProcs]) {
+    for (const proc of [ffmpegProc, packagerProc, ...textWriterProcs]) {
       if (proc) {
         try {
           proc.kill("SIGKILL");

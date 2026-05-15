@@ -7,7 +7,7 @@ import { spawn } from "child_process";
  *
  * Three synthetic video sources (720p / 480p / 360p) and three sine-wave
  * audio sources (English / French / Armenian) are muxed into separate MPEG-TS
- * UDP streams consumed by shaka-packager.
+ * UDP streams consumed by GPAC.
  *
  * @param {object} opts
  * @param {number} opts.frameRate

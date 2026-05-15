@@ -6,15 +6,6 @@ import { existsSync, readdirSync, unlinkSync } from "fs";
 import { ARTIFACT_PATTERNS } from "./constants.mjs";
 
 /**
- * Returns true if `value` is a 32-character hexadecimal string.
- * @param {string} value
- * @returns {boolean}
- */
-export function isValidHexKey(value) {
-  return /^[0-9a-fA-F]{32}$/.test(value);
-}
-
-/**
  * Returns true if `value` is a positive integer.
  * @param {string} value
  * @returns {boolean}

@@ -1,9 +1,7 @@
 // @ts-check
 
-// Encryption defaults
-
-export const DEFAULT_KID = "0123456789abcdef0123456789abcdef";
-export const DEFAULT_KEY = "fedcba9876543210fedcba9876543210";
+import { resolve, dirname, join } from "path";
+import { fileURLToPath } from "url";
 
 // Segment / stream defaults
 
@@ -23,10 +21,10 @@ export const TEXT_TRACK_CUE_SPACING = 4;
 export const TEXT_TRACK_CUE_DURATION = 2;
 export const TEXT_TRACK_INITIAL_AHEAD_DURATION = 4;
 
-// Shaka startup polling
+// Packager startup polling
 
-export const SHAKA_STARTUP_TIMEOUT_MS = 15000;
-export const SHAKA_STARTUP_POLL_INTERVAL_MS = 300;
+export const PACKAGER_STARTUP_TIMEOUT_MS = 15000;
+export const PACKAGER_STARTUP_POLL_INTERVAL_MS = 300;
 
 // ANSI colour codes
 
@@ -56,8 +54,14 @@ export const ARTIFACT_PATTERNS = [
   /^live_subtitles\.vtt$/,
 ];
 
+export const SCRIPT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
+export const TMP_DIR = resolve(SCRIPT_DIR, "..", "tmp");
+
 // Default config object
 
+/**
+ * @type import("./live_packager.mjs").PackageConfig
+ */
 export const DEFAULT_CONFIG = {
   segmentDuration: DEFAULT_SEGMENT_DURATION,
   fragmentDuration: DEFAULT_SEGMENT_DURATION,
@@ -67,8 +71,8 @@ export const DEFAULT_CONFIG = {
   mediaFormat: DEFAULT_MEDIA_FORMAT,
   subtitleFormat: DEFAULT_SUBTITLE_FORMAT,
   noConfirm: false,
-  shakaPath: "",
-  outputDir: "",
-  keyId: "",
-  key: "",
+  gpacPath: "",
+  tmpDir: TMP_DIR,
+  scriptDir: SCRIPT_DIR,
+  outputDir: resolve(TMP_DIR, "testcontents", "live"),
 };
