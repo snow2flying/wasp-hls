@@ -306,6 +306,7 @@ impl MediaPlaylist {
         let mut start = None;
         let mut skip_next_segment = false;
         let mut pending_discontinuities = 0u32;
+        let mut saw_program_date_time = false;
 
         let playlist_base_url = url.pathname();
 
@@ -403,6 +404,7 @@ impl MediaPlaylist {
                     },
                     "-X-PROGRAM-DATE-TIME" => {
                         if let Some(date) = parse_iso_8601_date(&str_line, colon_idx + 1) {
+                            saw_program_date_time = true;
                             curr_start_time = date;
                         }
                     }
@@ -531,6 +533,27 @@ impl MediaPlaylist {
         }
         if let Some(indep) = context.independent_segments() {
             independent_segments = indep;
+        }
+
+        if !saw_program_date_time {
+            if let Some(offset) =
+                infer_live_timeline_offset(prev_playlist, media_segments.as_slice())
+            {
+                for seg in &mut media_segments {
+                    seg.time_info.start += offset;
+                }
+
+                for init in &mut maps_info {
+                    let is_inherited_from_previous = prev_playlist.is_some_and(|prev| {
+                        prev.segment_list.init.iter().any(|known| {
+                            known.url == init.url && known.byte_range == init.byte_range
+                        })
+                    });
+                    if !is_inherited_from_previous {
+                        init.start += offset;
+                    }
+                }
+            }
         }
 
         if playlist_type == PlaylistNature::Unknown && !end_list {
@@ -727,6 +750,49 @@ impl MediaPlaylist {
     }
 }
 
+fn urls_match_for_reload(prev_url: &Url, new_url: &Url) -> bool {
+    // Query parameters often rotate between reloads without changing the
+    // underlying segment identity, so ignore them for overlap matching.
+    strip_query(prev_url.get_ref()) == strip_query(new_url.get_ref())
+}
+
+fn strip_query(url: &str) -> &str {
+    match url.find('?') {
+        Some(idx) => &url[..idx],
+        None => url,
+    }
+}
+
+fn infer_live_timeline_offset(
+    prev_playlist: Option<&MediaPlaylist>,
+    media_segments: &[MediaSegmentInfo],
+) -> Option<f64> {
+    let prev_playlist = prev_playlist?;
+
+    for new_seg in media_segments {
+        if let Some(prev_seg) = prev_playlist.segment_list.media.iter().find(|prev_seg| {
+            prev_seg.sequence == new_seg.sequence
+                && prev_seg.discontinuity_sequence == new_seg.discontinuity_sequence
+                && urls_match_for_reload(&prev_seg.url, &new_seg.url)
+        }) {
+            return Some(prev_seg.start() - new_seg.start());
+        }
+    }
+
+    match (
+        prev_playlist.segment_list.media.last(),
+        media_segments.first(),
+    ) {
+        (Some(prev_last), Some(new_first))
+            if prev_last.sequence.wrapping_add(1) == new_first.sequence
+                && prev_last.discontinuity_sequence == new_first.discontinuity_sequence =>
+        {
+            Some(prev_last.end() - new_first.start())
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::MediaPlaylist;
@@ -813,5 +879,128 @@ seg-next.ts
         let segments = parsed.segment_list().media();
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].discontinuity_sequence(), 7);
+    }
+
+    #[test]
+    fn refreshed_live_playlist_keeps_timeline_from_previous_sequence_overlap() {
+        let previous_playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-MEDIA-SEQUENCE:10
+#EXTINF:4,
+seg-10.ts
+#EXTINF:4,
+seg-11.ts
+#EXTINF:4,
+seg-12.ts
+"#;
+        let refreshed_playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-MEDIA-SEQUENCE:11
+#EXTINF:4,
+seg-11.ts
+#EXTINF:4,
+seg-12.ts
+#EXTINF:4,
+seg-13.ts
+"#;
+
+        let previous = MediaPlaylist::create(
+            Cursor::new(previous_playlist),
+            Url::new("https://example.com/media.m3u8".to_owned()),
+            None,
+            &MediaPlaylistContext::default(),
+        )
+        .unwrap();
+        let refreshed = MediaPlaylist::create(
+            Cursor::new(refreshed_playlist),
+            Url::new("https://example.com/media.m3u8".to_owned()),
+            Some(&previous),
+            &MediaPlaylistContext::default(),
+        )
+        .unwrap();
+
+        let segments = refreshed.segment_list().media();
+        assert_eq!(segments[0].sequence(), 11);
+        assert_eq!(segments[0].start(), 4.);
+        assert_eq!(segments[1].start(), 8.);
+        assert_eq!(segments[2].start(), 12.);
+    }
+
+    #[test]
+    fn refreshed_live_playlist_does_not_reuse_timeline_for_mismatched_overlap_segment() {
+        let previous_playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-MEDIA-SEQUENCE:10
+#EXTINF:4,
+seg-10.ts
+#EXTINF:4,
+seg-11.ts
+"#;
+        let refreshed_playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-MEDIA-SEQUENCE:11
+#EXTINF:4,
+replacement-11.ts
+#EXTINF:4,
+seg-12.ts
+"#;
+
+        let previous = MediaPlaylist::create(
+            Cursor::new(previous_playlist),
+            Url::new("https://example.com/media.m3u8".to_owned()),
+            None,
+            &MediaPlaylistContext::default(),
+        )
+        .unwrap();
+        let refreshed = MediaPlaylist::create(
+            Cursor::new(refreshed_playlist),
+            Url::new("https://example.com/media.m3u8".to_owned()),
+            Some(&previous),
+            &MediaPlaylistContext::default(),
+        )
+        .unwrap();
+
+        let segments = refreshed.segment_list().media();
+        assert_eq!(segments[0].start(), 0.);
+        assert_eq!(segments[1].start(), 4.);
+    }
+
+    #[test]
+    fn refreshed_live_playlist_accepts_query_only_uri_change() {
+        let previous_playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-MEDIA-SEQUENCE:10
+#EXTINF:4,
+seg-10.ts?token=old
+#EXTINF:4,
+seg-11.ts?token=old
+"#;
+        let refreshed_playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-MEDIA-SEQUENCE:11
+#EXTINF:4,
+seg-11.ts?token=new
+#EXTINF:4,
+seg-12.ts?token=new
+"#;
+
+        let previous = MediaPlaylist::create(
+            Cursor::new(previous_playlist),
+            Url::new("https://example.com/media.m3u8".to_owned()),
+            None,
+            &MediaPlaylistContext::default(),
+        )
+        .unwrap();
+        let refreshed = MediaPlaylist::create(
+            Cursor::new(refreshed_playlist),
+            Url::new("https://example.com/media.m3u8".to_owned()),
+            Some(&previous),
+            &MediaPlaylistContext::default(),
+        )
+        .unwrap();
+
+        let segments = refreshed.segment_list().media();
+        assert_eq!(segments[0].start(), 4.);
+        assert_eq!(segments[1].start(), 8.);
     }
 }
