@@ -400,12 +400,32 @@ impl PlaylistStore {
         media_playlist_data: impl BufRead,
         url: Url,
     ) -> Result<&MediaPlaylist, MediaPlaylistUpdateError> {
+        // Update logic may optionally need a reference for Audio/Video sync
+        let sync_playlist_id = match self.curr_media_type_for(id) {
+            Some(MediaType::Audio)
+                if self
+                    .curr_video_id
+                    .as_ref()
+                    .is_some_and(|video_id| video_id != id) =>
+            {
+                self.curr_video_id
+            }
+            Some(MediaType::Video)
+                if self
+                    .curr_audio_id
+                    .as_ref()
+                    .is_some_and(|audio_id| audio_id != id) =>
+            {
+                self.curr_audio_id
+            }
+            _ => None,
+        };
         match &mut self.playlist {
             TopLevelPlaylist::Multivariant(playlist) => {
-                playlist.update_media_playlist(id, media_playlist_data, url)
+                playlist.update_media_playlist(id, media_playlist_data, url, sync_playlist_id)
             }
             TopLevelPlaylist::DirectMedia(playlist) => {
-                playlist.update_media_playlist(id, media_playlist_data, url)
+                playlist.update_media_playlist(id, media_playlist_data, url, sync_playlist_id)
             }
         }
     }

@@ -64,6 +64,7 @@ impl DirectMediaPlaylist {
             io::Cursor::new(data),
             url.clone(),
             None,
+            None,
             &MediaPlaylistContext::default(),
         )?;
         Ok(Self {
@@ -121,6 +122,7 @@ impl DirectMediaPlaylist {
         id: &MediaPlaylistPermanentId,
         media_playlist_data: impl io::BufRead,
         url: Url,
+        _sync_playlist_id: Option<MediaPlaylistPermanentId>,
     ) -> Result<&MediaPlaylist, MediaPlaylistUpdateError> {
         if id != &self.id {
             return Err(MediaPlaylistUpdateError::NotFound);
@@ -129,6 +131,7 @@ impl DirectMediaPlaylist {
             media_playlist_data,
             url.clone(),
             Some(&self.playlist),
+            None,
             &MediaPlaylistContext::default(),
         )?;
         self.url = url;

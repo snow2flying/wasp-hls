@@ -60,7 +60,7 @@ pub(crate) struct SegmentList {
     /// Initialization segments a `MediaPlaylist` is associated to, ordered chronologically
     /// (initialization linked to earlier media segments are set first).
     init: Vec<InitSegmentInfo>,
-    /// Initialization segments a `MediaPlaylist` is associated to, in chronological order.
+    /// Media segments a `MediaPlaylist` is associated to, in chronological order.
     media: Vec<MediaSegmentInfo>,
 }
 
@@ -138,6 +138,10 @@ pub(crate) struct MediaSegmentInfo {
     ///
     /// It should be exclusive to the time boundaries of all other segments in this Media Playlist.
     time_info: SegmentTimeInfo,
+    /// Program date time associated to the segment, in seconds since epoch, if known.
+    /// XXX TODO: Do we associate that one to **every segment**? Seems unneeded (then again,
+    /// `sequence` also has this "issue")
+    program_date_time: Option<f64>,
     /// URL through which that media segment may be requested.
     url: Url,
     /// If set, byte-range to specifically request only the media segment at the given `url`.
@@ -175,6 +179,11 @@ impl MediaSegmentInfo {
         &self.time_info
     }
 
+    /// Program date time associated to that segment, in seconds since epoch, if known.
+    pub(crate) fn program_date_time(&self) -> Option<f64> {
+        self.program_date_time
+    }
+
     /// If set, byte-range at which this media segment should be requested.
     pub(crate) fn byte_range(&self) -> Option<&ByteRange> {
         self.byte_range.as_ref()
@@ -183,6 +192,147 @@ impl MediaSegmentInfo {
     /// URL at which this initialization segment should be requested.
     pub(crate) fn url(&self) -> &Url {
         &self.url
+    }
+}
+
+/// Context of an "EXT-X-PROGRAM-DATE-TIME" value usable for synchronization with another playlist.
+#[derive(Clone, Copy, Debug)]
+struct TimelineReferencePdtAnchor {
+    /// The discontinuity sequence number corresponding to the segment having this program date time
+    discontinuity_sequence: u32,
+    /// The start time in seconds of the segment having this program date time
+    start: f64,
+    /// The program date time of that segment.
+    program_date_time: f64,
+}
+
+/// Extracted information about an HLS media playlist "discontinuity", which may be useful for
+/// synchronizing other media playlists with it.
+#[derive(Clone, Debug)]
+struct TimelineReferenceDiscontinuity {
+    /// The discontinuity sequence number of that discontinuity.
+    discontinuity_sequence: u32,
+    /// The first post-discontinuity segment's start time in seconds.
+    start: f64,
+    /// Corresponding program date time context
+    /// XXX TODO: Isn't only `program_date_time` needed?
+    pdt_anchor: Option<TimelineReferencePdtAnchor>,
+}
+
+/// Extracted information from a parsed Media Playlist which can be useful for
+/// synchronization when parsing another media playlist.
+#[derive(Clone, Debug)]
+pub(crate) struct TimelineReference {
+    /// Whether at least one EXT-X-PROGRAM-DATE-TIME tag was found in the playlist.
+    /// This greatly simplifies synchronization.
+    has_program_date_time: bool,
+    /// Sequence number of the first announced segment in that playlist.
+    first_sequence: Option<u32>,
+    /// `start`, in seconds, for the first announced segment in that playlist.
+    first_start: Option<f64>,
+    /// Sequence number of the last announced segment in that playlist.
+    last_sequence: Option<u32>,
+    /// `end`, in seconds, for the last announced segment in that playlist.
+    last_end: Option<f64>,
+    /// `start` time in seconds for every segments announced in that playlist.
+    segment_starts: Vec<f64>,
+    /// Context linked to every Announced "HLS discontinuity" in that playlist.
+    discontinuities: Vec<TimelineReferenceDiscontinuity>,
+    /// Selected "EXT-X-PROGRAM-DATE-TIME" value at the middle of the playlist.
+    /// The middle of the playlist is chosen because it is a more likely candidate to be retrieved
+    /// in another playlist than the first (because since not available) or last (because too new)
+    /// segments.
+    middle_pdt_anchor: Option<TimelineReferencePdtAnchor>,
+}
+
+impl TimelineReference {
+    /// Construct the `TimelineReference` from a reference playlist, generally with the intent
+    /// of synchronizing another playlist to it.
+    pub(crate) fn from_playlist(playlist: &MediaPlaylist) -> Self {
+        let media = &playlist.segment_list.media;
+
+        // XXX TODO: Isn't that costly for such a simple operation? Is that optimized?
+        let middle_pdt_anchor = media
+            .iter()
+            .filter_map(|segment| {
+                Some(TimelineReferencePdtAnchor {
+                    discontinuity_sequence: segment.discontinuity_sequence,
+                    start: segment.start(),
+                    program_date_time: segment.program_date_time?,
+                })
+            })
+            .nth(media.len() / 2);
+
+        let mut discontinuities: Vec<TimelineReferenceDiscontinuity> = Vec::new();
+        for segment in media {
+            // XXX TODO: Here also, this is very rarely needed, though computed every time
+            let pdt_anchor =
+                segment
+                    .program_date_time
+                    .map(|program_date_time| TimelineReferencePdtAnchor {
+                        discontinuity_sequence: segment.discontinuity_sequence,
+                        start: segment.start(),
+                        program_date_time,
+                    });
+            match discontinuities.last_mut() {
+                Some(entry) if entry.discontinuity_sequence == segment.discontinuity_sequence => {
+                    if entry.pdt_anchor.is_none() {
+                        entry.pdt_anchor = pdt_anchor;
+                    }
+                }
+                _ => discontinuities.push(TimelineReferenceDiscontinuity {
+                    discontinuity_sequence: segment.discontinuity_sequence,
+                    start: segment.start(),
+                    pdt_anchor,
+                }),
+            }
+        }
+
+        Self {
+            has_program_date_time: playlist.has_program_date_time,
+            first_sequence: media.first().map(|segment| segment.sequence),
+            first_start: media.first().map(MediaSegmentInfo::start),
+            last_sequence: media.last().map(|segment| segment.sequence),
+            last_end: media.last().map(MediaSegmentInfo::end),
+            segment_starts: media.iter().map(MediaSegmentInfo::start).collect(),
+            discontinuities,
+            middle_pdt_anchor,
+        }
+    }
+
+    fn first_discontinuity_sequence(&self) -> Option<u32> {
+        self.discontinuities
+            .first()
+            .map(|entry| entry.discontinuity_sequence)
+    }
+
+    fn last_discontinuity_sequence(&self) -> Option<u32> {
+        self.discontinuities
+            .last()
+            .map(|entry| entry.discontinuity_sequence)
+    }
+
+    fn discontinuity_start(&self, discontinuity_sequence: u32) -> Option<f64> {
+        self.discontinuities
+            .iter()
+            .find(|entry| entry.discontinuity_sequence == discontinuity_sequence)
+            .map(|entry| entry.start)
+    }
+
+    fn discontinuity_pdt_anchor(
+        &self,
+        discontinuity_sequence: u32,
+    ) -> Option<TimelineReferencePdtAnchor> {
+        self.discontinuities
+            .iter()
+            .find(|entry| entry.discontinuity_sequence == discontinuity_sequence)
+            .and_then(|entry| entry.pdt_anchor)
+    }
+
+    fn start_for_sequence(&self, sequence: u32) -> Option<f64> {
+        let first_sequence = self.first_sequence?;
+        let idx = usize::try_from(sequence.checked_sub(first_sequence)?).ok()?;
+        self.segment_starts.get(idx).copied()
     }
 }
 
@@ -279,6 +429,8 @@ pub struct MediaPlaylist {
     url: Url,
     /// Metadata inferred from one of this playlist's segments when HLS signaling is incomplete.
     external_media_info: Option<ExternalMediaInfo>,
+    /// Whether at least one EXT-X-PROGRAM-DATE-TIME tag was found in the playlist.
+    has_program_date_time: bool,
     // TODO
     // pub server_control: ServerControl,
     // pub part_inf: Option<f64>,
@@ -291,6 +443,7 @@ impl MediaPlaylist {
         playlist: impl BufRead,
         url: Url,
         prev_playlist: Option<&MediaPlaylist>,
+        timeline_reference: Option<&TimelineReference>,
         context: &MediaPlaylistContext,
     ) -> Result<Self, MediaPlaylistParsingError> {
         let mut version: Option<u32> = None;
@@ -311,6 +464,7 @@ impl MediaPlaylist {
         let playlist_base_url = url.pathname();
 
         let mut curr_start_time = 0.;
+        let mut curr_program_date_time = None;
         let mut media_segments: Vec<MediaSegmentInfo> = vec![];
         let mut next_segment_duration: Option<f64> = None;
         let mut current_byte: Option<usize> = None;
@@ -406,6 +560,7 @@ impl MediaPlaylist {
                         if let Some(date) = parse_iso_8601_date(&str_line, colon_idx + 1) {
                             saw_program_date_time = true;
                             curr_start_time = date;
+                            curr_program_date_time = Some(date);
                         }
                     }
                     "-X-I-FRAMES-ONLY" => i_frames_only = true,
@@ -467,6 +622,9 @@ impl MediaPlaylist {
                         discontinuity_sequence.wrapping_add(pending_discontinuities);
                     pending_discontinuities = 0;
                     curr_start_time += duration;
+                    if let Some(program_date_time) = curr_program_date_time {
+                        curr_program_date_time = Some(program_date_time + duration);
+                    }
                     next_segment_duration = None;
                     next_segment_byte_range = None;
                 } else {
@@ -489,6 +647,7 @@ impl MediaPlaylist {
                         sequence: 0,
                         discontinuity_sequence,
                         time_info: SegmentTimeInfo::new(curr_start_time, duration),
+                        program_date_time: curr_program_date_time,
                         byte_range: next_segment_byte_range,
                         url: seg_url,
                     };
@@ -514,6 +673,9 @@ impl MediaPlaylist {
                         ..seg
                     });
                     curr_start_time += duration;
+                    if let Some(program_date_time) = curr_program_date_time {
+                        curr_program_date_time = Some(program_date_time + duration);
+                    }
                     next_segment_duration = None;
                     next_segment_byte_range = None;
                 } else {
@@ -536,9 +698,11 @@ impl MediaPlaylist {
         }
 
         if !saw_program_date_time {
-            if let Some(offset) =
-                infer_live_timeline_offset(prev_playlist, media_segments.as_slice())
-            {
+            if let Some(offset) = infer_live_timeline_offset(
+                prev_playlist,
+                timeline_reference,
+                media_segments.as_slice(),
+            ) {
                 for seg in &mut media_segments {
                     seg.time_info.start += offset;
                 }
@@ -554,6 +718,8 @@ impl MediaPlaylist {
                     }
                 }
             }
+        } else {
+            backfill_program_date_time(&mut media_segments);
         }
 
         if playlist_type == PlaylistNature::Unknown && !end_list {
@@ -571,6 +737,7 @@ impl MediaPlaylist {
             segment_list: SegmentList::new(maps_info, media_segments),
             url,
             external_media_info: prev_playlist.and_then(|p| p.external_media_info.clone()),
+            has_program_date_time: saw_program_date_time,
             // TODO
             // server_control,
             // part_inf,
@@ -765,39 +932,203 @@ fn strip_query(url: &str) -> &str {
     }
 }
 
+/// XXX TODO: An LLM without full context flagged this as a possibility, to check:
+/// backfill_program_date_time modifies time_info.start in-place for pre-PDT segments, which means it retroactively changes segment timing based on the first PDT encountered. If there's a discontinuity before that first PDT tag, the backfilled times will be wrong — they'll extrapolate backward through a discontinuity boundary as if it were continuous.
+fn backfill_program_date_time(media_segments: &mut [MediaSegmentInfo]) {
+    let Some(first_pdt_index) = media_segments
+        .iter()
+        .position(|seg| seg.program_date_time.is_some())
+    else {
+        return;
+    };
+
+    let mut next_program_date_time = media_segments[first_pdt_index].program_date_time.unwrap();
+    for seg in media_segments[..first_pdt_index].iter_mut().rev() {
+        next_program_date_time -= seg.duration();
+        seg.program_date_time = Some(next_program_date_time);
+        seg.time_info.start = next_program_date_time;
+    }
+}
+
 fn infer_live_timeline_offset(
     prev_playlist: Option<&MediaPlaylist>,
+    timeline_reference: Option<&TimelineReference>,
     media_segments: &[MediaSegmentInfo],
 ) -> Option<f64> {
-    let prev_playlist = prev_playlist?;
+    if let Some(prev_playlist) = prev_playlist {
+        for new_seg in media_segments {
+            if let Some(prev_seg) = prev_playlist.segment_list.media.iter().find(|prev_seg| {
+                prev_seg.sequence == new_seg.sequence
+                    && prev_seg.discontinuity_sequence == new_seg.discontinuity_sequence
+                    && urls_match_for_reload(&prev_seg.url, &new_seg.url)
+            }) {
+                return Some(prev_seg.start() - new_seg.start());
+            }
+        }
 
-    for new_seg in media_segments {
-        if let Some(prev_seg) = prev_playlist.segment_list.media.iter().find(|prev_seg| {
-            prev_seg.sequence == new_seg.sequence
-                && prev_seg.discontinuity_sequence == new_seg.discontinuity_sequence
-                && urls_match_for_reload(&prev_seg.url, &new_seg.url)
-        }) {
-            return Some(prev_seg.start() - new_seg.start());
+        match (
+            prev_playlist.segment_list.media.last(),
+            media_segments.first(),
+        ) {
+            (Some(prev_last), Some(new_first))
+                if prev_last.sequence.wrapping_add(1) == new_first.sequence
+                    && prev_last.discontinuity_sequence == new_first.discontinuity_sequence =>
+            {
+                return Some(prev_last.end() - new_first.start());
+            }
+            _ => {}
         }
     }
 
-    match (
-        prev_playlist.segment_list.media.last(),
-        media_segments.first(),
-    ) {
-        (Some(prev_last), Some(new_first))
-            if prev_last.sequence.wrapping_add(1) == new_first.sequence
-                && prev_last.discontinuity_sequence == new_first.discontinuity_sequence =>
-        {
-            Some(prev_last.end() - new_first.start())
-        }
-        _ => None,
+    let reference_playlist = timeline_reference?;
+    align_reference_playlist(reference_playlist, media_segments)
+}
+
+fn align_reference_playlist(
+    reference_playlist: &TimelineReference,
+    media_segments: &[MediaSegmentInfo],
+) -> Option<f64> {
+    align_by_discontinuity_sequence(reference_playlist, media_segments)
+        .or_else(|| align_by_program_date_time(reference_playlist, media_segments))
+        .or_else(|| align_by_sequence_number(reference_playlist, media_segments))
+}
+
+fn align_by_discontinuity_sequence(
+    reference_playlist: &TimelineReference,
+    media_segments: &[MediaSegmentInfo],
+) -> Option<f64> {
+    let reference_start_cc = reference_playlist.first_discontinuity_sequence()?;
+    let reference_end_cc = reference_playlist.last_discontinuity_sequence()?;
+    let start_cc = media_segments.first()?.discontinuity_sequence;
+    let end_cc = media_segments.last()?.discontinuity_sequence;
+    if !(start_cc < reference_end_cc && end_cc > reference_start_cc) {
+        return None;
     }
+
+    let target_cc = reference_end_cc.min(end_cc);
+    let ref_start = reference_playlist.discontinuity_start(target_cc)?;
+    let seg = media_segments
+        .iter()
+        .find(|seg| seg.discontinuity_sequence == target_cc)?;
+    let delta = ref_start - seg.start();
+    Logger::debug(&format!(
+        "Parser: aligning playlist using discontinuity sequence {} (diff:{})",
+        target_cc, delta
+    ));
+    Some(delta)
+}
+
+fn align_by_program_date_time(
+    reference_playlist: &TimelineReference,
+    media_segments: &[MediaSegmentInfo],
+) -> Option<f64> {
+    if !reference_playlist.has_program_date_time
+        || !media_segments
+            .iter()
+            .any(|seg| seg.program_date_time.is_some())
+    {
+        return None;
+    }
+
+    let reference_start_cc = reference_playlist.first_discontinuity_sequence()?;
+    let reference_end_cc = reference_playlist.last_discontinuity_sequence()?;
+    let start_cc = media_segments.first()?.discontinuity_sequence;
+    let end_cc = media_segments.last()?.discontinuity_sequence;
+    let target_cc = reference_end_cc.min(end_cc);
+
+    let (ref_anchor, seg) = if reference_start_cc < target_cc && start_cc < target_cc {
+        (
+            reference_playlist.discontinuity_pdt_anchor(target_cc),
+            media_segments
+                .iter()
+                .find(|seg| seg.discontinuity_sequence == target_cc),
+        )
+    } else {
+        (None, None)
+    };
+
+    let ref_anchor = ref_anchor.or(reference_playlist.middle_pdt_anchor)?;
+    let seg = seg.unwrap_or_else(|| {
+        media_segments
+            .iter()
+            .find(|seg| seg.discontinuity_sequence == ref_anchor.discontinuity_sequence)
+            .unwrap_or(&media_segments[media_segments.len() / 2])
+    });
+
+    let ref_pdt = ref_anchor.program_date_time;
+    let pdt = seg.program_date_time()?;
+    let date_difference = pdt - ref_pdt;
+    let total_duration = media_segments
+        .last()
+        .map(|last| {
+            last.end()
+                - media_segments
+                    .first()
+                    .map(|first| first.start())
+                    .unwrap_or(0.)
+        })
+        .unwrap_or(0.);
+    if date_difference.abs() > f64::max(60., total_duration) {
+        Logger::debug(&format!(
+            "Parser: refusing PDT alignment without overlap ({} > {})",
+            date_difference.abs(),
+            total_duration
+        ));
+        return None;
+    }
+
+    let delta = date_difference - (seg.start() - ref_anchor.start);
+    Logger::debug(&format!(
+        "Parser: aligning playlist using PDT (diff:{})",
+        delta
+    ));
+    Some(delta)
+}
+
+/// XXX TODO: An LLM without full context flagged this as a possibility, to check:
+/// align_by_sequence_number's last fallback — when new_first.start() == 0., it assumes the new playlist starts at the same point as the reference. That's a weak heuristic; a freshly-loaded playlist genuinely starting at 0 (e.g., a VOD edge case, or a live stream that reset) would be misaligned.
+fn align_by_sequence_number(
+    reference_playlist: &TimelineReference,
+    media_segments: &[MediaSegmentInfo],
+) -> Option<f64> {
+    let new_first = media_segments.first()?;
+    let ref_first_start = reference_playlist.first_start?;
+    let ref_last_sequence = reference_playlist.last_sequence?;
+    let ref_last_end = reference_playlist.last_end?;
+
+    if let Some(ref_start) = reference_playlist.start_for_sequence(new_first.sequence) {
+        let offset = ref_start - new_first.start();
+        Logger::debug(&format!(
+            "Parser: aligning playlist based on media sequence {} (diff:{})",
+            new_first.sequence, offset
+        ));
+        return Some(offset);
+    }
+
+    if ref_last_sequence.wrapping_add(1) == new_first.sequence {
+        let offset = ref_last_end - new_first.start();
+        Logger::debug(&format!(
+            "Parser: aligning playlist based on first/last media sequence {} (diff:{})",
+            new_first.sequence, offset
+        ));
+        return Some(offset);
+    }
+
+    if new_first.start() == 0. {
+        let offset = ref_first_start - new_first.start();
+        Logger::debug(&format!(
+            "Parser: aligning playlist based on first media sequence {} (diff:{})",
+            new_first.sequence, offset
+        ));
+        return Some(offset);
+    }
+
+    None
 }
 
 #[cfg(test)]
 mod tests {
-    use super::MediaPlaylist;
+    use super::{MediaPlaylist, TimelineReference};
     use crate::{parser::multi_variant_playlist::MediaPlaylistContext, utils::url::Url};
     use std::io::Cursor;
 
@@ -814,6 +1145,7 @@ seg-1.ts
         let parsed = MediaPlaylist::create(
             Cursor::new(playlist),
             Url::new("https://example.com/media.m3u8".to_owned()),
+            None,
             None,
             &MediaPlaylistContext::default(),
         )
@@ -845,6 +1177,7 @@ seg-3.ts
             Cursor::new(playlist),
             Url::new("https://example.com/media.m3u8".to_owned()),
             None,
+            None,
             &MediaPlaylistContext::default(),
         )
         .unwrap();
@@ -873,6 +1206,7 @@ seg-next.ts
         let parsed = MediaPlaylist::create(
             Cursor::new(playlist),
             Url::new("https://example.com/media.m3u8".to_owned()),
+            None,
             None,
             &MediaPlaylistContext::default(),
         )
@@ -910,6 +1244,7 @@ seg-13.ts
             Cursor::new(previous_playlist),
             Url::new("https://example.com/media.m3u8".to_owned()),
             None,
+            None,
             &MediaPlaylistContext::default(),
         )
         .unwrap();
@@ -917,6 +1252,7 @@ seg-13.ts
             Cursor::new(refreshed_playlist),
             Url::new("https://example.com/media.m3u8".to_owned()),
             Some(&previous),
+            None,
             &MediaPlaylistContext::default(),
         )
         .unwrap();
@@ -951,6 +1287,7 @@ seg-12.ts
             Cursor::new(previous_playlist),
             Url::new("https://example.com/media.m3u8".to_owned()),
             None,
+            None,
             &MediaPlaylistContext::default(),
         )
         .unwrap();
@@ -958,6 +1295,7 @@ seg-12.ts
             Cursor::new(refreshed_playlist),
             Url::new("https://example.com/media.m3u8".to_owned()),
             Some(&previous),
+            None,
             &MediaPlaylistContext::default(),
         )
         .unwrap();
@@ -990,6 +1328,7 @@ seg-12.ts?token=new
             Cursor::new(previous_playlist),
             Url::new("https://example.com/media.m3u8".to_owned()),
             None,
+            None,
             &MediaPlaylistContext::default(),
         )
         .unwrap();
@@ -997,6 +1336,7 @@ seg-12.ts?token=new
             Cursor::new(refreshed_playlist),
             Url::new("https://example.com/media.m3u8".to_owned()),
             Some(&previous),
+            None,
             &MediaPlaylistContext::default(),
         )
         .unwrap();
@@ -1004,6 +1344,59 @@ seg-12.ts?token=new
         let segments = refreshed.segment_list().media();
         assert_eq!(segments[0].start(), 4.);
         assert_eq!(segments[1].start(), 8.);
+    }
+
+    #[test]
+    fn first_load_of_alternate_live_playlist_can_align_from_current_reference_playlist() {
+        let current_playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-MEDIA-SEQUENCE:110
+#EXTINF:4,
+video-110.ts
+#EXTINF:4,
+video-111.ts
+#EXTINF:4,
+video-112.ts
+"#;
+        let newly_selected_playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-MEDIA-SEQUENCE:110
+#EXTINF:4,
+audio-110.ts
+#EXTINF:4,
+audio-111.ts
+#EXTINF:4,
+audio-112.ts
+"#;
+
+        let current = MediaPlaylist::create(
+            Cursor::new(current_playlist),
+            Url::new("https://example.com/video.m3u8".to_owned()),
+            None,
+            None,
+            &MediaPlaylistContext::default(),
+        )
+        .unwrap();
+        let timeline_reference = TimelineReference::from_playlist(&current);
+        let selected = MediaPlaylist::create(
+            Cursor::new(newly_selected_playlist),
+            Url::new("https://example.com/audio.m3u8".to_owned()),
+            None,
+            Some(&timeline_reference),
+            &MediaPlaylistContext::default(),
+        )
+        .unwrap();
+
+        let segments = selected.segment_list().media();
+        assert_eq!(
+            segments[0].start(),
+            current.segment_list().media()[0].start()
+        );
+        assert_eq!(
+            segments[1].start(),
+            current.segment_list().media()[1].start()
+        );
+        assert_eq!(segments[2].end(), current.segment_list().media()[2].end());
     }
 
     fn refresh_interval_ignores_trailing_zero_duration_segment() {
@@ -1021,6 +1414,7 @@ seg-92.m4s
         let parsed = MediaPlaylist::create(
             Cursor::new(playlist),
             Url::new("https://example.com/media.m3u8".to_owned()),
+            None,
             None,
             &MediaPlaylistContext::default(),
         )

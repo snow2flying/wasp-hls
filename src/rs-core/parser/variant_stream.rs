@@ -1,6 +1,6 @@
 use super::{
     attribute_list::AttributeListIter,
-    media_playlist::{MediaPlaylist, MediaPlaylistParsingError},
+    media_playlist::{MediaPlaylist, MediaPlaylistParsingError, TimelineReference},
     multi_variant_playlist::MediaPlaylistContext,
     variable_substitution::VariableStore,
 };
@@ -302,9 +302,16 @@ impl VariantStream {
         &mut self,
         playlist: impl BufRead,
         url: Url,
+        timeline_reference: Option<&TimelineReference>,
         context: &MediaPlaylistContext,
     ) -> Result<&MediaPlaylist, MediaPlaylistParsingError> {
-        let new_mp = MediaPlaylist::create(playlist, url, self.media_playlist.as_ref(), context)?;
+        let new_mp = MediaPlaylist::create(
+            playlist,
+            url,
+            self.media_playlist.as_ref(),
+            timeline_reference,
+            context,
+        )?;
         self.media_playlist = Some(new_mp);
         Ok(self.media_playlist.as_ref().unwrap())
     }

@@ -1,6 +1,6 @@
 use super::{
     audio_track_list::AudioTrackList,
-    media_playlist::{MediaPlaylist, MediaPlaylistParsingError},
+    media_playlist::{MediaPlaylist, MediaPlaylistParsingError, TimelineReference},
     media_tag::{MediaTag, MediaTagParsingError},
     value_parsers::{parse_start_attribute, StartAttribute},
     variable_substitution::{
@@ -438,16 +438,29 @@ impl MultivariantPlaylist {
         id: &MediaPlaylistPermanentId,
         data: impl io::BufRead,
         url: Url,
+        sync_playlist_id: Option<MediaPlaylistPermanentId>,
     ) -> Result<&MediaPlaylist, MediaPlaylistUpdateError> {
+        // If we didn't previously hear about this playlist, use `sync_playlist_id` to get the
+        // timeline from that Playlist.
+        // XXX TODO: What about very old playlist whose old segments have since disappeared under
+        // timeshift rules?
+        let timeline_reference = if self.media_playlist(id).is_none() {
+            sync_playlist_id
+                .filter(|reference_id| reference_id != id)
+                .and_then(|reference_id| self.media_playlist(&reference_id))
+                .map(TimelineReference::from_playlist)
+        } else {
+            None
+        };
         match id.location() {
             MediaPlaylistUrlLocation::Variant => {
-                self.update_variant_media_playlist(id.id(), data, url)
+                self.update_variant_media_playlist(id.id(), data, url, timeline_reference.as_ref())
             }
             MediaPlaylistUrlLocation::AudioTrack => {
-                self.update_audio_media_playlist(id.id(), data, url)
+                self.update_audio_media_playlist(id.id(), data, url, timeline_reference.as_ref())
             }
             MediaPlaylistUrlLocation::OtherMedia => {
-                self.update_other_media_playlist(id.id(), data, url)
+                self.update_other_media_playlist(id.id(), data, url, timeline_reference.as_ref())
             }
             // Should not happen
             MediaPlaylistUrlLocation::Direct => Err(MediaPlaylistUpdateError::NotFound),
@@ -459,9 +472,15 @@ impl MultivariantPlaylist {
         variant_id: u32,
         media_playlist_data: impl io::BufRead,
         url: Url,
+        timeline_reference: Option<&TimelineReference>,
     ) -> Result<&MediaPlaylist, MediaPlaylistUpdateError> {
         match self.variants.iter_mut().find(|v| v.id() == variant_id) {
-            Some(v) => Ok(v.update_media_playlist(media_playlist_data, url, &self.context)?),
+            Some(v) => Ok(v.update_media_playlist(
+                media_playlist_data,
+                url,
+                timeline_reference,
+                &self.context,
+            )?),
             None => Err(MediaPlaylistUpdateError::NotFound),
         }
     }
@@ -471,9 +490,10 @@ impl MultivariantPlaylist {
         id: u32,
         media_playlist_data: impl io::BufRead,
         url: Url,
+        timeline_reference: Option<&TimelineReference>,
     ) -> Result<&MediaPlaylist, MediaPlaylistUpdateError> {
         match self.audio_tracks.media_tag_mut(id) {
-            Some(m) => Ok(m.update(media_playlist_data, url, &self.context)?),
+            Some(m) => Ok(m.update(media_playlist_data, url, timeline_reference, &self.context)?),
             None => Err(MediaPlaylistUpdateError::NotFound),
         }
     }
@@ -483,9 +503,10 @@ impl MultivariantPlaylist {
         media_tag_id: u32,
         media_playlist_data: impl io::BufRead,
         url: Url,
+        timeline_reference: Option<&TimelineReference>,
     ) -> Result<&MediaPlaylist, MediaPlaylistUpdateError> {
         match self.other_media.iter_mut().find(|v| v.id() == media_tag_id) {
-            Some(m) => Ok(m.update(media_playlist_data, url, &self.context)?),
+            Some(m) => Ok(m.update(media_playlist_data, url, timeline_reference, &self.context)?),
             None => Err(MediaPlaylistUpdateError::NotFound),
         }
     }
@@ -765,6 +786,7 @@ video.m3u8
                 &MediaPlaylistPermanentId::new(MediaPlaylistUrlLocation::Variant, 0),
                 Cursor::new(media_playlist),
                 Url::new("https://example.com/video.m3u8?token=abc%20123".to_owned()),
+                None,
             )
             .unwrap();
 
@@ -802,6 +824,7 @@ video.m3u8
                 &MediaPlaylistPermanentId::new(MediaPlaylistUrlLocation::Variant, 0),
                 Cursor::new(first_media),
                 Url::new("https://example.com/video.m3u8".to_owned()),
+                None,
             )
             .unwrap();
 
@@ -815,6 +838,7 @@ video.m3u8
                 &MediaPlaylistPermanentId::new(MediaPlaylistUrlLocation::Variant, 0),
                 Cursor::new(second_media),
                 Url::new("https://example.com/video.m3u8".to_owned()),
+                None,
             )
             .unwrap_err();
 

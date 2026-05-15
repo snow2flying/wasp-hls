@@ -1,6 +1,6 @@
 use super::{
     attribute_list::{parse_enumerated_string, AttributeListIter},
-    media_playlist::MediaPlaylistParsingError,
+    media_playlist::{MediaPlaylistParsingError, TimelineReference},
     multi_variant_playlist::MediaPlaylistContext,
     variable_substitution::{
         parse_substituted_comma_separated_list, parse_substituted_quoted_string, VariableStore,
@@ -330,9 +330,16 @@ impl MediaTag {
         &mut self,
         playlist: impl BufRead,
         url: Url,
+        timeline_reference: Option<&TimelineReference>,
         context: &MediaPlaylistContext,
     ) -> Result<&MediaPlaylist, MediaPlaylistParsingError> {
-        let new_mp = MediaPlaylist::create(playlist, url, self.media_playlist.as_ref(), context)?;
+        let new_mp = MediaPlaylist::create(
+            playlist,
+            url,
+            self.media_playlist.as_ref(),
+            timeline_reference,
+            context,
+        )?;
         self.media_playlist = Some(new_mp);
         Ok(self.media_playlist.as_ref().unwrap())
     }
