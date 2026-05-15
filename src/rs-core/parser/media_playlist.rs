@@ -939,8 +939,9 @@ fn backfill_program_date_time(media_segments: &mut [MediaSegmentInfo]) {
 
     let mut next_program_date_time = media_segments[first_pdt_index].program_date_time.unwrap();
     for seg in media_segments[..first_pdt_index].iter_mut().rev() {
-        // XXX TODO: does that work even when there's a discontinuity? We're only using `duration`
-        // in reverse
+        // RFC 8216 says clients SHOULD extrapolate backward from the first PDT tag using segment
+        // durations when earlier segments have no explicit EXT-X-PROGRAM-DATE-TIME. hls.js does
+        // the same, including across discontinuities, so keep the mapping monotonic here.
         next_program_date_time -= seg.duration();
         seg.program_date_time = Some(next_program_date_time);
         seg.time_info.start = next_program_date_time;
