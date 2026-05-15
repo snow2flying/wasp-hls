@@ -8,7 +8,11 @@ use crate::{
     utils::url::Url,
     Logger,
 };
-use std::{cmp::Ordering, collections::HashMap, io::BufRead};
+use std::{
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+    io::BufRead,
+};
 
 use crate::parser::ByteRange;
 pub(crate) use crate::parser::MediaPlaylistPermanentId;
@@ -132,6 +136,10 @@ pub(crate) struct PlaylistStore {
 
     /// Probe metadata inferred for currently known multivariant media playlists.
     multivariant_media_info: HashMap<MediaPlaylistPermanentId, ExternalMediaInfo>,
+
+    /// Cached live playlists that were deselected and must be refreshed before they are exposed
+    /// again to startup, probing, or segment selection.
+    stale_live_playlists: HashSet<MediaPlaylistPermanentId>,
 }
 
 impl PlaylistStore {
@@ -182,6 +190,7 @@ impl PlaylistStore {
             multivariant_support_resolved: false,
             variant_support: HashMap::new(),
             multivariant_media_info: HashMap::new(),
+            stale_live_playlists: HashSet::new(),
         })
     }
 
@@ -420,47 +429,86 @@ impl PlaylistStore {
             }
             _ => None,
         };
-        match &mut self.playlist {
+        let updated = match &mut self.playlist {
             TopLevelPlaylist::Multivariant(playlist) => {
                 playlist.update_media_playlist(id, media_playlist_data, url, sync_playlist_id)
             }
             TopLevelPlaylist::DirectMedia(playlist) => {
                 playlist.update_media_playlist(id, media_playlist_data, url, sync_playlist_id)
             }
-        }
+        }?;
+        self.stale_live_playlists.remove(id);
+        Ok(updated)
     }
 
-    /// When switching back to a cached live sliding media playlist that we stopped refreshing,
-    /// force a reload instead of relying on its potentially stale value.
+    /// Mark live playlists as stale once we stop actively refreshing them.
     ///
     /// WHY: We do that to simplify state handling for the rest of the player.
-    /// If we kept its old value while it refreshed, many of its current attributes like the
-    /// availability of each segments, the minimum/maximum positions of a playlist etc. would have
-    /// ro be checked for trustedness first (e.g. "are they old or fresh values?").
-    /// It would be doable, but clearing up stale playlist is just a much easier state to manage
-    /// for what is an infrequent event anyway.
-    /// We do miss potential context about an older load of it, but that's rarely useful.
-    fn invalidate_stale_live_playlist(
+    /// By marking it as stale, we won't return its old value until it has been refreshed, allowing
+    /// as a security to prevent the rest of the player of potentially relying on many
+    /// now-unavailable segments, invalid minimum/maximum position etc.
+    fn invalidate_live_playlist(
         &mut self,
         previous_id: Option<MediaPlaylistPermanentId>,
         next_id: Option<MediaPlaylistPermanentId>,
     ) {
-        let Some(id) = next_id else {
-            return;
-        };
-        if next_id == previous_id {
+        if previous_id == next_id {
             return;
         }
 
-        match &mut self.playlist {
-            TopLevelPlaylist::Multivariant(playlist)
-                if playlist
-                    .media_playlist(&id)
-                    .is_some_and(MediaPlaylist::is_live) =>
-            {
-                playlist.clear_media_playlist(&id);
+        if let Some(previous_id) = previous_id {
+            let was_live = match &self.playlist {
+                TopLevelPlaylist::Multivariant(playlist) => playlist
+                    .media_playlist(&previous_id)
+                    .is_some_and(MediaPlaylist::is_live),
+                TopLevelPlaylist::DirectMedia(_) => false,
+            };
+            if was_live {
+                self.stale_live_playlists.insert(previous_id);
             }
-            TopLevelPlaylist::Multivariant(_) | TopLevelPlaylist::DirectMedia(_) => {}
+        }
+
+        if let Some(next_id) = next_id {
+            let next_is_not_live = match &self.playlist {
+                TopLevelPlaylist::Multivariant(playlist) => playlist
+                    .media_playlist(&next_id)
+                    .is_some_and(|playlist| !playlist.is_live()),
+                TopLevelPlaylist::DirectMedia(_) => true,
+            };
+            if next_is_not_live {
+                self.stale_live_playlists.remove(&next_id);
+            }
+        }
+    }
+
+    fn set_curr_audio_id(&mut self, new_audio_id: Option<MediaPlaylistPermanentId>) {
+        let prev_audio_id = self.curr_audio_id;
+        self.curr_audio_id = new_audio_id;
+        self.invalidate_live_playlist(prev_audio_id, self.curr_audio_id);
+    }
+
+    fn set_curr_video_id(&mut self, new_video_id: Option<MediaPlaylistPermanentId>) {
+        let prev_video_id = self.curr_video_id;
+        self.curr_video_id = new_video_id;
+        self.invalidate_live_playlist(prev_video_id, self.curr_video_id);
+    }
+
+    fn current_fresh_playlist(
+        &self,
+        media_type: MediaType,
+    ) -> Option<(&MediaPlaylistPermanentId, &MediaPlaylist)> {
+        let wanted_id = match media_type {
+            MediaType::Video => self.curr_video_id.as_ref()?,
+            MediaType::Audio => self.curr_audio_id.as_ref()?,
+        };
+        let playlist = match &self.playlist {
+            TopLevelPlaylist::Multivariant(playlist) => playlist.media_playlist(wanted_id)?,
+            TopLevelPlaylist::DirectMedia(playlist) => playlist.media_playlist(wanted_id)?,
+        };
+        if self.stale_live_playlists.contains(wanted_id) {
+            None
+        } else {
+            Some((wanted_id, playlist))
         }
     }
 
@@ -581,17 +629,13 @@ impl PlaylistStore {
         match &mut self.playlist {
             TopLevelPlaylist::DirectMedia(playlist) => {
                 let direct_media_id = *playlist.id();
-                match media_type {
-                    MediaType::Audio => {
-                        self.curr_audio_id = Some(direct_media_id);
-                        self.curr_video_id = None;
-                    }
-                    MediaType::Video => {
-                        self.curr_audio_id = None;
-                        self.curr_video_id = Some(direct_media_id);
-                    }
-                }
                 playlist.set_external_media_info(media_info);
+                let next_ids = match media_type {
+                    MediaType::Audio => (Some(direct_media_id), None),
+                    MediaType::Video => (None, Some(direct_media_id)),
+                };
+                self.set_curr_audio_id(next_ids.0);
+                self.set_curr_video_id(next_ids.1);
             }
             TopLevelPlaylist::Multivariant(_) => {
                 let wanted_id = match media_type {
@@ -903,41 +947,26 @@ impl PlaylistStore {
     /// Returns a reference to the MediaPlaylist currently loaded for the given `MediaType`.
     ///
     /// Returns `None` either if there's no MediaPlaylist selected for that `MediaType` or if the
-    /// MediaPlaylist is not yet loaded.
+    /// MediaPlaylist is not yet loaded/reloaded.
     pub(crate) fn curr_media_playlist(&self, media_type: MediaType) -> Option<&MediaPlaylist> {
-        if let Some(wanted_id) = match media_type {
-            MediaType::Video => &self.curr_video_id,
-            MediaType::Audio => &self.curr_audio_id,
-        } {
-            match &self.playlist {
-                TopLevelPlaylist::Multivariant(playlist) => playlist.media_playlist(wanted_id),
-                TopLevelPlaylist::DirectMedia(playlist) => playlist.media_playlist(wanted_id),
-            }
-        } else {
-            None
-        }
+        self.current_fresh_playlist(media_type)
+            .map(|(_, playlist)| playlist)
     }
 
     pub(crate) fn curr_media_playlist_segment_info(
         &self,
         media_type: MediaType,
     ) -> Option<(&SegmentList, SegmentQualityContext)> {
-        if let Some(wanted_id) = match media_type {
-            MediaType::Video => &self.curr_video_id,
-            MediaType::Audio => &self.curr_audio_id,
-        } {
-            self.curr_media_playlist(media_type).map(|m| {
+        self.current_fresh_playlist(media_type)
+            .map(|(wanted_id, playlist)| {
                 let score = self
                     .curr_variant()
                     .map(|v| v.score().unwrap_or(v.bandwidth() as f64))
                     .unwrap_or(0.);
 
                 let context = SegmentQualityContext::new(score, wanted_id.as_u32());
-                (m.segment_list(), context)
+                (playlist.segment_list(), context)
             })
-        } else {
-            None
-        }
     }
 
     pub(crate) fn playlist_type(&self) -> PlaylistNature {
@@ -1059,9 +1088,7 @@ impl PlaylistStore {
                     unlocked_variant: old_variant_locked,
                 }
             } else if new_audio_id != self.curr_audio_id {
-                let prev_audio_id = self.curr_audio_id;
-                self.curr_audio_id = new_audio_id;
-                self.invalidate_stale_live_playlist(prev_audio_id, self.curr_audio_id);
+                self.set_curr_audio_id(new_audio_id);
                 SetAudioTrackResponse::AudioMediaUpdate
             } else {
                 SetAudioTrackResponse::NoUpdate
@@ -1127,18 +1154,14 @@ impl PlaylistStore {
             TopLevelPlaylist::Multivariant(playlist) => playlist,
             TopLevelPlaylist::DirectMedia(_) => return,
         };
-        let prev_audio_id = self.curr_audio_id;
-        let prev_video_id = self.curr_video_id;
         let variant = playlist.variant(variant_id).unwrap();
         self.curr_variant_id = Some(variant_id);
         let (curr_audio_id, curr_video_id) = Self::normalize_selected_media_ids(
             playlist.audio_media_playlist_id_for(variant, self.curr_audio_track),
             playlist.video_media_playlist_id_for(variant),
         );
-        self.curr_video_id = curr_video_id;
-        self.curr_audio_id = curr_audio_id;
-        self.invalidate_stale_live_playlist(prev_audio_id, self.curr_audio_id);
-        self.invalidate_stale_live_playlist(prev_video_id, self.curr_video_id);
+        self.set_curr_audio_id(curr_audio_id);
+        self.set_curr_video_id(curr_video_id);
         self.multivariant_support_resolved = false;
     }
 
@@ -1435,7 +1458,7 @@ video.m3u8
     }
 
     #[test]
-    fn switching_back_to_a_loaded_live_audio_playlist_invalidates_its_cache() {
+    fn switching_back_to_a_loaded_live_audio_playlist_hides_it_until_refresh() {
         let multivariant = r#"#EXTM3U
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="English",DEFAULT=YES,AUTOSELECT=YES,URI="audio-en.m3u8"
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="French",AUTOSELECT=YES,URI="audio-fr.m3u8"
@@ -1511,6 +1534,12 @@ seg.ts
             english_playlist_id
         );
         assert!(store.curr_media_playlist(MediaType::Audio).is_none());
+        match &store.playlist {
+            TopLevelPlaylist::Multivariant(playlist) => {
+                assert!(playlist.media_playlist(&english_playlist_id).is_some());
+            }
+            TopLevelPlaylist::DirectMedia(_) => panic!("expected multivariant playlist"),
+        }
     }
 
     #[test]
