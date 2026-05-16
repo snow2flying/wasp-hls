@@ -30,6 +30,7 @@ import {
  * @property {number}  timeshiftBufferDepth  - DVR window depth in seconds.
  * @property {"mpegts"|"fmp4"} mediaFormat   - HLS media output format.
  * @property {"none"|"webvtt"|"ttml"} subtitleFormat - HLS subtitle output format.
+ * @property {boolean} lowLatency            - Enable LL-HLS packaging when supported.
  * @property {string}  [gpacPath]            - Explicit path to the gpac binary.
  * @property {string}  tmpDir                - Directory used to cache the gpac binary.
  * @property {string}  scriptDir             - Directory containing install_gpac.sh.
@@ -262,7 +263,8 @@ function buildGpacArgs(config, ports) {
       `:cdur=${config.fragmentDuration}` +
       `:refresh=${config.segmentDuration}` +
       `:tsb=${config.timeshiftBufferDepth}` +
-      (config.mediaFormat === "mpegts" ? ":muxtype=ts" : ":llhls=br"),
+      (config.mediaFormat === "mpegts" ? ":muxtype=ts" : "") +
+      (config.lowLatency ? ":llhls=br" : ""),
   ];
 
   return [...inputArgs, "-o", ...outputOptions];

@@ -69,9 +69,7 @@ export async function waitForGpacReady(portList) {
     return;
   }
 
-  console.log(
-    `Waiting for GPAC to bind UDP ports: ${uniquePorts.join(", ")}...`,
-  );
+  console.log(`Waiting for GPAC to bind UDP ports: ${uniquePorts.join(", ")}...`);
 
   const deadline = Date.now() + PACKAGER_STARTUP_TIMEOUT_MS;
 

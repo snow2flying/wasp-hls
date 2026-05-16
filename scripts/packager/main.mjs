@@ -152,6 +152,10 @@ for (let i = 0; i < args.length; i++) {
       break;
     }
 
+    case "--low-latency":
+      configObj.lowLatency = true;
+      break;
+
     case "--no-confirmation":
       configObj.noConfirm = true;
       break;
@@ -221,9 +225,9 @@ Options:
   --media-format <format>             HLS media output format.
                                       Accepted values: 'mpegts', 'fmp4'.
                                       Defaults to ${DEFAULT_MEDIA_FORMAT}.
-                                      LL-HLS output is produced in the fMP4 mode
-                                      when --fragment-duration is lower than
-                                      --segment-duration.
+
+  --low-latency                       Enable LL-HLS packaging.
+                                      Only applies in the fMP4 mode.
 
   --subtitle-format <format>          HLS subtitle output format.
                                       Accepted values: 'none', 'webvtt', 'ttml'.

@@ -70,6 +70,7 @@ export const DEFAULT_CONFIG = {
   basePort: DEFAULT_BASE_PORT,
   mediaFormat: DEFAULT_MEDIA_FORMAT,
   subtitleFormat: DEFAULT_SUBTITLE_FORMAT,
+  lowLatency: false,
   noConfirm: false,
   gpacPath: "",
   tmpDir: TMP_DIR,
