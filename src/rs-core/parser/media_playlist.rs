@@ -407,8 +407,12 @@ impl MediaPlaylist {
             backfill_program_date_time(&mut media_segments);
         }
 
-        if playlist_type == PlaylistNature::Unknown && !end_list {
-            playlist_type = PlaylistNature::Live;
+        if playlist_type == PlaylistNature::Unknown {
+            playlist_type = if end_list {
+                PlaylistNature::VoD
+            } else {
+                PlaylistNature::Live
+            };
         }
         Ok(MediaPlaylist {
             version,
@@ -676,8 +680,34 @@ fn infer_live_timeline_offset(
 #[cfg(test)]
 mod tests {
     use super::{MediaPlaylist, TimelineReference};
-    use crate::{parser::multi_variant_playlist::MediaPlaylistContext, utils::url::Url};
+    use crate::{
+        bindings::PlaylistNature, parser::multi_variant_playlist::MediaPlaylistContext,
+        utils::url::Url,
+    };
     use std::io::Cursor;
+
+    #[test]
+    fn infers_vod_from_endlist_without_explicit_playlist_type() {
+        let playlist = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXTINF:4,
+seg-0.ts
+#EXT-X-ENDLIST
+"#;
+
+        let parsed = MediaPlaylist::create(
+            Cursor::new(playlist),
+            Url::new("https://example.com/media.m3u8".to_owned()),
+            None,
+            None,
+            &MediaPlaylistContext::default(),
+        )
+        .unwrap();
+
+        assert_eq!(parsed.playlist_type(), PlaylistNature::VoD);
+        assert!(!parsed.may_be_refreshed());
+        assert!(!parsed.is_live());
+    }
 
     #[test]
     fn defaults_discontinuity_sequence_to_zero_without_tags() {
