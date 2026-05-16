@@ -2,7 +2,7 @@ use super::{
     attribute_list::{parse_enumerated_string, AttributeListIter},
     media_playlist::MediaPlaylistParsingError,
     multi_variant_playlist::MediaPlaylistContext,
-    segment_list::TimelineReference,
+    timeline_sync::TimelineReference,
     variable_substitution::{
         parse_substituted_comma_separated_list, parse_substituted_quoted_string, VariableStore,
     },

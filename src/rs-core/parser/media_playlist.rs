@@ -1,9 +1,8 @@
 use super::{
     attribute_list::{parse_enumerated_string, AttributeListIter},
     multi_variant_playlist::MediaPlaylistContext,
-    segment_list::{
-        InitSegmentInfo, MediaSegmentInfo, SegmentList, SegmentTimeInfo, TimelineReference,
-    },
+    segment_list::{InitSegmentInfo, MediaSegmentInfo, SegmentList, SegmentTimeInfo},
+    timeline_sync::TimelineReference,
     top_level_playlist::ExternalMediaInfo,
     value_parsers::{
         parse_byte_range, parse_decimal_floating_point, parse_decimal_integer,
@@ -925,7 +924,10 @@ audio-112.ts
             &MediaPlaylistContext::default(),
         )
         .unwrap();
-        let timeline_reference = TimelineReference::from_playlist(&current);
+        let timeline_reference = TimelineReference::from_segment_list(
+            current.segment_list().media(),
+            current.has_program_date_time,
+        );
         let selected = MediaPlaylist::create(
             Cursor::new(newly_selected_playlist),
             Url::new("https://example.com/audio.m3u8".to_owned()),
@@ -978,7 +980,10 @@ audio-512.ts
             &MediaPlaylistContext::default(),
         )
         .unwrap();
-        let timeline_reference = TimelineReference::from_playlist(&current);
+        let timeline_reference = TimelineReference::from_segment_list(
+            current.segment_list().media(),
+            current.has_program_date_time,
+        );
         let selected = MediaPlaylist::create(
             Cursor::new(unrelated_playlist),
             Url::new("https://example.com/audio.m3u8".to_owned()),

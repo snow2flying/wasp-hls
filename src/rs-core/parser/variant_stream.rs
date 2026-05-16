@@ -3,7 +3,7 @@ use super::{
     attribute_list::AttributeListIter,
     media_playlist::{MediaPlaylist, MediaPlaylistParsingError},
     multi_variant_playlist::MediaPlaylistContext,
-    segment_list::TimelineReference,
+    timeline_sync::TimelineReference,
     value_parsers::{parse_decimal_floating_point, parse_decimal_integer, parse_resolution},
     variable_substitution::VariableStore,
     variable_substitution::{

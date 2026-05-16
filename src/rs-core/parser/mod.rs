@@ -4,6 +4,7 @@ mod media_playlist;
 mod media_tag;
 mod multi_variant_playlist;
 mod segment_list;
+mod timeline_sync;
 mod top_level_playlist;
 mod value_parsers;
 mod variable_substitution;

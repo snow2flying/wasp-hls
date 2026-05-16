@@ -2,7 +2,7 @@ use super::{
     audio_track_list::AudioTrackList,
     media_playlist::{MediaPlaylist, MediaPlaylistParsingError},
     media_tag::{MediaTag, MediaTagParsingError},
-    segment_list::TimelineReference,
+    timeline_sync::TimelineReference,
     value_parsers::{parse_start_attribute, StartAttribute},
     variable_substitution::{
         parse_define_tag, VariableDefinition, VariableDefinitionError, VariableStore,
@@ -469,7 +469,12 @@ impl MultivariantPlaylist {
         let timeline_reference = sync_playlist_id
             .filter(|reference_id| reference_id != id)
             .and_then(|reference_id| self.media_playlist(&reference_id))
-            .map(TimelineReference::from_playlist);
+            .map(|pl| {
+                TimelineReference::from_segment_list(
+                    pl.segment_list().media(),
+                    pl.has_program_date_time,
+                )
+            });
         match id.location() {
             MediaPlaylistUrlLocation::Variant => {
                 self.update_variant_media_playlist(id.id(), data, url, timeline_reference.as_ref())
