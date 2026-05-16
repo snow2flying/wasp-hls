@@ -14,27 +14,16 @@ pub(super) fn was_last_segment(
     media_type: MediaType,
     seg_start: f64,
 ) -> bool {
-    playlist_store
-        .and_then(|c| c.curr_media_playlist(media_type))
-        .map(|pl| {
-            pl.is_ended()
-                && pl
-                    .segment_list()
-                    .media()
-                    .last()
-                    .map(|x| x.start() == seg_start)
-                    .unwrap_or(false)
-        })
-        .unwrap_or(false)
+    playlist_store.is_some_and(|c| c.is_last_media_segment(media_type, seg_start))
 }
 
 pub(super) fn has_playlist_store_media_type(
     playlist_store: Option<&PlaylistStore>,
 ) -> Option<MediaType> {
     let playlist_store = playlist_store?;
-    if playlist_store.has_media_type(MediaType::Video) {
+    if playlist_store.has_distinct_media_type(MediaType::Video) {
         Some(MediaType::Video)
-    } else if playlist_store.has_media_type(MediaType::Audio) {
+    } else if playlist_store.has_distinct_media_type(MediaType::Audio) {
         Some(MediaType::Audio)
     } else {
         None
@@ -51,10 +40,13 @@ pub(super) fn get_initial_position(
         match starting_pos.start_type {
             StartingPositionType::Absolute => starting_pos.position,
             StartingPositionType::FromBeginning => {
-                playlist_store.curr_min_position().unwrap_or(0.) + starting_pos.position
+                playlist_store
+                    .current_estimated_minimum_position()
+                    .unwrap_or(0.)
+                    + starting_pos.position
             }
             StartingPositionType::FromEnd => playlist_store
-                .curr_max_position()
+                .current_estimated_maximum_position()
                 .map(|max| max - starting_pos.position)
                 .unwrap_or(playlist_store.expected_start_time()),
         }
@@ -72,10 +64,10 @@ pub(super) fn is_stale_segment_request_context(
             media_type,
             sequence_number,
             ..
-        } => playlist_store
-            .as_ref()
-            .and_then(|pl_store| pl_store.curr_media_playlist(*media_type))
-            .is_some_and(|playlist| !playlist.contains_sequence(*sequence_number)),
+        } => playlist_store.as_ref().is_some_and(|pl_store| {
+            pl_store.has_loaded_media_playlist(*media_type)
+                && !pl_store.loaded_playlist_contains_sequence(*media_type, *sequence_number)
+        }),
 
         PendingSegmentRequest::Probe {
             requested_media_type,
@@ -85,9 +77,10 @@ pub(super) fn is_stale_segment_request_context(
                     ..
                 },
         } => match requested_media_type {
-            Some(media_type) => playlist_store
-                .and_then(|pl_store| pl_store.curr_media_playlist(*media_type))
-                .is_some_and(|playlist| !playlist.contains_sequence(*sequence)),
+            Some(media_type) => playlist_store.is_some_and(|pl_store| {
+                pl_store.has_loaded_media_playlist(*media_type)
+                    && !pl_store.loaded_playlist_contains_sequence(*media_type, *sequence)
+            }),
             None => playlist_store
                 .and_then(|pl_store| pl_store.direct_media_playlist())
                 .is_some_and(|(_, playlist)| !playlist.contains_sequence(*sequence)),

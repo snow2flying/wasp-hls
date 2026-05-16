@@ -64,7 +64,7 @@ impl Dispatcher {
                 // rates are also ignored here defensively to avoid poisoning ABR decisions.
                 bandwidth
             };
-            let update = pl_store.update_curr_bandwidth(actually_used_bandwidth);
+            let update = pl_store.update_estimated_bandwidth(actually_used_bandwidth);
             self.handle_variant_update(update, false);
         }
     }
@@ -73,7 +73,7 @@ impl Dispatcher {
     /// playing that one.
     pub(super) fn lock_variant_core(&mut self, variant_id: u32) {
         if let Some(pl_store) = self.playlist_store.as_mut() {
-            let is_audio_track_selected = pl_store.curr_audio_track_id().is_some();
+            let is_audio_track_distinct = pl_store.current_audio_track_id().is_some();
             match pl_store.lock_variant(variant_id) {
                 LockVariantResponse::NoVariantWithId => {
                     Logger::warn("Core: Locked variant not found");
@@ -91,7 +91,7 @@ impl Dispatcher {
                         jsAnnounceTrackUpdate(
                             MediaType::Audio,
                             Some(track_id),
-                            is_audio_track_selected,
+                            is_audio_track_distinct,
                         );
                     }
                     self.handle_variant_update(updates, true);
@@ -121,7 +121,7 @@ impl Dispatcher {
 
         if let (Some(url), Some(media_type)) = (
             playlist_store.media_playlist_url(&playlist_id),
-            playlist_store.curr_media_type_for(&playlist_id),
+            playlist_store.media_type_for(&playlist_id),
         ) {
             let playlist_type = PlaylistFileType::MediaPlaylist {
                 id: playlist_id,
@@ -529,8 +529,8 @@ impl Dispatcher {
 
         // That might have led to more timing-related information
         jsUpdateContentInfo(
-            playlist_store.curr_min_position(),
-            playlist_store.curr_max_position(),
+            playlist_store.current_estimated_minimum_position(),
+            playlist_store.current_estimated_maximum_position(),
             playlist_store.playlist_type(),
         );
         sync_media_source_duration(playlist_store);
@@ -659,8 +659,8 @@ impl Dispatcher {
 
         // That might have led to more timing-related information
         jsUpdateContentInfo(
-            playlist_store.curr_min_position(),
-            playlist_store.curr_max_position(),
+            playlist_store.current_estimated_minimum_position(),
+            playlist_store.current_estimated_maximum_position(),
             playlist_store.playlist_type(),
         );
         sync_media_source_duration(playlist_store);
@@ -743,7 +743,7 @@ impl Dispatcher {
                 };
 
                 let inventory = self.media_element_ref.inventory(mt);
-                if let Some(seg_info) = pl_store.curr_media_playlist_segment_info(mt) {
+                if let Some(seg_info) = pl_store.loaded_media_playlist_segment_info(mt) {
                     let needed_segment = self.segment_selectors.get_mut(mt).most_needed_segment(
                         seg_info.0,
                         &seg_info.1,
@@ -791,7 +791,7 @@ impl Dispatcher {
         };
         if !self.requester.has_segment_request_pending(media_type) {
             let inventory = self.media_element_ref.inventory(media_type);
-            if let Some(seg_info) = pl_store.curr_media_playlist_segment_info(media_type) {
+            if let Some(seg_info) = pl_store.loaded_media_playlist_segment_info(media_type) {
                 let most_needed_segment = self
                     .segment_selectors
                     .get_mut(media_type)
@@ -841,7 +841,7 @@ impl Dispatcher {
 
         self.handle_media_playlist_update(&changed_media_types, flush || has_worsened, flush);
         if let Some(pl_store) = self.playlist_store.as_mut() {
-            jsAnnounceVariantUpdate(pl_store.curr_variant().map(|v| v.id()));
+            jsAnnounceVariantUpdate(pl_store.current_variant_id());
         }
     }
 
@@ -877,10 +877,10 @@ impl Dispatcher {
             }
 
             let playlist_to_fetch = self.playlist_store.as_ref().and_then(|pl_store| {
-                if pl_store.curr_media_playlist(mt).is_some() {
+                if pl_store.has_loaded_media_playlist(mt) {
                     None
                 } else {
-                    let id = *pl_store.curr_media_playlist_id(mt)?;
+                    let id = *pl_store.media_playlist_id_for(mt)?;
                     let url = pl_store.media_playlist_url(&id)?.clone();
                     Some((id, url))
                 }
@@ -1052,7 +1052,7 @@ impl Dispatcher {
     fn clean_up_playlist_refresh_timers(&mut self) {
         if let Some(ref pl_store) = self.playlist_store {
             self.playlist_refresh_timers
-                .retain(|id| pl_store.is_curr_media_playlist(id))
+                .retain(|id| pl_store.is_current_media_playlist(id))
         } else {
             self.playlist_refresh_timers.clear_all_timers();
         }
@@ -1062,7 +1062,7 @@ impl Dispatcher {
 fn sync_media_source_duration(playlist_store: &PlaylistStore) {
     if playlist_store.playlist_type() != PlaylistNature::VoD {
         let _ = jsSetMediaSourceDuration(u32::MAX as f64);
-    } else if let Some(duration) = playlist_store.curr_duration() {
+    } else if let Some(duration) = playlist_store.current_estimated_duration() {
         let _ = jsSetMediaSourceDuration(duration);
     } else {
         Logger::warn("Core: Unknown content duration");
