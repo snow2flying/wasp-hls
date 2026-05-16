@@ -185,7 +185,7 @@ impl PlaylistStore {
         })
     }
 
-    /// Returns a reference to the `Url` to the Multivariant Playlist stored by this
+    /// Returns a reference to the `Url` to the top-level Playlist stored by this
     /// `PlaylistStore`.
     pub(crate) fn url(&self) -> &Url {
         self.playlist.url()
@@ -680,6 +680,7 @@ impl PlaylistStore {
     }
 
     /// Returns vec describing all available variant streams in the current MultivariantPlaylist.
+    /// XXX TODO: still really needed? `available_variants` should do the job always
     pub(crate) fn supported_variants(&self) -> Vec<&VariantStream> {
         match &self.playlist {
             TopLevelPlaylist::Multivariant(playlist) => playlist
@@ -912,6 +913,10 @@ impl PlaylistStore {
     ///
     /// Returns `None` either if there's no MediaPlaylist selected for that `MediaType` or if the
     /// MediaPlaylist is not yet loaded.
+    // XXX TODO:: I'm not too comfortable with this. I would be more comfortable with:
+    // - Either We expose the full `MediaPlaylist`
+    // - Either we expose methods to exploit directly what is wanted
+    // What's your opinion? What is it used for today?
     pub(crate) fn curr_media_playlist(&self, media_type: MediaType) -> Option<&MediaPlaylist> {
         if let Some(wanted_id) = match media_type {
             MediaType::Video => &self.curr_video_id,
@@ -1152,6 +1157,8 @@ impl PlaylistStore {
         self.multivariant_support_resolved = false;
     }
 
+    // XXX TODO:: Why is this separate method needed? It is not-straightforward in the API of this
+    // module why this is different than update_variant
     pub(crate) fn switch_startup_variant(&mut self, variant_id: u32) -> Vec<MediaType> {
         let prev_audio_id = self.curr_audio_id;
         let prev_video_id = self.curr_video_id;
