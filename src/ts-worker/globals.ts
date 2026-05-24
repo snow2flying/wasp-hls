@@ -45,7 +45,9 @@ class PlayerInstance {
   public dispose(): void {
     this._instanceInfo?.dispatcher.free();
     jsMemoryResources.freeEverything();
-    requestsStore.freeEverything();
+    requestsStore.freeEverything((request) => {
+      request.abortController.abort();
+    });
   }
 
   public changeContent(content: ContentInfo) {
@@ -56,7 +58,9 @@ class PlayerInstance {
       return;
     }
     jsMemoryResources.freeEverything();
-    requestsStore.freeEverything();
+    requestsStore.freeEverything((request) => {
+      request.abortController.abort();
+    });
     this._instanceInfo.content = content;
   }
 
@@ -95,7 +99,14 @@ class GenericStore<T> {
     return this._store[id];
   }
 
-  public freeEverything(): void {
+  public freeEverything(disposeItem?: (item: T) => void): void {
+    if (disposeItem !== undefined) {
+      for (const item of Object.values(this._store)) {
+        if (item !== undefined) {
+          disposeItem(item);
+        }
+      }
+    }
     this._store = {};
   }
 }
@@ -111,7 +122,14 @@ export interface RequestObject {
 export interface SourceBufferInstanceInfo<HasMseInWorker extends boolean> {
   id: SourceBufferId;
   lastInitTrackInfoByTrackId:
-    | Map<number, { timescale: number; type: "audio" | "video" | "other" }>
+    | Map<
+        number,
+        {
+          timescale: number;
+          type: "audio" | "video" | "other";
+          defaultSampleDuration: number | undefined;
+        }
+      >
     | undefined;
   mediaType: MediaType;
   sourceBuffer: HasMseInWorker extends true ? QueuedSourceBuffer : null;

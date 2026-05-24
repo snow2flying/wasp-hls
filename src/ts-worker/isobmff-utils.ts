@@ -35,7 +35,7 @@ function getDurationFromTrun(buffer: Uint8Array): number | undefined {
       return undefined;
     }
     for (const trun of truns) {
-      const duration = getDurationFromSingleTrun(traf, trun);
+      const duration = getDurationFromSingleTrun(traf, trun, undefined);
       if (duration === undefined) {
         return undefined;
       }
@@ -45,10 +45,15 @@ function getDurationFromTrun(buffer: Uint8Array): number | undefined {
   return completeDuration;
 }
 
-function getInitTrackInfo(
-  buffer: Uint8Array,
-):
-  | Map<number, { timescale: number; type: "audio" | "video" | "other" }>
+function getInitTrackInfo(buffer: Uint8Array):
+  | Map<
+      number,
+      {
+        timescale: number;
+        type: "audio" | "video" | "other";
+        defaultSampleDuration: number | undefined;
+      }
+    >
   | undefined {
   const moov = getBoxContent(buffer, 0x6d6f6f76 /* moov */);
   if (moov === null) {
@@ -60,9 +65,15 @@ function getInitTrackInfo(
     return undefined;
   }
 
+  const defaultSampleDurationByTrackId =
+    getDefaultSampleDurationFromTREXByTrackId(moov);
   const trackInfo = new Map<
     number,
-    { timescale: number; type: "audio" | "video" | "other" }
+    {
+      timescale: number;
+      type: "audio" | "video" | "other";
+      defaultSampleDuration: number | undefined;
+    }
   >();
   for (const trak of traks) {
     const trackId = getTrackIdFromTRAK(trak);
@@ -75,6 +86,7 @@ function getInitTrackInfo(
       trackInfo.set(trackId, {
         timescale,
         type: getTrackTypeFromTRAK(trak),
+        defaultSampleDuration: defaultSampleDurationByTrackId.get(trackId),
       });
     }
   }
@@ -100,7 +112,11 @@ function getIsobmfTimeInfo(
   buffer: Uint8Array,
   initTrackInfoByTrackId: Map<
     number,
-    { timescale: number; type: "audio" | "video" | "other" }
+    {
+      timescale: number;
+      type: "audio" | "video" | "other";
+      defaultSampleDuration: number | undefined;
+    }
   >,
 ): { time: number; duration: number | undefined; timescale: number } | null {
   const trafs = getTRAFs(buffer);
@@ -119,7 +135,10 @@ function getIsobmfTimeInfo(
       if (initTrackInfo === undefined) {
         return null;
       }
-      const duration = getDurationFromTRAF(traf);
+      const duration = getDurationFromTRAF(
+        traf,
+        initTrackInfo.defaultSampleDuration,
+      );
       if (duration === undefined) {
         return null;
       }
@@ -692,7 +711,31 @@ function getDefaultDurationFromTFHDInTRAF(
   return defaultDuration;
 }
 
-function getDurationFromTRAF(traf: Uint8Array): number | undefined {
+function getDefaultSampleDurationFromTREXByTrackId(
+  moov: Uint8Array,
+): Map<number, number> {
+  const mvex = getBoxContent(moov, 0x6d766578 /* mvex */);
+  if (mvex === null) {
+    return new Map();
+  }
+
+  const trexBoxes = getBoxesContent(mvex, 0x74726578 /* trex */);
+  const defaultDurations = new Map<number, number>();
+  for (const trex of trexBoxes) {
+    if (trex.length < 24) {
+      continue;
+    }
+    const trackId = be4toi(trex, 4);
+    const defaultSampleDuration = be4toi(trex, 12);
+    defaultDurations.set(trackId, defaultSampleDuration);
+  }
+  return defaultDurations;
+}
+
+function getDurationFromTRAF(
+  traf: Uint8Array,
+  defaultSampleDurationFromInit: number | undefined,
+): number | undefined {
   const truns = getBoxesContent(traf, 0x7472756e /* trun */);
   if (truns.length === 0) {
     return undefined;
@@ -700,7 +743,11 @@ function getDurationFromTRAF(traf: Uint8Array): number | undefined {
 
   let totalDuration = 0;
   for (const trun of truns) {
-    const duration = getDurationFromSingleTrun(traf, trun);
+    const duration = getDurationFromSingleTrun(
+      traf,
+      trun,
+      defaultSampleDurationFromInit,
+    );
     if (duration === undefined) {
       return undefined;
     }
@@ -712,6 +759,7 @@ function getDurationFromTRAF(traf: Uint8Array): number | undefined {
 function getDurationFromSingleTrun(
   traf: Uint8Array,
   trun: Uint8Array,
+  defaultSampleDurationFromInit: number | undefined,
 ): number | undefined {
   let cursor = 0;
   const version = trun[cursor];
@@ -727,6 +775,9 @@ function getDurationFromSingleTrun(
   let defaultDuration: number | undefined = 0;
   if (!hasSampleDuration) {
     defaultDuration = getDefaultDurationFromTFHDInTRAF(traf);
+    if (defaultDuration === undefined) {
+      defaultDuration = defaultSampleDurationFromInit;
+    }
     if (defaultDuration === undefined) {
       return undefined;
     }
