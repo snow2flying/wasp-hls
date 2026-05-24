@@ -27,8 +27,15 @@ import {
 import { exec } from "../utils/exec.mjs";
 import { cleanBuildDirectory } from "../utils/fs.mjs";
 import launchStaticServer from "../launch_static_server.mjs";
+import {
+  testAll,
+  testIntegration,
+  testRust as runRustTests,
+  testTransmux,
+} from "./test.mjs";
 import { watchDemo } from "./watch.mjs";
 import { reportSuccess } from "./report.mjs";
+import { npmExecCommand } from "../utils/exec.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const rawArgs = process.argv.slice(2);
@@ -140,16 +147,61 @@ async function run() {
       const { flags } = parseArgs(rest, ["--check"]);
       if (flags.has("--check")) {
         await exec("cargo", ["fmt", "--check"], { cwd: ROOT });
-        await exec("prettier", [".", "--check"], { cwd: ROOT });
+        const prettier = npmExecCommand("prettier", [".", "--check"]);
+        await exec(prettier.command, prettier.args, {
+          cwd: ROOT,
+        });
         reportSuccess("Code formatting checks");
       } else {
         await exec("cargo", ["fmt"], { cwd: ROOT });
-        await exec("prettier", ["--write", ".", "--loglevel", "warn"], {
+        const prettier = npmExecCommand("prettier", [
+          "--write",
+          ".",
+          "--loglevel",
+          "warn",
+        ]);
+        await exec(prettier.command, prettier.args, {
           cwd: ROOT,
         });
         reportSuccess("Code formatting");
       }
       return;
+    }
+    case "test": {
+      const options = parseTestArgs(rest);
+      switch (options.scope ?? "all") {
+        case "all":
+          ensureNoTestOptions(options, "all");
+          await testAll(ROOT);
+          reportSuccess("All tests");
+          return;
+        case "integration":
+          await testIntegration(ROOT, {
+            browser: options.browser,
+            filters: options.filters,
+            watch: options.watch,
+          });
+          reportSuccess("Integration tests");
+          return;
+        case "transmux":
+          assertNoBrowserOption(options, "transmux");
+          await testTransmux(ROOT, {
+            filters: options.filters,
+            watch: options.watch,
+          });
+          reportSuccess("Transmux tests");
+          return;
+        case "rust":
+          assertNoBrowserOption(options, "rust");
+          assertNoWatchOption(options, "rust");
+          await runRustTests(ROOT, { filters: options.filters });
+          reportSuccess("Rust unit tests");
+          return;
+        default:
+          throw new Error(
+            `Unknown test scope "${options.scope}".\n\n${helpText()}`,
+          );
+      }
     }
     case "generate":
       ensureNoArgs(rest);
@@ -239,12 +291,83 @@ function ensureNoArgs(args) {
   }
 }
 
+function parseTestArgs(args) {
+  let scope;
+  let watch = false;
+  let browser;
+  const filters = [];
+
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    switch (arg) {
+      case "--watch":
+        watch = true;
+        break;
+      case "--browser":
+        index++;
+        browser = args[index];
+        if (browser == null) {
+          throw new Error(`Missing value for "${arg}".\n\n${helpText()}`);
+        }
+        break;
+      case "--filter":
+        index++;
+        {
+          const filter = args[index];
+          if (filter == null) {
+            throw new Error(`Missing value for "${arg}".\n\n${helpText()}`);
+          }
+          filters.push(filter);
+        }
+        break;
+      default:
+        if (arg.startsWith("--")) {
+          throw new Error(`Unsupported flag "${arg}".\n\n${helpText()}`);
+        }
+        if (scope != null) {
+          throw new Error(`Too many test arguments.\n\n${helpText()}`);
+        }
+        scope = arg;
+        break;
+    }
+  }
+
+  return {
+    browser,
+    filters,
+    scope,
+    watch,
+  };
+}
+
 function assertNoFlag(flags, flag, message) {
   if (flags.has(flag)) throw new Error(message);
 }
 
 function assertNoFlags(flags, message) {
   if (flags.size !== 0) throw new Error(message);
+}
+
+function ensureNoTestOptions(options, scope) {
+  if (options.watch || options.browser != null || options.filters.length > 0) {
+    throw new Error(
+      `Extra options are not supported for "test ${scope}". Select a specific scope instead.\n\n${helpText()}`,
+    );
+  }
+}
+
+function assertNoBrowserOption(options, scope) {
+  if (options.browser != null) {
+    throw new Error(
+      `"--browser" is only supported for "test integration", not "test ${scope}".`,
+    );
+  }
+}
+
+function assertNoWatchOption(options, scope) {
+  if (options.watch) {
+    throw new Error(`"--watch" is not supported for "test ${scope}".`);
+  }
 }
 
 function helpText() {
@@ -266,6 +389,15 @@ Commands
     common      Check common TypeScript
     demo        Check demo TypeScript
     rust        Run cargo clippy
+
+  test [scope] [--filter <value>] [--watch] [--browser <name>]
+    all         Run every test suite: Rust, transmux, and integration (default)
+    rust        Run Rust unit tests
+    transmux    Run Node-based transmux tests
+    integration Run browser integration tests
+               --filter is repeatable for scoped test runs
+               --watch is supported for integration and transmux
+               --browser is supported for integration only
 
   fmt [--check]   Format Rust and JS/TS/Markdown
   generate        Regenerate wasm ABI enums

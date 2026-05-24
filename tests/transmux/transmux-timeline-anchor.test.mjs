@@ -20,7 +20,9 @@ function hasFfmpeg() {
 async function bundleTransmuxSource(tmpRoot) {
   const outfile = join(tmpRoot, "transmux-test-bundle.mjs");
   await build({
-    entryPoints: [join(process.cwd(), "tests/helpers/transmux-test-entry.ts")],
+    entryPoints: [
+      join(process.cwd(), "tests/transmux/helpers/transmux-test-entry.ts"),
+    ],
     bundle: true,
     format: "esm",
     platform: "node",
@@ -103,7 +105,7 @@ async function transmuxSequence(mod, segments) {
   const values = [];
   for (const { data, start, duration } of segments) {
     const out = transmuxer.transmuxSegment(data, {
-      baseMediaDecodeTime: {
+      baseMediaDecodeTimeSeed: {
         value: Math.round(start * 90000),
         timescale: 90000,
       },
