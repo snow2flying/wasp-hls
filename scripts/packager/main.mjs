@@ -24,6 +24,7 @@ import {
   DEFAULT_BASE_PORT,
   DEFAULT_MEDIA_FORMAT,
   DEFAULT_SUBTITLE_FORMAT,
+  DEFAULT_PUBLISH_STRATEGY,
 } from "./constants.mjs";
 import { isPositiveInteger, isValidPort, sanitizeDirPath } from "./utils.mjs";
 import { getMaxNbPortsUsed } from "./ports.mjs";
@@ -152,6 +153,16 @@ for (let i = 0; i < args.length; i++) {
       break;
     }
 
+    case "--publish-strategy": {
+      const { value, nextIndex } = requireNextArg(arg, i);
+      if (value !== "atomic" && value !== "direct") {
+        panic('--publish-strategy must be either "atomic" or "direct".');
+      }
+      configObj.publishStrategy = value;
+      i = nextIndex;
+      break;
+    }
+
     case "--low-latency":
       configObj.lowLatency = true;
       break;
@@ -235,6 +246,10 @@ Options:
                                       The current GPAC live path only supports
                                       'none'.
 
+  --publish-strategy <strategy>       How GPAC output is exposed publicly.
+                                      Accepted values: 'atomic', 'direct'.
+                                      Defaults to ${DEFAULT_PUBLISH_STRATEGY}.
+
   --no-confirmation                   Never ask for confirmation; validate all prompts.
                                       Intended for automated scripts.
 
@@ -244,8 +259,6 @@ Options:
                                       Defaults to ${DEFAULT_BASE_PORT} (ports ${DEFAULT_BASE_PORT}-${DEFAULT_BASE_PORT + maxNbPortsUsed - 1}).
 
   --gpac-path <path>                  Path to the gpac binary. If not specified,
-                                      the script will search common locations and,
-                                      as a last resort, try to install it locally
-                                      in \`tmp\` (you will be asked to confirm).
+                                      the script will search common locations.
 `);
 }

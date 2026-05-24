@@ -9,7 +9,7 @@ import {
   cleanupMediaFiles,
 } from "./utils.mjs";
 import { checkPortRange, buildPortMap } from "./ports.mjs";
-import { resolveGpacBinary, waitForGpacReady } from "./gpac_packager.mjs";
+import { resolveGpacBinary } from "./gpac_packager.mjs";
 import { buildFfmpegArgs, spawnFfmpeg } from "./ffmpeg.mjs";
 import { showConfigAndConfirm, askConfirmation } from "./ui.mjs";
 import {
@@ -18,6 +18,11 @@ import {
   cleanup,
   createChildExitPromise,
 } from "./cleanup.mjs";
+import {
+  cleanupGpacWorkDir,
+  getGpacWorkDir,
+  startLiveOutputPublisher,
+} from "./publisher.mjs";
 
 /**
  * @typedef {object} PackageConfig
@@ -30,10 +35,10 @@ import {
  * @property {number}  timeshiftBufferDepth  - DVR window depth in seconds.
  * @property {"mpegts"|"fmp4"} mediaFormat   - HLS media output format.
  * @property {"none"|"webvtt"|"ttml"} subtitleFormat - HLS subtitle output format.
+ * @property {"atomic"|"direct"} publishStrategy - How GPAC output is exposed publicly.
  * @property {boolean} lowLatency            - Enable LL-HLS packaging when supported.
  * @property {string}  [gpacPath]            - Explicit path to the gpac binary.
  * @property {string}  tmpDir                - Directory used to cache the gpac binary.
- * @property {string}  scriptDir             - Directory containing install_gpac.sh.
  */
 
 /**
@@ -67,12 +72,7 @@ export async function packageLiveContent(config) {
     );
   }
 
-  const gpacCmd = await resolveGpacBinary(
-    config.tmpDir,
-    config.scriptDir,
-    config.noConfirm,
-    config.gpacPath,
-  );
+  const gpacCmd = await resolveGpacBinary(config.tmpDir, config.gpacPath);
 
   const ports = buildPortMap(config.basePort);
 
@@ -81,29 +81,29 @@ export async function packageLiveContent(config) {
   console.log("Starting...");
   console.log("Cleaning up any existing media files before starting...");
   cleanupMediaFiles(config.outputDir);
+  cleanupGpacWorkDir(config.outputDir);
   ensureOutputDir(config);
+  const useAtomicPublisher = config.publishStrategy !== "direct";
+  const gpacOutputDir = useAtomicPublisher
+    ? getGpacWorkDir(config.outputDir)
+    : config.outputDir;
+  const publisher = useAtomicPublisher
+    ? startLiveOutputPublisher({
+        sourceDir: gpacOutputDir,
+        targetDir: config.outputDir,
+      })
+    : { stop() {} };
+  console.log(
+    `Publishing strategy: ${useAtomicPublisher ? "atomic publisher" : "direct GPAC output"}`,
+  );
 
-  const gpacArgs = buildGpacArgs(config, ports);
+  const gpacArgs = buildGpacArgs(config, ports, gpacOutputDir);
 
   console.log(`Starting GPAC with command: ${gpacCmd}`);
   const gpac = spawn(gpacCmd, gpacArgs, { stdio: "inherit" });
   setPackagerProc(gpac);
   console.log(`GPAC started with PID: ${gpac.pid}`);
   const gpacExited = createChildExitPromise("gpac", gpac, config.outputDir);
-
-  try {
-    await waitForGpacReady([
-      ports.p720,
-      ports.p480,
-      ports.p360,
-      ports.audio1,
-      ports.audio2,
-      ports.audio3,
-    ]);
-  } catch (err) {
-    cleanup(config.outputDir);
-    throw err;
-  }
 
   const ffmpegArgs = buildFfmpegArgs({
     frameRate: config.frameRate,
@@ -118,8 +118,12 @@ export async function packageLiveContent(config) {
     config.outputDir,
   );
 
-  // Run until interrupted or one child crashes.
-  await Promise.race([ffmpegExited, gpacExited]);
+  try {
+    // Run until interrupted or one child crashes.
+    await Promise.race([ffmpegExited, gpacExited]);
+  } finally {
+    publisher.stop();
+  }
 }
 
 /**
@@ -189,10 +193,11 @@ async function checkIfOutputContainsMediaFiles(outputDir, noConfirm) {
  *
  * @param {PackageConfig} config
  * @param {ReturnType<import("./ports.mjs").buildPortMap>} ports
+ * @param {string} outputDir
  * @returns {string[]}
  */
-function buildGpacArgs(config, ports) {
-  const out = config.outputDir;
+function buildGpacArgs(config, ports, outputDir) {
+  const out = outputDir;
   const inputs = [
     {
       port: ports.p720,
@@ -240,7 +245,8 @@ function buildGpacArgs(config, ports) {
 
   const inputArgs = inputs.flatMap((input) => {
     let source =
-      `udp://127.0.0.1:${input.port}` +
+      // GPAC expects a trailing "/" before filter options on socket URLs.
+      `udp://127.0.0.1:${input.port}/` +
       `:#HLSPL=${input.playlist}` +
       `:#Representation=${input.representation}` +
       `:#Bitrate=${input.bitrate}`;
