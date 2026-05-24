@@ -92,6 +92,7 @@ export function onAttachMediaSourceMessage(
     contentMetadata.playbackObserver.stop();
     contentMetadata.playbackObserver = null;
   }
+  disposeContentSourceBuffers(contentMetadata);
 
   if (msg.value.handle !== undefined) {
     mediaElement.srcObject = msg.value.handle as unknown as MediaProvider;
@@ -222,6 +223,7 @@ export function onCreateMediaSourceMessage(
         contentMetadata.playbackObserver.stop();
         contentMetadata.playbackObserver = null;
       }
+      disposeContentSourceBuffers(contentMetadata);
 
       const mediaSource = new MediaSource();
 
@@ -310,6 +312,7 @@ export function onClearMediaSourceMessage(
       contentMetadata.disposeMediaSource();
       contentMetadata.disposeMediaSource = null;
     }
+    disposeContentSourceBuffers(contentMetadata);
     clearElementSrc(mediaElement);
   } catch (err) {
     const error = err instanceof Error ? err : "Unknown Error";
@@ -766,6 +769,7 @@ export function onErrorMessage(
     contentMetadata.disposeMediaSource();
     contentMetadata.disposeMediaSource = null;
   }
+  disposeContentSourceBuffers(contentMetadata);
   if (contentMetadata.playbackObserver !== null) {
     contentMetadata.playbackObserver.stop();
     contentMetadata.playbackObserver = null;
@@ -1125,6 +1129,18 @@ function bindMediaSource(
     videoElement.src = "";
     videoElement.removeAttribute("src");
   };
+}
+
+function disposeContentSourceBuffers(
+  contentMetadata: ContentMetadata | null,
+): void {
+  if (contentMetadata === null || contentMetadata.sourceBuffers.length === 0) {
+    return;
+  }
+  for (const sourceBuffer of contentMetadata.sourceBuffers) {
+    sourceBuffer.queuedSourceBuffer.dispose();
+  }
+  contentMetadata.sourceBuffers = [];
 }
 
 /**
