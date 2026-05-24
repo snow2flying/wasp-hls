@@ -54,6 +54,7 @@ export async function checkPackageExports(root) {
     const packagedFiles = new Set(
       execOutsideRepo("tar", ["-tzf", repoTarballPath], root, npmCacheDir)
         .split("\n")
+        .map((entry) => entry.trim())
         .filter((entry) => entry.startsWith("package/"))
         .map((entry) => entry.slice("package/".length))
         .filter(Boolean),
@@ -153,8 +154,9 @@ function getPackedFilename(expectedTarballName, npmPackOutput) {
  * @returns {string}
  */
 function execOutsideRepo(command, args, cwd, npmCacheDir) {
+  const resolved = resolveCommand(command, args);
   try {
-    return execFileSync(command, args, {
+    return execFileSync(resolved.command, resolved.args, {
       cwd,
       encoding: "utf8",
       env: {
@@ -177,6 +179,39 @@ function execOutsideRepo(command, args, cwd, npmCacheDir) {
     }
     throw error;
   }
+}
+
+/**
+ * Resolve commands that need platform-specific launching behavior.
+ * In particular, invoking `npm` directly is unreliable on Windows without
+ * either reusing npm's JS entrypoint or going through `cmd.exe`.
+ *
+ * @param {string} command
+ * @param {string[]} args
+ * @returns {{ command: string, args: string[] }}
+ */
+function resolveCommand(command, args) {
+  if (command !== "npm") {
+    return { command, args };
+  }
+
+  if (process.env.npm_execpath) {
+    return {
+      command: process.execPath,
+      args: [process.env.npm_execpath, ...args],
+    };
+  }
+
+  if (process.platform === "win32") {
+    return {
+      command: "cmd.exe",
+      // `/d` disables AutoRun hooks, `/s` preserves quoting for the command
+      // string passed to `cmd`, and `/c` runs it then exits.
+      args: ["/d", "/s", "/c", "npm", ...args],
+    };
+  }
+
+  return { command: "npm", args };
 }
 
 /**

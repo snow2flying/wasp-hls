@@ -3,7 +3,6 @@
  */
 
 import { spawn } from "child_process";
-import { delimiter, join } from "path";
 
 /**
  * @param {string} commandName
@@ -14,7 +13,6 @@ export function exec(commandName, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(commandName, args, {
       cwd: options.cwd,
-      env: spawnEnv(options.cwd),
       stdio: options.stdio ?? "inherit",
     });
     child.on("error", reject);
@@ -31,18 +29,33 @@ export function exec(commandName, args, options = {}) {
 }
 
 /**
- * Ensure locally installed CLIs remain resolvable even when the task runner is
- * invoked directly through `node` instead of `npm run`.
+ * Build a command tuple for `npm exec -- <tool> ...args` without relying on
+ * PATH shims. When the current process was launched by npm, reuse npm's own JS
+ * entrypoint through the current runtime.
  *
- * @param {string | undefined} cwd
- * @returns {NodeJS.ProcessEnv}
+ * @param {string} toolName
+ * @param {string[]} args
+ * @returns {{ command: string, args: string[] }}
  */
-export function spawnEnv(cwd) {
-  const env = { ...process.env };
-  const nodeModulesBin = join(cwd ?? process.cwd(), "node_modules", ".bin");
-  env.PATH =
-    env.PATH == null
-      ? nodeModulesBin
-      : `${nodeModulesBin}${delimiter}${env.PATH}`;
-  return env;
+export function npmExecCommand(toolName, args = []) {
+  if (process.env.npm_execpath) {
+    return {
+      command: process.execPath,
+      args: [process.env.npm_execpath, "exec", "--", toolName, ...args],
+    };
+  }
+
+  if (process.platform === "win32") {
+    return {
+      command: "cmd.exe",
+      // `/d` disables AutoRun hooks, `/s` preserves quoting for the command
+      // string passed to `cmd`, and `/c` runs it then exits.
+      args: ["/d", "/s", "/c", "npm", "exec", "--", toolName, ...args],
+    };
+  }
+
+  return {
+    command: "npm",
+    args: ["exec", "--", toolName, ...args],
+  };
 }
