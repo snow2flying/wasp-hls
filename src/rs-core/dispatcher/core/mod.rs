@@ -1000,6 +1000,10 @@ impl Dispatcher {
             Err(x) => {
                 let media_type = x.media_type();
                 let message = x.to_string();
+                Logger::warn(&format!(
+                    "Core: {} media segment push failed start:{} end:{} err:{}",
+                    media_type, segment_start, segment_end, message
+                ));
                 jsSendSegmentParsingError(true, x.into(), Some(media_type), &message);
                 self.stop_current_content();
             }
@@ -1021,6 +1025,10 @@ impl Dispatcher {
             Err(x) => {
                 let media_type = x.media_type();
                 let message = x.to_string();
+                Logger::warn(&format!(
+                    "Core: {} init segment push failed id:{} err:{}",
+                    media_type, init_id, message
+                ));
                 jsSendSegmentParsingError(true, x.into(), Some(media_type), &message);
                 self.stop_current_content();
             }
