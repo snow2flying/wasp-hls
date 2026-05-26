@@ -4,8 +4,8 @@ This directory contains the WebAssembly target file when built as well as the
 handwritten code, in `./js`, allowing to link it to JavaScript.
 
 Its `./abi` directory contains file useful both for file generation on both
-sides (Rust and JavaScript) - such as the creation of synchronized enums - as
-well as files used mainly to check that both sides are synchronized.
+sides (Rust and JavaScript) - such as the creation of synchronized enums and
+bindings.
 
 ## Why not just `wasm-bindgen`?
 

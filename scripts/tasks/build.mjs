@@ -21,7 +21,7 @@ export async function buildWasm(root, { release, skipGenerate = false }) {
   reportStep(
     "BUILD",
     "Building WebAssembly module" +
-      (release ? " in release mode..." : "in debug mode..."),
+      (release ? " in release mode..." : " in debug mode..."),
   );
   await exec(
     "cargo",
@@ -179,4 +179,6 @@ export async function buildDocs(root) {
 export async function generateWasmAbi(root) {
   reportStep("BUILD", "Generating ABI enums...");
   await exec(NODE, ["./scripts/generate_wasm_abi_enums.mjs"], { cwd: root });
+  reportStep("BUILD", "Generating ABI bindings...");
+  await exec(NODE, ["./scripts/generate_wasm_abi_bindings.mjs"], { cwd: root });
 }

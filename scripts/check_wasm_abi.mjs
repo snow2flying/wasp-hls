@@ -4,26 +4,27 @@
  * Validates that the built wasm module exports the ABI symbols expected by the
  * JavaScript bindings and imports the ABI symbols expected from the JS host.
  *
- * The expected symbol inventory is defined in `src/wasm/abi/wasm-functions.json`.
+ * The expected symbol inventory is defined in `src/wasm/abi/wasm-functions.jsonc`.
  */
 
 import { readFile } from "node:fs/promises";
+import readWasmAbiFunctionsManifest from "./utils/parse_wasm-functions_file.mjs";
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`Usage: node ./scripts/check_wasm_abi.mjs
 
 Checks that build/wasp_hls_bg.wasm matches the expected import/export ABI
-defined in src/wasm/abi/wasm-functions.json.`);
+defined in src/wasm/abi/wasm-functions.jsonc.`);
   process.exit(0);
 }
 
 const wasmPath = new URL("../build/wasp_hls_bg.wasm", import.meta.url);
-const functionsManifestPath = new URL(
-  "../src/wasm/abi/wasm-functions.json",
-  import.meta.url,
+const manifest = await readWasmAbiFunctionsManifest();
+const expectedImports = (manifest.imports ?? []).map(
+  (entry) => entry.wasmSymbol,
 );
-const { imports: expectedImports, exports: expectedExports } = JSON.parse(
-  await readFile(functionsManifestPath, "utf8"),
+const expectedExports = (manifest.exports ?? []).map(
+  (entry) => entry.wasmSymbol,
 );
 
 const bytes = await readFile(wasmPath);

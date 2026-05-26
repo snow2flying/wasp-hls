@@ -61,6 +61,7 @@ export async function watchDemo(root, { release }) {
         path === "Cargo.toml" ||
         path === "Cargo.lock" ||
         path.endsWith("scripts/generate_wasm_abi_enums.mjs") ||
+        path.endsWith("scripts/generate_wasm_abi_bindings.mjs") ||
         path.endsWith("scripts/check_wasm_abi.mjs") ||
         path.endsWith("scripts/wasm-strip.js"),
       onChange: () =>
@@ -73,7 +74,8 @@ export async function watchDemo(root, { release }) {
       roots: ["src/ts-worker", "src/ts-transmux", "src/ts-common", "src/wasm"],
       filter: (path) =>
         path !== "src/wasm/wasp_hls_bg.wasm" &&
-        path !== "src/ts-common/generatedWasmEnums.ts",
+        path !== "src/ts-common/generatedWasmEnums.ts" &&
+        path !== "src/wasm/js/generatedTypes.ts",
       onChange: () => enqueue("worker", () => buildWorker(root, { release })),
     },
     {

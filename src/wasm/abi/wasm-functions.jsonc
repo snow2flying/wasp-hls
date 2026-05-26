@@ -1,0 +1,1233 @@
+{
+  // ABI manifest for the handwritten JS<->WASM boundary.
+  //
+  // This file is intentionally JSONC so maintainers can keep inline notes next
+  // to each binding. Keep keys quoted and values JSON-compatible.
+  "imports": [
+    {
+      "wasmSymbol": "__js_func__abort_request",
+      "doc": ["Abort a pending network request identified by its request id."],
+      "typescript": {
+        "methodName": "abortRequest",
+        "args": [{ "name": "requestId", "type": "number" }],
+        "returnType": "boolean",
+      },
+      "rust": {
+        "args": [{ "name": "request_id", "type": "RequestId" }],
+        "returnType": "u32",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__add_source_buffer",
+      "doc": ["Create a SourceBuffer for the given media type and MIME type."],
+      "typescript": {
+        "methodName": "addSourceBuffer",
+        "args": [
+          { "name": "mediaType", "type": "MediaType" },
+          { "name": "typ", "type": "string" },
+        ],
+        "returnType": "HostResult<number, AddSourceBufferErrorCode>",
+      },
+      "rust": {
+        "args": [
+          { "name": "media_type", "type": "u32" },
+          { "name": "typ_ptr", "type": "*const u8" },
+          { "name": "typ_len", "type": "u32" },
+          { "name": "source_buffer_id_out", "type": "*mut u32" },
+          { "name": "err_code_out", "type": "*mut u32" },
+          { "name": "err_desc_ptr_out", "type": "*mut u32" },
+          { "name": "err_desc_len_out", "type": "*mut u32" },
+        ],
+        "returnType": "u32",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__announce_fetched_content",
+      "doc": ["Report freshly parsed content metadata back to the host."],
+      "typescript": {
+        "methodName": "announceFetchedContent",
+        "args": [
+          { "name": "playlistType", "type": "PlaylistType" },
+          { "name": "variantInfo", "type": "Uint32Array" },
+          { "name": "audioTracksInfo", "type": "Uint32Array" },
+        ],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [
+          { "name": "playlist_type", "type": "u32" },
+          { "name": "variant_info_ptr", "type": "*const u32" },
+          { "name": "variant_info_len", "type": "u32" },
+          { "name": "audio_tracks_info_ptr", "type": "*const u32" },
+          { "name": "audio_tracks_info_len", "type": "u32" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__announce_track_update",
+      "doc": ["Report an audio or video track selection update to the host."],
+      "typescript": {
+        "methodName": "announceTrackUpdate",
+        "args": [
+          { "name": "mediaType", "type": "MediaType" },
+          { "name": "trackId", "type": "number | undefined" },
+          { "name": "isSelected", "type": "boolean" },
+        ],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [
+          { "name": "media_type", "type": "u32" },
+          { "name": "track_id", "type": "u32" },
+          { "name": "is_selected", "type": "u32" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__announce_variant_lock_status_change",
+      "doc": ["Report that variant lock state changed."],
+      "typescript": {
+        "methodName": "announceVariantLockStatusChange",
+        "args": [{ "name": "variantId", "type": "number | undefined" }],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [{ "name": "variant_id", "type": "u32" }],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__announce_variant_update",
+      "doc": ["Report the currently selected variant update."],
+      "typescript": {
+        "methodName": "announceVariantUpdate",
+        "args": [{ "name": "variantId", "type": "number | undefined" }],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [{ "name": "variant_id", "type": "u32" }],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__append_buffer",
+      "doc": [
+        "Append one media segment to a SourceBuffer.",
+        "",
+        "Notes:",
+        "- The JS marshalling for this binding is intentionally still handwritten because the return payload is packed.",
+      ],
+      "typescript": {
+        "methodName": "appendBuffer",
+        "args": [
+          { "name": "sourceBufferId", "type": "number" },
+          { "name": "resourceId", "type": "number" },
+          { "name": "segmentHints", "type": "SegmentHints" },
+        ],
+        "returnType": "HostResult<AppendBufferValue, SegmentParsingErrorCode>",
+      },
+      "rust": {
+        "args": [
+          { "name": "source_buffer_id", "type": "SourceBufferId" },
+          { "name": "segment_id", "type": "ResourceId" },
+          { "name": "base_decode_time_start_hi", "type": "u32" },
+          { "name": "base_decode_time_start_lo", "type": "u32" },
+          { "name": "base_decode_time_start_timescale", "type": "u32" },
+          { "name": "reset_transmuxer_state", "type": "u32" },
+          { "name": "has_start_out", "type": "*mut u32" },
+          { "name": "start_value_hi_out", "type": "*mut u32" },
+          { "name": "start_value_lo_out", "type": "*mut u32" },
+          { "name": "has_end_out", "type": "*mut u32" },
+          { "name": "end_value_hi_out", "type": "*mut u32" },
+          { "name": "end_value_lo_out", "type": "*mut u32" },
+          { "name": "timescale", "type": "*mut u32" },
+          { "name": "err_code_out", "type": "*mut u32" },
+          { "name": "err_desc_ptr_out", "type": "*mut u32" },
+          { "name": "err_desc_len_out", "type": "*mut u32" },
+        ],
+        "returnType": "u32",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__attach_media_source",
+      "doc": ["Create and attach a MediaSource to the host media element."],
+      "typescript": {
+        "methodName": "attachMediaSource",
+        "args": [],
+        "returnType": "HostResult<true, AttachMediaSourceErrorCode>",
+      },
+      "rust": {
+        "args": [
+          { "name": "err_code_out", "type": "*mut u32" },
+          { "name": "err_desc_ptr_out", "type": "*mut u32" },
+          { "name": "err_desc_len_out", "type": "*mut u32" },
+        ],
+        "returnType": "u32",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__clear_timer",
+      "doc": ["Cancel a timer previously started by wasm."],
+      "typescript": {
+        "methodName": "clearTimer",
+        "args": [{ "name": "id", "type": "number" }],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [{ "name": "id", "type": "TimerId" }],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__copy_resource_data",
+      "doc": [
+        "Copy resource bytes into wasm memory.",
+        "",
+        "Notes:",
+        "- This shares the same host method as `__js_func__get_resource_len`; only the low-level ABI differs.",
+      ],
+      "typescript": {
+        "methodName": "getResourceData",
+        "args": [{ "name": "id", "type": "number" }],
+        "returnType": "Uint8Array | undefined",
+      },
+      "rust": {
+        "args": [
+          { "name": "id", "type": "ResourceId" },
+          { "name": "dest_ptr", "type": "*mut u8" },
+          { "name": "dest_len", "type": "u32" },
+        ],
+        "returnType": "u32",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__end_of_stream",
+      "doc": ["Signal end-of-stream to the active MediaSource."],
+      "typescript": {
+        "methodName": "endOfStream",
+        "args": [],
+        "returnType": "HostResult<true, EndOfStreamErrorCode>",
+      },
+      "rust": {
+        "args": [
+          { "name": "err_code_out", "type": "*mut u32" },
+          { "name": "err_desc_ptr_out", "type": "*mut u32" },
+          { "name": "err_desc_len_out", "type": "*mut u32" },
+        ],
+        "returnType": "u32",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__fetch",
+      "doc": ["Start a network request from JavaScript."],
+      "typescript": {
+        "methodName": "fetch",
+        "args": [
+          { "name": "url", "type": "string" },
+          { "name": "rangeBase", "type": "number | undefined" },
+          { "name": "rangeEnd", "type": "number | undefined" },
+          { "name": "timeout", "type": "number" },
+        ],
+        "returnType": "number",
+      },
+      "rust": {
+        "args": [
+          { "name": "url_ptr", "type": "*const u8" },
+          { "name": "url_len", "type": "u32" },
+          { "name": "has_range_base", "type": "u32" },
+          { "name": "range_base", "type": "usize" },
+          { "name": "has_range_end", "type": "u32" },
+          { "name": "range_end", "type": "usize" },
+          { "name": "timeout", "type": "f64" },
+        ],
+        "returnType": "RequestId",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__flush",
+      "doc": ["Flush pending host-side buffered state."],
+      "typescript": {
+        "methodName": "flush",
+        "args": [],
+        "returnType": "void",
+      },
+      "rust": { "args": [], "returnType": "void" },
+    },
+    {
+      "wasmSymbol": "__js_func__free_resource",
+      "doc": ["Release a JavaScript-side resource buffer."],
+      "typescript": {
+        "methodName": "freeResource",
+        "args": [{ "name": "resourceId", "type": "number" }],
+        "returnType": "boolean",
+      },
+      "rust": {
+        "args": [{ "name": "resource_id", "type": "ResourceId" }],
+        "returnType": "u32",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__get_random",
+      "doc": ["Return a random floating-point value."],
+      "typescript": {
+        "methodName": "getRandom",
+        "args": [],
+        "returnType": "number",
+      },
+      "rust": { "args": [], "returnType": "f64" },
+    },
+    {
+      "wasmSymbol": "__js_func__get_resource_len",
+      "doc": [
+        "Return the byte length for a JavaScript-side resource buffer.",
+        "",
+        "Notes:",
+        "- This shares the same host method as `__js_func__copy_resource_data`; only the low-level ABI differs.",
+      ],
+      "typescript": {
+        "methodName": "getResourceData",
+        "args": [{ "name": "id", "type": "number" }],
+        "returnType": "Uint8Array | undefined",
+      },
+      "rust": {
+        "args": [{ "name": "id", "type": "ResourceId" }],
+        "returnType": "i32",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__inspect_segment",
+      "doc": [
+        "Inspect a segment resource to extract codec and MIME metadata.",
+        "",
+        "Notes:",
+        "- The JS marshalling for this binding is intentionally still handwritten because the success payload is multi-field.",
+      ],
+      "typescript": {
+        "methodName": "inspectSegment",
+        "args": [{ "name": "resourceId", "type": "number" }],
+        "returnType": "HostResult<InspectSegmentValue, SegmentParsingErrorCode>",
+      },
+      "rust": {
+        "args": [
+          { "name": "segment_id", "type": "ResourceId" },
+          { "name": "media_type_out", "type": "*mut u32" },
+          { "name": "parsed_mime_type_ptr_out", "type": "*mut u32" },
+          { "name": "parsed_mime_type_len_out", "type": "*mut u32" },
+          { "name": "codec_ptr_out", "type": "*mut u32" },
+          { "name": "codec_len_out", "type": "*mut u32" },
+          { "name": "err_code_out", "type": "*mut u32" },
+          { "name": "err_desc_ptr_out", "type": "*mut u32" },
+          { "name": "err_desc_len_out", "type": "*mut u32" },
+        ],
+        "returnType": "u32",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__is_type_supported",
+      "doc": ["Ask the host whether a MIME type is supported."],
+      "typescript": {
+        "methodName": "isTypeSupported",
+        "args": [
+          { "name": "mediaType", "type": "MediaType" },
+          { "name": "typ", "type": "string" },
+        ],
+        "returnType": "boolean | undefined",
+      },
+      "rust": {
+        "args": [
+          { "name": "media_type", "type": "u32" },
+          { "name": "typ_ptr", "type": "*const u8" },
+          { "name": "typ_len", "type": "u32" },
+        ],
+        "returnType": "i32",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__log",
+      "doc": ["Send a log line to the host environment."],
+      "typescript": {
+        "methodName": "log",
+        "args": [
+          { "name": "logLevel", "type": "LogLevel" },
+          { "name": "log", "type": "string" },
+        ],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [
+          { "name": "log_level", "type": "u32" },
+          { "name": "ptr", "type": "*const u8" },
+          { "name": "len", "type": "u32" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__remove_buffer",
+      "doc": ["Remove buffered media data from a SourceBuffer."],
+      "typescript": {
+        "methodName": "removeBuffer",
+        "args": [
+          { "name": "sourceBufferId", "type": "number" },
+          { "name": "start", "type": "number" },
+          { "name": "end", "type": "number" },
+        ],
+        "returnType": "HostResult<true, RemoveBufferErrorCode>",
+      },
+      "rust": {
+        "args": [
+          { "name": "source_buffer_id", "type": "SourceBufferId" },
+          { "name": "start", "type": "f64" },
+          { "name": "end", "type": "f64" },
+          { "name": "err_code_out", "type": "*mut u32" },
+          { "name": "err_desc_ptr_out", "type": "*mut u32" },
+          { "name": "err_desc_len_out", "type": "*mut u32" },
+        ],
+        "returnType": "u32",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__remove_media_source",
+      "doc": ["Detach and clean up the current MediaSource."],
+      "typescript": {
+        "methodName": "removeMediaSource",
+        "args": [],
+        "returnType": "HostResult<true, RemoveMediaSourceErrorCode>",
+      },
+      "rust": {
+        "args": [
+          { "name": "err_code_out", "type": "*mut u32" },
+          { "name": "err_desc_ptr_out", "type": "*mut u32" },
+          { "name": "err_desc_len_out", "type": "*mut u32" },
+        ],
+        "returnType": "u32",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__seek",
+      "doc": ["Seek the media element to a new playback position."],
+      "typescript": {
+        "methodName": "seek",
+        "args": [{ "name": "position", "type": "number" }],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [{ "name": "position", "type": "f64" }],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__send_media_playlist_parsing_error",
+      "doc": ["Emit a media-playlist parsing error to the host."],
+      "typescript": {
+        "methodName": "sendMediaPlaylistParsingError",
+        "args": [
+          { "name": "fatal", "type": "boolean" },
+          { "name": "code", "type": "MediaPlaylistParsingErrorCode" },
+          { "name": "mediaType", "type": "MediaType | undefined" },
+          { "name": "message", "type": "string" },
+        ],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [
+          { "name": "fatal", "type": "u32" },
+          { "name": "code", "type": "u32" },
+          { "name": "media_type", "type": "u32" },
+          { "name": "message_ptr", "type": "*const u8" },
+          { "name": "message_len", "type": "u32" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__send_media_playlist_request_error",
+      "doc": ["Emit a media-playlist request error to the host."],
+      "typescript": {
+        "methodName": "sendMediaPlaylistRequestError",
+        "args": [
+          { "name": "fatal", "type": "boolean" },
+          { "name": "url", "type": "string" },
+          { "name": "reason", "type": "RequestErrorReason" },
+          { "name": "mediaType", "type": "MediaType | undefined" },
+          { "name": "status", "type": "number | undefined" },
+        ],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [
+          { "name": "fatal", "type": "u32" },
+          { "name": "url_ptr", "type": "*const u8" },
+          { "name": "url_len", "type": "u32" },
+          { "name": "reason", "type": "u32" },
+          { "name": "media_type", "type": "u32" },
+          { "name": "status", "type": "u32" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__send_multivariant_playlist_parsing_error",
+      "doc": ["Emit a multivariant-playlist parsing error to the host."],
+      "typescript": {
+        "methodName": "sendMultivariantPlaylistParsingError",
+        "args": [
+          { "name": "fatal", "type": "boolean" },
+          { "name": "code", "type": "MultivariantPlaylistParsingErrorCode" },
+          { "name": "message", "type": "string" },
+        ],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [
+          { "name": "fatal", "type": "u32" },
+          { "name": "code", "type": "u32" },
+          { "name": "message_ptr", "type": "*const u8" },
+          { "name": "message_len", "type": "u32" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__send_multivariant_playlist_request_error",
+      "doc": ["Emit a multivariant-playlist request error to the host."],
+      "typescript": {
+        "methodName": "sendMultivariantPlaylistRequestError",
+        "args": [
+          { "name": "fatal", "type": "boolean" },
+          { "name": "url", "type": "string" },
+          { "name": "reason", "type": "RequestErrorReason" },
+          { "name": "status", "type": "number | undefined" },
+        ],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [
+          { "name": "fatal", "type": "u32" },
+          { "name": "url_ptr", "type": "*const u8" },
+          { "name": "url_len", "type": "u32" },
+          { "name": "reason", "type": "u32" },
+          { "name": "status", "type": "u32" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__send_other_error",
+      "doc": ["Emit a generic error to the host."],
+      "typescript": {
+        "methodName": "sendOtherError",
+        "args": [
+          { "name": "fatal", "type": "boolean" },
+          { "name": "code", "type": "OtherErrorCode" },
+          { "name": "message", "type": "string" },
+        ],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [
+          { "name": "fatal", "type": "u32" },
+          { "name": "code", "type": "u32" },
+          { "name": "message_ptr", "type": "*const u8" },
+          { "name": "message_len", "type": "u32" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__send_pushed_segment_error",
+      "doc": ["Emit a pushed-segment processing error to the host."],
+      "typescript": {
+        "methodName": "sendPushedSegmentError",
+        "args": [
+          { "name": "fatal", "type": "boolean" },
+          { "name": "code", "type": "PushedSegmentErrorCode" },
+          { "name": "mediaType", "type": "MediaType" },
+          { "name": "message", "type": "string" },
+        ],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [
+          { "name": "fatal", "type": "u32" },
+          { "name": "code", "type": "u32" },
+          { "name": "media_type", "type": "u32" },
+          { "name": "message_ptr", "type": "*const u8" },
+          { "name": "message_len", "type": "u32" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__send_remove_buffer_error",
+      "doc": ["Emit a remove-buffer error to the host."],
+      "typescript": {
+        "methodName": "sendRemoveBufferError",
+        "args": [
+          { "name": "fatal", "type": "boolean" },
+          { "name": "mediaType", "type": "MediaType" },
+          { "name": "message", "type": "string" },
+        ],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [
+          { "name": "fatal", "type": "u32" },
+          { "name": "media_type", "type": "u32" },
+          { "name": "message_ptr", "type": "*const u8" },
+          { "name": "message_len", "type": "u32" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__send_segment_parsing_error",
+      "doc": ["Emit a segment parsing error to the host."],
+      "typescript": {
+        "methodName": "sendSegmentParsingError",
+        "args": [
+          { "name": "fatal", "type": "boolean" },
+          { "name": "code", "type": "SegmentParsingErrorCode" },
+          { "name": "mediaType", "type": "MediaType | undefined" },
+          { "name": "message", "type": "string" },
+        ],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [
+          { "name": "fatal", "type": "u32" },
+          { "name": "code", "type": "u32" },
+          { "name": "media_type", "type": "u32" },
+          { "name": "message_ptr", "type": "*const u8" },
+          { "name": "message_len", "type": "u32" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__send_segment_request_error",
+      "doc": ["Emit a segment request error to the host."],
+      "typescript": {
+        "methodName": "sendSegmentRequestError",
+        "args": [
+          { "name": "fatal", "type": "boolean" },
+          { "name": "url", "type": "string" },
+          { "name": "isInit", "type": "boolean" },
+          { "name": "timeInfo", "type": "[number, number] | undefined" },
+          { "name": "mediaType", "type": "MediaType" },
+          { "name": "reason", "type": "RequestErrorReason" },
+          { "name": "status", "type": "number | undefined" },
+        ],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [
+          { "name": "fatal", "type": "u32" },
+          { "name": "url_ptr", "type": "*const u8" },
+          { "name": "url_len", "type": "u32" },
+          { "name": "is_init", "type": "u32" },
+          { "name": "media_type", "type": "u32" },
+          { "name": "start_ptr", "type": "*const f64" },
+          { "name": "duration_ptr", "type": "*const f64" },
+          { "name": "reason", "type": "u32" },
+          { "name": "status", "type": "u32" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__send_source_buffer_creation_error",
+      "doc": ["Emit a SourceBuffer creation error to the host."],
+      "typescript": {
+        "methodName": "sendSourceBufferCreationError",
+        "args": [
+          { "name": "fatal", "type": "boolean" },
+          { "name": "code", "type": "SourceBufferCreationErrorCode" },
+          { "name": "mediaType", "type": "MediaType" },
+          { "name": "message", "type": "string" },
+        ],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [
+          { "name": "fatal", "type": "u32" },
+          { "name": "code", "type": "u32" },
+          { "name": "media_type", "type": "u32" },
+          { "name": "message_ptr", "type": "*const u8" },
+          { "name": "message_len", "type": "u32" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__set_media_offset",
+      "doc": ["Update the media-time offset used by the host."],
+      "typescript": {
+        "methodName": "setMediaOffset",
+        "args": [{ "name": "mediaOffset", "type": "number" }],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [{ "name": "media_offset", "type": "f64" }],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__set_media_source_duration",
+      "doc": ["Update the current MediaSource duration."],
+      "typescript": {
+        "methodName": "setMediaSourceDuration",
+        "args": [{ "name": "duration", "type": "number" }],
+        "returnType": "HostResult<true, MediaSourceDurationUpdateErrorCode>",
+      },
+      "rust": {
+        "args": [
+          { "name": "duration", "type": "f64" },
+          { "name": "err_code_out", "type": "*mut u32" },
+          { "name": "err_desc_ptr_out", "type": "*mut u32" },
+          { "name": "err_desc_len_out", "type": "*mut u32" },
+        ],
+        "returnType": "u32",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__set_playback_rate",
+      "doc": ["Update the playback rate on the media element."],
+      "typescript": {
+        "methodName": "setPlaybackRate",
+        "args": [{ "name": "playbackRate", "type": "number" }],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [{ "name": "playback_rate", "type": "f64" }],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__start_observing_playback",
+      "doc": ["Start periodic playback observation callbacks."],
+      "typescript": {
+        "methodName": "startObservingPlayback",
+        "args": [],
+        "returnType": "void",
+      },
+      "rust": { "args": [], "returnType": "void" },
+    },
+    {
+      "wasmSymbol": "__js_func__start_rebuffering",
+      "doc": ["Notify the host that rebuffering started."],
+      "typescript": {
+        "methodName": "startRebuffering",
+        "args": [],
+        "returnType": "void",
+      },
+      "rust": { "args": [], "returnType": "void" },
+    },
+    {
+      "wasmSymbol": "__js_func__stop_observing_playback",
+      "doc": ["Stop periodic playback observation callbacks."],
+      "typescript": {
+        "methodName": "stopObservingPlayback",
+        "args": [],
+        "returnType": "void",
+      },
+      "rust": { "args": [], "returnType": "void" },
+    },
+    {
+      "wasmSymbol": "__js_func__stop_rebuffering",
+      "doc": ["Notify the host that rebuffering stopped."],
+      "typescript": {
+        "methodName": "stopRebuffering",
+        "args": [],
+        "returnType": "void",
+      },
+      "rust": { "args": [], "returnType": "void" },
+    },
+    {
+      "wasmSymbol": "__js_func__timer",
+      "doc": ["Start a host-side timer and return its identifier."],
+      "typescript": {
+        "methodName": "timer",
+        "args": [
+          { "name": "duration", "type": "number" },
+          { "name": "reason", "type": "TimerReason" },
+        ],
+        "returnType": "number",
+      },
+      "rust": {
+        "args": [
+          { "name": "duration", "type": "f64" },
+          { "name": "reason", "type": "u32" },
+        ],
+        "returnType": "TimerId",
+      },
+    },
+    {
+      "wasmSymbol": "__js_func__update_content_info",
+      "doc": ["Update content-level metadata exposed by the host."],
+      "typescript": {
+        "methodName": "updateContentInfo",
+        "args": [
+          { "name": "minimumPosition", "type": "number | undefined" },
+          { "name": "maximumPosition", "type": "number | undefined" },
+          { "name": "playlistNature", "type": "PlaylistNature" },
+        ],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [
+          { "name": "has_minimum_position", "type": "u32" },
+          { "name": "minimum_position", "type": "f64" },
+          { "name": "has_maximum_position", "type": "u32" },
+          { "name": "maximum_position", "type": "f64" },
+          { "name": "playlist_nat", "type": "u32" },
+        ],
+        "returnType": "void",
+      },
+    },
+  ],
+  "exports": [
+    {
+      "wasmSymbol": "memory",
+      "doc": ["Linear wasm memory used for all ABI data exchange."],
+      "wasm": { "kind": "property", "type": "WebAssembly.Memory" },
+    },
+    {
+      "wasmSymbol": "wasp_malloc",
+      "doc": ["Allocate raw bytes in wasm memory."],
+      "wasm": {
+        "kind": "method",
+        "args": [{ "name": "len", "type": "number" }],
+        "returnType": "number",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_free",
+      "doc": ["Free raw bytes previously allocated in wasm memory."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "len", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_new",
+      "doc": ["Construct a new dispatcher instance."],
+      "wasm": {
+        "kind": "method",
+        "args": [{ "name": "initialBandwidth", "type": "number" }],
+        "returnType": "number",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_free",
+      "doc": ["Free a dispatcher instance."],
+      "wasm": {
+        "kind": "method",
+        "args": [{ "name": "ptr", "type": "number" }],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_load_content",
+      "doc": ["Start loading content into a dispatcher."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "urlPtr", "type": "number" },
+          { "name": "urlLen", "type": "number" },
+          { "name": "hasStartingPosition", "type": "number" },
+          { "name": "startType", "type": "StartingPositionType" },
+          { "name": "position", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_minimum_position",
+      "doc": ["Return the minimum known content position."],
+      "wasm": {
+        "kind": "method",
+        "args": [{ "name": "ptr", "type": "number" }],
+        "returnType": "number",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_maximum_position",
+      "doc": ["Return the maximum known content position."],
+      "wasm": {
+        "kind": "method",
+        "args": [{ "name": "ptr", "type": "number" }],
+        "returnType": "number",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_set_wanted_speed",
+      "doc": ["Update the target playback speed for a dispatcher."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "speed", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_set_buffer_goal",
+      "doc": ["Update the target buffer goal for a dispatcher."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "bufferGoal", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_stop",
+      "doc": ["Stop a dispatcher instance."],
+      "wasm": {
+        "kind": "method",
+        "args": [{ "name": "ptr", "type": "number" }],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_lock_variant",
+      "doc": ["Lock playback to a specific variant."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "variantId", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_unlock_variant",
+      "doc": ["Clear any variant lock on a dispatcher."],
+      "wasm": {
+        "kind": "method",
+        "args": [{ "name": "ptr", "type": "number" }],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_set_audio_track",
+      "doc": ["Select the audio track used by a dispatcher."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "trackId", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_set_segment_request_max_retry",
+      "doc": ["Set the segment request retry limit."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "maxRetry", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_set_segment_request_timeout",
+      "doc": ["Set the segment request timeout."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "timeout", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_set_segment_backoff_base",
+      "doc": ["Set the segment request backoff base."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "base", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_set_segment_backoff_max",
+      "doc": ["Set the segment request backoff maximum."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "max", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_set_multi_variant_playlist_request_max_retry",
+      "doc": ["Set the multivariant-playlist request retry limit."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "maxRetry", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_set_multi_variant_playlist_request_timeout",
+      "doc": ["Set the multivariant-playlist request timeout."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "timeout", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_set_multi_variant_playlist_backoff_base",
+      "doc": ["Set the multivariant-playlist backoff base."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "base", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_set_multi_variant_playlist_backoff_max",
+      "doc": ["Set the multivariant-playlist backoff maximum."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "max", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_set_media_playlist_request_max_retry",
+      "doc": ["Set the media-playlist request retry limit."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "maxRetry", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_set_media_playlist_request_timeout",
+      "doc": ["Set the media-playlist request timeout."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "timeout", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_set_media_playlist_backoff_base",
+      "doc": ["Set the media-playlist backoff base."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "base", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "wasp_dispatcher_set_media_playlist_backoff_max",
+      "doc": ["Set the media-playlist backoff maximum."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "max", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__web_event__request_finished",
+      "doc": ["Forward a successful network request completion to wasm."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "requestId", "type": "number" },
+          { "name": "resourceId", "type": "number" },
+          { "name": "resourceSize", "type": "number" },
+          { "name": "finalUrlPtr", "type": "number" },
+          { "name": "finalUrlLen", "type": "number" },
+          { "name": "durationMs", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__web_event__request_failed",
+      "doc": ["Forward a failed network request completion to wasm."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "requestId", "type": "number" },
+          { "name": "hasTimeouted", "type": "number" },
+          { "name": "status", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__web_event__media_source_state_change",
+      "doc": ["Forward a MediaSource ready-state change to wasm."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "state", "type": "MediaSourceReadyState" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__web_event__source_buffer_update",
+      "doc": ["Forward a SourceBuffer buffered-range update to wasm."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "sourceBufferId", "type": "number" },
+          { "name": "bufferedPtr", "type": "number" },
+          { "name": "bufferedLen", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__web_event__source_buffer_creation_error",
+      "doc": ["Forward a SourceBuffer creation error to wasm."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "sourceBufferId", "type": "number" },
+          { "name": "code", "type": "AddSourceBufferErrorCode" },
+          { "name": "messagePtr", "type": "number" },
+          { "name": "messageLen", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__web_event__append_buffer_error",
+      "doc": ["Forward an append-buffer failure to wasm."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "sourceBufferId", "type": "number" },
+          { "name": "code", "type": "PushedSegmentErrorCode" },
+          { "name": "bufferedPtr", "type": "number" },
+          { "name": "bufferedLen", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__web_event__remove_buffer_error",
+      "doc": ["Forward a remove-buffer failure to wasm."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "sourceBufferId", "type": "number" },
+          { "name": "bufferedPtr", "type": "number" },
+          { "name": "bufferedLen", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__web_event__playback_tick",
+      "doc": [
+        "Forward a playback observation snapshot to wasm.",
+        "",
+        "Notes:",
+        "- The higher-level JS wrapper for this export remains handwritten because it conditionally allocates multiple optional arrays.",
+      ],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "reason", "type": "PlaybackTickReason" },
+          { "name": "currentTime", "type": "number" },
+          { "name": "readyState", "type": "number" },
+          { "name": "bufferedPtr", "type": "number" },
+          { "name": "bufferedLen", "type": "number" },
+          { "name": "paused", "type": "number" },
+          { "name": "seeking", "type": "number" },
+          { "name": "ended", "type": "number" },
+          { "name": "duration", "type": "number" },
+          { "name": "audioPtr", "type": "number" },
+          { "name": "audioLen", "type": "number" },
+          { "name": "videoPtr", "type": "number" },
+          { "name": "videoLen", "type": "number" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__web_event__timer_ended",
+      "doc": ["Forward a host timer completion to wasm."],
+      "wasm": {
+        "kind": "method",
+        "args": [
+          { "name": "ptr", "type": "number" },
+          { "name": "id", "type": "number" },
+          { "name": "reason", "type": "TimerReason" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
+      "wasmSymbol": "__web_event__codecs_support_update",
+      "doc": ["Notify wasm that codec support information changed."],
+      "wasm": {
+        "kind": "method",
+        "args": [{ "name": "ptr", "type": "number" }],
+        "returnType": "void",
+      },
+    },
+  ],
+}
