@@ -73,8 +73,9 @@ export function waitForLoad(
   abortSignal: AbortSignal,
 ): Promise<void> {
   return new Promise<void>((res, rej) => {
-    if (videoElement.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) {
+    if (videoElement.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
       res();
+      return;
     }
     abortSignal.addEventListener("abort", onAbort);
     videoElement.addEventListener("canplay", onCanPlay);
