@@ -2,6 +2,7 @@
 /node_modules
 /src/wasm/wasp_hls_bg.wasm
 /build/*
+!/build/README.md
 !/build/index.html
 !/build/style.css
 !/build/logo-white.png
