@@ -664,32 +664,37 @@ impl PlaylistStore {
     pub(crate) fn expected_start_time(&self) -> f64 {
         let media_playlists = self.current_media_playlists();
         if media_playlists.is_empty() {
-            0.
-        } else if media_playlists.iter().all(|p| p.1.is_live()) {
-            let initial_dur: Option<f64> = None;
-            let min_duration = media_playlists.iter().fold(initial_dur, |acc, p| {
-                let duration = p.1.ending();
-                if let Some(acc_dur) = acc {
-                    if let Some(p_dur) = duration {
-                        Some(acc_dur.min(p_dur))
-                    } else {
-                        Some(acc_dur)
-                    }
-                } else {
-                    duration
+            if let Some((_, playlist)) = self.direct_media_playlist() {
+                if let Some(wanted_start) = playlist.wanted_start() {
+                    return wanted_start;
                 }
-            });
-            if let Some(min_duration) = min_duration {
-                (min_duration - 10.).max(0.)
-            } else {
-                0.
+                if playlist.is_live() {
+                    return playlist
+                        .ending()
+                        .map(|end| (end - (3. * playlist.target_duration())).max(0.))
+                        .unwrap_or(0.);
+                }
             }
-        } else {
-            media_playlists
-                .iter()
-                .find_map(|p| p.1.wanted_start())
-                .unwrap_or(0.)
+            return 0.;
         }
+
+        if let Some(wanted_start) = media_playlists.iter().find_map(|p| p.1.wanted_start()) {
+            return wanted_start;
+        }
+
+        if media_playlists.iter().all(|p| p.1.is_live()) {
+            return media_playlists
+                .iter()
+                .filter_map(|(_, playlist)| {
+                    playlist
+                        .ending()
+                        .map(|end| (end - (3. * playlist.target_duration())).max(0.))
+                })
+                .reduce(f64::min)
+                .unwrap_or(0.);
+        }
+
+        0.
     }
 
     /// Returns the `id` of the `AudioTrack` object which is associated to the current audio
@@ -1660,5 +1665,119 @@ seg.ts
             english_playlist_id
         );
         assert!(store.has_loaded_media_playlist(MediaType::Audio));
+    }
+
+    #[test]
+    fn live_expected_start_time_defaults_to_three_target_durations_from_end() {
+        let media = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXTINF:4,
+seg-1.ts
+#EXTINF:4,
+seg-2.ts
+#EXTINF:4,
+seg-3.ts
+#EXTINF:4,
+seg-4.ts
+#EXTINF:4,
+seg-5.ts
+"#;
+
+        let playlist = TopLevelPlaylist::parse(
+            media.as_bytes(),
+            parse_url("https://example.com/live.m3u8"),
+        )
+        .unwrap();
+        let store = PlaylistStore::try_new(playlist, 10_000.).unwrap();
+
+        assert_eq!(store.expected_start_time(), 8.);
+    }
+
+    #[test]
+    fn live_expected_start_time_honors_ext_x_start() {
+        let media = r#"#EXTM3U
+#EXT-X-START:TIME-OFFSET=-12,PRECISE=YES
+#EXT-X-TARGETDURATION:4
+#EXTINF:4,
+seg-1.ts
+#EXTINF:4,
+seg-2.ts
+#EXTINF:4,
+seg-3.ts
+#EXTINF:4,
+seg-4.ts
+#EXTINF:4,
+seg-5.ts
+"#;
+
+        let playlist = TopLevelPlaylist::parse(
+            media.as_bytes(),
+            parse_url("https://example.com/live-start.m3u8"),
+        )
+        .unwrap();
+        let store = PlaylistStore::try_new(playlist, 10_000.).unwrap();
+
+        assert_eq!(store.expected_start_time(), 8.);
+    }
+
+    #[test]
+    fn live_expected_start_time_uses_earliest_safe_point_across_selected_renditions() {
+        let multivariant = r#"#EXTM3U
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="Main",DEFAULT=YES,AUTOSELECT=YES,URI="audio.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=1000,AUDIO="aud"
+video.m3u8
+"#;
+        let video = r#"#EXTM3U
+#EXT-X-TARGETDURATION:6
+#EXTINF:6,
+video-1.ts
+#EXTINF:6,
+video-2.ts
+#EXTINF:6,
+video-3.ts
+#EXTINF:6,
+video-4.ts
+"#;
+        let audio = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXTINF:4,
+audio-1.ts
+#EXTINF:4,
+audio-2.ts
+#EXTINF:4,
+audio-3.ts
+#EXTINF:4,
+audio-4.ts
+#EXTINF:4,
+audio-5.ts
+#EXTINF:4,
+audio-6.ts
+"#;
+
+        let playlist = TopLevelPlaylist::parse(
+            multivariant.as_bytes(),
+            parse_url("https://example.com/master.m3u8"),
+        )
+        .unwrap();
+        let mut store = PlaylistStore::try_new(playlist, 10_000.).unwrap();
+
+        let video_id = *store.media_playlist_id_for(MediaType::Video).unwrap();
+        let audio_id = *store.media_playlist_id_for(MediaType::Audio).unwrap();
+        store
+            .update_media_playlist(
+                &video_id,
+                video.as_bytes(),
+                parse_url("https://example.com/video.m3u8"),
+            )
+            .unwrap();
+        store
+            .update_media_playlist(
+                &audio_id,
+                audio.as_bytes(),
+                parse_url("https://example.com/audio.m3u8"),
+            )
+            .unwrap();
+
+        assert_eq!(store.expected_start_time(), 6.);
     }
 }
