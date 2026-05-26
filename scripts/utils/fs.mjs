@@ -35,6 +35,7 @@ export function copyRecursive(source, destination) {
  */
 export function cleanBuildDirectory(buildDir, { preserveDemoBundle }) {
   const keep = new Set([
+    "README.md",
     "favicon.png",
     "index.html",
     "logo-white.png",
