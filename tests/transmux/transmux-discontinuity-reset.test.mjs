@@ -21,7 +21,9 @@ function hasFfmpeg() {
 async function bundleTransmuxSource(tmpRoot) {
   const outfile = join(tmpRoot, "transmux-test-bundle.mjs");
   await build({
-    entryPoints: [join(process.cwd(), "tests/helpers/transmux-test-entry.ts")],
+    entryPoints: [
+      join(process.cwd(), "tests/transmux/helpers/transmux-test-entry.ts"),
+    ],
     bundle: true,
     format: "esm",
     platform: "node",
@@ -127,7 +129,7 @@ if (!hasFfmpeg()) {
 
       const withoutReset = new mod.default();
       withoutReset.transmuxSegment(segmentFromA, {
-        baseMediaDecodeTime: {
+        baseMediaDecodeTimeSeed: {
           value: 0,
           timescale: 90000,
         },
@@ -136,7 +138,7 @@ if (!hasFfmpeg()) {
         midGopSegmentFromB,
         {
           reset: true,
-          baseMediaDecodeTime: {
+          baseMediaDecodeTimeSeed: {
             value: 2 * 90000,
             timescale: 90000,
           },
@@ -145,7 +147,7 @@ if (!hasFfmpeg()) {
 
       const fresh = new mod.default();
       const expectedAfterReset = fresh.transmuxSegment(midGopSegmentFromB, {
-        baseMediaDecodeTime: {
+        baseMediaDecodeTimeSeed: {
           value: 2 * 90000,
           timescale: 90000,
         },

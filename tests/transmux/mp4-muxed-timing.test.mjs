@@ -10,7 +10,9 @@ import { build } from "esbuild";
 async function bundleWorkerMp4Utils(tmpRoot) {
   const outfile = join(tmpRoot, "mp4-utils-test-bundle.mjs");
   await build({
-    entryPoints: [join(process.cwd(), "tests/helpers/transmux-test-entry.ts")],
+    entryPoints: [
+      join(process.cwd(), "tests/transmux/helpers/transmux-test-entry.ts"),
+    ],
     bundle: true,
     format: "esm",
     platform: "node",
@@ -72,6 +74,11 @@ function makeInitSegment() {
   return box("moov", makeTrak(1, 90000), makeTrak(2, 48000));
 }
 
+function makeInitSegmentWithTrex() {
+  const trex = fullBox("trex", 0, 0, u32(2), u32(1), u32(1024), u32(0), u32(0));
+  return box("moov", makeTrak(2, 48000), box("mvex", trex));
+}
+
 function makeTfhd(trackId) {
   return fullBox("tfhd", 0, 0, u32(trackId));
 }
@@ -107,6 +114,16 @@ function makeMediaSegment() {
   return box("moof", videoTraf, audioTraf);
 }
 
+function makeMediaSegmentUsingTrexDefaultDuration() {
+  const audioTraf = box(
+    "traf",
+    makeTfhd(2),
+    makeTfdt(480000),
+    fullBox("trun", 0, 0, u32(2)),
+  );
+  return box("moof", audioTraf);
+}
+
 test("worker MP4 timing normalizes muxed tracks with distinct timescales", async () => {
   const tmpRoot = await mkdtemp(join(tmpdir(), "wasp-hls-mp4-utils-"));
   try {
@@ -123,6 +140,28 @@ test("worker MP4 timing normalizes muxed tracks with distinct timescales", async
     assert.ok(
       Math.abs(info.duration - 6000 / 90000) < 1e-6,
       "expected duration to span the longest normalized track run",
+    );
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test("worker MP4 timing falls back to trex default sample duration", async () => {
+  const tmpRoot = await mkdtemp(join(tmpdir(), "wasp-hls-mp4-utils-"));
+  try {
+    const mod = await bundleWorkerMp4Utils(tmpRoot);
+    const initTimescales = mod.getMDHDTimescales(makeInitSegmentWithTrex());
+    assert.ok(initTimescales instanceof Map, "expected init timescales map");
+
+    const info = mod.getSegmentTimeInformation(
+      makeMediaSegmentUsingTrexDefaultDuration(),
+      initTimescales,
+    );
+    assert.ok(info, "expected timing with trex fallback");
+    assert.ok(Math.abs(info.time - 10) < 1e-6, "expected a 10s segment start");
+    assert.ok(
+      Math.abs(info.duration - 2048 / 48000) < 1e-6,
+      "expected duration from trex default sample duration",
     );
   } finally {
     await rm(tmpRoot, { recursive: true, force: true });

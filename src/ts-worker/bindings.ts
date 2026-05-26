@@ -465,6 +465,10 @@ export function doFetch(
       }
       const dispatcher = playerInstance.getDispatcher();
       if (res.status >= 300) {
+        logger.warn(
+          `Worker: fetch failed id=${currentRequestId} status=${res.status} elapsed=${(timerFn() - timestampBef).toFixed(1)}ms url=${res.url || url}`,
+        );
+        requestsStore.delete(currentRequestId);
         dispatcher?.on_request_failed(currentRequestId, false, res.status);
         return;
       }
@@ -488,12 +492,18 @@ export function doFetch(
       requestsStore.delete(currentRequestId);
       const dispatcher = playerInstance.getDispatcher();
       if (timeouted) {
+        logger.warn(
+          `Worker: fetch timeout id=${currentRequestId} timeout=${timeout}ms url=${url}`,
+        );
         dispatcher?.on_request_failed(currentRequestId, true, undefined);
         return;
       }
       if (err instanceof Error && err.name === "AbortError") {
         return;
       }
+      logger.warn(
+        `Worker: fetch error id=${currentRequestId} elapsed=${(timerFn() - timestampBef).toFixed(1)}ms url=${url} err=${formatErrMessage(err, "Unknown fetch error")}`,
+      );
       dispatcher?.on_request_failed(currentRequestId, false, undefined);
     });
   return currentRequestId;
@@ -682,8 +692,16 @@ export function removeMediaSource(): RemoveMediaSourceResult {
   }
 
   if (contentInfo.mediaSourceObj.type === "worker") {
-    const { mediaSource, removeEventListeners } = contentInfo.mediaSourceObj;
+    const {
+      mediaSource,
+      removeEventListeners,
+      sourceBuffers: sourceBufferInfos,
+    } = contentInfo.mediaSourceObj;
     removeEventListeners();
+    for (const sourceBuffer of sourceBufferInfos) {
+      sourceBuffer.sourceBuffer.dispose();
+    }
+    contentInfo.mediaSourceObj.sourceBuffers = [];
 
     if (mediaSource !== null && mediaSource.readyState !== "closed") {
       const { readyState } = mediaSource;
@@ -1039,6 +1057,9 @@ export function appendBuffer(
             logger.info("Worker: Ignoring cancelled appendBuffer operation");
             return;
           }
+          logger.warn(
+            `Worker: appendBuffer failed sb=${sourceBufferId} mediaType=${sourceBufferObj.mediaType} resource=${resourceId} bytes=${transferableSegment.byteLength} err=${formatErrMessage(err, "Unknown appendBuffer error")}`,
+          );
           try {
             let buffered;
             try {
@@ -1412,7 +1433,11 @@ function getTimeInformationFromMp4(
   segment: Uint8Array,
   initTrackInfoByTrackId: Map<
     number,
-    { timescale: number; type: "audio" | "video" | "other" }
+    {
+      timescale: number;
+      type: "audio" | "video" | "other";
+      defaultSampleDuration: number | undefined;
+    }
   >,
 ): { time: number; duration: number | undefined; timescale: number } | null {
   return getIsobmfTimeInfo(segment, initTrackInfoByTrackId);

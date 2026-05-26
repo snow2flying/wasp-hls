@@ -9,6 +9,6 @@ to manually test the RxPlayer on a local content.
 Its entry point is the `main.mjs` file, you can run it directly with an `--help` flag to
 see options.
 
-When running it, `ffmpeg` has to be accessible in path. GPAC will be searched in
-path first and will otherwise be installed locally in `./tmp`, unless the GPAC
-binary is explicitly provided through `--gpac-path`.
+When running it, `ffmpeg` and `gpac` both have to be accessible in path (for the latter,
+unless the GPAC binary is explicitly provided through `--gpac-path`). On Windows, the
+packager also checks common `gpac.exe` install locations if the binary is not on `PATH`.

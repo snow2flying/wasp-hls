@@ -765,17 +765,19 @@ impl MediaElementReference {
     ///
     /// Returns `true` if a seek has been performed
     fn check_queued_seek(&mut self) -> bool {
-        if self.queued_seek.is_some() && self.last_observation.as_ref().unwrap().ready_state() >= 1
+        if let (Some(queued_seek), Some(observation)) =
+            (self.queued_seek, self.last_observation.as_ref())
         {
-            let queued_seek = self.queued_seek.unwrap();
             if let Some(media_pos) = self.playlist_pos_to_media_pos(queued_seek) {
-                Logger::info(&format!(
-                    "Perform awaited seek to {} ({})",
-                    queued_seek, media_pos
-                ));
-                jsSeek(media_pos);
-                self.queued_seek = None;
-                return true;
+                if should_perform_queued_seek(observation, media_pos) {
+                    Logger::info(&format!(
+                        "Perform awaited seek to {} ({})",
+                        queued_seek, media_pos
+                    ));
+                    jsSeek(media_pos);
+                    self.queued_seek = None;
+                    return true;
+                }
             }
         }
         false
@@ -802,6 +804,11 @@ impl MediaElementReference {
     }
 }
 
+fn should_perform_queued_seek(observation: &MediaObservation, media_pos: f64) -> bool {
+    // TODO: even if media_pos is not in `buffered`?
+    observation.ready_state() >= 1 || observation.buffered().range_for(media_pos).is_some()
+}
+
 #[cfg(test)]
 mod tests {
     use super::MediaElementReference;
@@ -821,6 +828,42 @@ mod tests {
             discontinuity_sequence: 0,
             context: SegmentQualityContext::new(1.0, 1),
         }
+    }
+
+    #[test]
+    fn queued_seek_can_start_when_target_is_buffered_even_if_ready_state_is_zero() {
+        let observation = MediaObservation::new(
+            PlaybackTickReason::Init,
+            0.0,
+            0,
+            JsTimeRanges::new(vec![1.912, 3.896]),
+            false,
+            false,
+            false,
+            f64::MAX,
+            None,
+            None,
+        );
+
+        assert!(super::should_perform_queued_seek(&observation, 1.912));
+    }
+
+    #[test]
+    fn queued_seek_stays_blocked_without_ready_state_or_target_buffer() {
+        let observation = MediaObservation::new(
+            PlaybackTickReason::Init,
+            0.0,
+            0,
+            JsTimeRanges::new(vec![1.912, 3.896]),
+            false,
+            false,
+            false,
+            f64::MAX,
+            None,
+            None,
+        );
+
+        assert!(!super::should_perform_queued_seek(&observation, 0.5));
     }
 
     #[test]

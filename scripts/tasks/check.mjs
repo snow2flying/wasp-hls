@@ -3,7 +3,7 @@
  */
 
 import { join } from "path";
-import { exec } from "../utils/exec.mjs";
+import { exec, npmExecCommand } from "../utils/exec.mjs";
 import { generateWasmAbi } from "./build.mjs";
 import { reportStep } from "./report.mjs";
 
@@ -22,35 +22,60 @@ export async function checkAll(root) {
 /** @param {string} root */
 export async function checkMain(root) {
   reportStep("CHECK", "typechecking ts-main...");
-  await exec("tsc", ["--project", "./src/ts-main", "--noEmit"], { cwd: root });
+  const tsc = npmExecCommand("tsc", ["--project", "./src/ts-main", "--noEmit"]);
+  await exec(tsc.command, tsc.args, {
+    cwd: root,
+  });
   reportStep("CHECK", "linting ts-main...");
-  await exec("eslint", ["."], { cwd: join(root, "src", "ts-main") });
+  const eslint = npmExecCommand("eslint", ["."]);
+  await exec(eslint.command, eslint.args, {
+    cwd: join(root, "src", "ts-main"),
+  });
 }
 
 /** @param {string} root */
 export async function checkWorker(root) {
   reportStep("CHECK", "typechecking ts-worker...");
-  await exec("tsc", ["--project", "./src/ts-worker", "--noEmit"], {
+  const tsc = npmExecCommand("tsc", [
+    "--project",
+    "./src/ts-worker",
+    "--noEmit",
+  ]);
+  await exec(tsc.command, tsc.args, {
     cwd: root,
   });
   reportStep("CHECK", "linting ts-worker...");
-  await exec("eslint", ["."], { cwd: join(root, "src", "ts-worker") });
+  const eslint = npmExecCommand("eslint", ["."]);
+  await exec(eslint.command, eslint.args, {
+    cwd: join(root, "src", "ts-worker"),
+  });
   reportStep("CHECK", "linting ts-transmux...");
-  await exec("eslint", ["."], { cwd: join(root, "src", "ts-transmux") });
+  await exec(eslint.command, eslint.args, {
+    cwd: join(root, "src", "ts-transmux"),
+  });
 }
 
 /** @param {string} root */
 export async function checkCommon(root) {
   reportStep("CHECK", "linting ts-common...");
-  await exec("eslint", ["."], { cwd: join(root, "src", "ts-common") });
+  const eslint = npmExecCommand("eslint", ["."]);
+  await exec(eslint.command, eslint.args, {
+    cwd: join(root, "src", "ts-common"),
+  });
 }
 
 /** @param {string} root */
 export async function checkDemo(root) {
   reportStep("CHECK", "typechecking demo...");
-  await exec("tsc", ["--project", "./demo", "--noEmit"], { cwd: root });
+  const tsc = npmExecCommand("tsc", ["--project", "./demo", "--noEmit"]);
+  await exec(tsc.command, tsc.args, {
+    cwd: root,
+  });
   reportStep("CHECK", "linting demo...");
-  await exec("eslint", ["src/**/*"], { cwd: join(root, "demo") });
+  const eslint = npmExecCommand("eslint", ["src/**/*"]);
+  await exec(eslint.command, eslint.args, {
+    cwd: join(root, "demo"),
+  });
 }
 
 /** @param {string} root */

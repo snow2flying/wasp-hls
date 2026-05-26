@@ -4,9 +4,11 @@
 
 import { copyFileSync, mkdirSync, readFileSync, rmSync } from "fs";
 import { dirname, join } from "path";
-import { exec } from "../utils/exec.mjs";
+import { exec, npmExecCommand } from "../utils/exec.mjs";
 import { checkPackageExports } from "./check-package-exports.mjs";
 import { reportStep } from "./report.mjs";
+
+const NODE = process.execPath;
 
 /**
  * @param {string} root
@@ -48,10 +50,10 @@ export async function buildWasm(root, { release, skipGenerate = false }) {
     copyFileSync(source, destination);
   }
   reportStep("BUILD", "Checking ABI correctness...");
-  await exec("node", ["./scripts/check_wasm_abi.mjs"], { cwd: root });
+  await exec(NODE, ["./scripts/check_wasm_abi.mjs"], { cwd: root });
   if (release) {
     reportStep("BUILD", "Stripping WASM debug symbols...");
-    await exec("node", ["./scripts/wasm-strip.js", "build/wasp_hls_bg.wasm"], {
+    await exec(NODE, ["./scripts/wasm-strip.js", "build/wasp_hls_bg.wasm"], {
       cwd: root,
     });
   }
@@ -72,7 +74,8 @@ export async function buildWorker(root, { release }) {
     args.push("--minify");
   }
   reportStep("BUILD", "building worker file...");
-  await exec("esbuild", args, { cwd: root });
+  const esbuild = npmExecCommand("esbuild", args);
+  await exec(esbuild.command, esbuild.args, { cwd: root });
 }
 
 /**
@@ -90,7 +93,8 @@ export async function buildMain(root, { release }) {
     args.push("--minify");
   }
   reportStep("BUILD", "building main file bundle...");
-  await exec("esbuild", args, { cwd: root });
+  const esbuild = npmExecCommand("esbuild", args);
+  await exec(esbuild.command, esbuild.args, { cwd: root });
 }
 
 /**
@@ -108,7 +112,8 @@ export async function buildDemoBundle(root, { release }) {
     args.push("--minify");
   }
   reportStep("BUILD", "building demo bundle...");
-  await exec("esbuild", args, { cwd: root });
+  const esbuild = npmExecCommand("esbuild", args);
+  await exec(esbuild.command, esbuild.args, { cwd: root });
 }
 
 /**
@@ -123,26 +128,23 @@ export async function buildAll(root, { release }) {
   rmSync(join(root, "build", "es6"), { force: true, recursive: true });
   rmSync(join(root, "build", "embedded"), { force: true, recursive: true });
   reportStep("BUILD", "generating ES6 build...");
-  await exec(
-    "tsc",
-    [
-      "-p",
-      join(root, "src/ts-main/tsconfig.json"),
-      "--rootDir",
-      join(root, "src"),
-      "--outDir",
-      "./build/es6",
-    ],
-    { cwd: root },
-  );
+  const tsc = npmExecCommand("tsc", [
+    "-p",
+    join(root, "src/ts-main/tsconfig.json"),
+    "--rootDir",
+    join(root, "src"),
+    "--outDir",
+    "./build/es6",
+  ]);
+  await exec(tsc.command, tsc.args, { cwd: root });
   copyFileSync(
     join(root, "src", "wasm", "wasp_hls_bg.wasm"),
     join(root, "build", "es6", "wasm", "wasp_hls_bg.wasm"),
   );
   reportStep("BUILD", "generating Embedded WASM JS file...");
-  await exec("node", ["./scripts/generate_embedded_wasm.js"], { cwd: root });
+  await exec(NODE, ["./scripts/generate_embedded_wasm.js"], { cwd: root });
   reportStep("BUILD", "generating Embedded Worker JS file...");
-  await exec("node", ["./scripts/generate_embedded_worker.js"], { cwd: root });
+  await exec(NODE, ["./scripts/generate_embedded_worker.js"], { cwd: root });
   reportStep("BUILD", "checking all exports...");
   await checkPackageExports(root);
 }
@@ -158,13 +160,17 @@ export async function buildDocs(root) {
     readFileSync(join(root, "package.json"), "utf8"),
   );
   const version = packageJson.version;
-  await exec(
-    "readme.doc",
-    ["--input", "doc", "--output", "build/doc", "-p", version],
-    {
-      cwd: root,
-    },
-  );
+  const readmeDoc = npmExecCommand("readme.doc", [
+    "--input",
+    "doc",
+    "--output",
+    "build/doc",
+    "-p",
+    version,
+  ]);
+  await exec(readmeDoc.command, readmeDoc.args, {
+    cwd: root,
+  });
 }
 
 /**
@@ -172,5 +178,5 @@ export async function buildDocs(root) {
  */
 export async function generateWasmAbi(root) {
   reportStep("BUILD", "Generating ABI enums...");
-  await exec("node", ["./scripts/generate_wasm_abi_enums.mjs"], { cwd: root });
+  await exec(NODE, ["./scripts/generate_wasm_abi_enums.mjs"], { cwd: root });
 }

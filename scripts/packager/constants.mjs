@@ -11,6 +11,7 @@ export const DEFAULT_TIMESHIFT_BUFFER_DEPTH = 180;
 export const DEFAULT_BASE_PORT = 8881;
 export const DEFAULT_MEDIA_FORMAT = "fmp4";
 export const DEFAULT_SUBTITLE_FORMAT = "none";
+export const DEFAULT_PUBLISH_STRATEGY = "atomic";
 
 // Text track constants
 
@@ -20,11 +21,6 @@ export const TEXT_TRACK_SEGMENT_PREFIX = "text_en";
 export const TEXT_TRACK_CUE_SPACING = 4;
 export const TEXT_TRACK_CUE_DURATION = 2;
 export const TEXT_TRACK_INITIAL_AHEAD_DURATION = 4;
-
-// Packager startup polling
-
-export const PACKAGER_STARTUP_TIMEOUT_MS = 15000;
-export const PACKAGER_STARTUP_POLL_INTERVAL_MS = 300;
 
 // ANSI colour codes
 
@@ -70,10 +66,10 @@ export const DEFAULT_CONFIG = {
   basePort: DEFAULT_BASE_PORT,
   mediaFormat: DEFAULT_MEDIA_FORMAT,
   subtitleFormat: DEFAULT_SUBTITLE_FORMAT,
+  publishStrategy: DEFAULT_PUBLISH_STRATEGY,
   lowLatency: false,
   noConfirm: false,
   gpacPath: "",
   tmpDir: TMP_DIR,
-  scriptDir: SCRIPT_DIR,
   outputDir: resolve(TMP_DIR, "testcontents", "live"),
 };

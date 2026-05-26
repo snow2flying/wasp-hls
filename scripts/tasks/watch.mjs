@@ -6,7 +6,7 @@ import { spawn } from "child_process";
 import { existsSync, readdirSync, watch } from "fs";
 import { join } from "path";
 import { cleanBuildDirectory } from "../utils/fs.mjs";
-import { spawnEnv } from "../utils/exec.mjs";
+import { npmExecCommand } from "../utils/exec.mjs";
 import {
   buildWasm,
   buildWorker,
@@ -24,18 +24,18 @@ export async function watchDemo(root, { release }) {
   await buildWasm(root, { release, skipGenerate: true });
   await buildWorker(root, { release });
 
-  const demoWatcher = spawn(
-    "esbuild",
-    [
-      "demo/src/index.tsx",
-      "--bundle",
-      "--outfile=build/demo.js",
-      "--tsconfig=demo/tsconfig.json",
-      ...(release ? ["--minify"] : []),
-      "--watch",
-    ],
-    { cwd: root, env: spawnEnv(root), stdio: "inherit" },
-  );
+  const esbuild = npmExecCommand("esbuild", [
+    "demo/src/index.tsx",
+    "--bundle",
+    "--outfile=build/demo.js",
+    "--tsconfig=demo/tsconfig.json",
+    ...(release ? ["--minify"] : []),
+    "--watch",
+  ]);
+  const demoWatcher = spawn(esbuild.command, esbuild.args, {
+    cwd: root,
+    stdio: "inherit",
+  });
 
   let buildQueue = Promise.resolve();
   const enqueue = (label, task) => {

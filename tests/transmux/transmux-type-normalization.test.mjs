@@ -11,7 +11,7 @@ async function bundleTransmuxTypeHelpers(tmpRoot) {
   const outfile = join(tmpRoot, "transmux-type-test-bundle.mjs");
   await build({
     entryPoints: [
-      join(process.cwd(), "tests/helpers/transmux-type-test-entry.ts"),
+      join(process.cwd(), "tests/transmux/helpers/transmux-type-test-entry.ts"),
     ],
     bundle: true,
     format: "esm",

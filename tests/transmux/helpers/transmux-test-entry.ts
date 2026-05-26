@@ -1,10 +1,10 @@
-import Transmuxer from "../../src/ts-transmux/index.ts";
+import Transmuxer from "../../../src/ts-transmux/index.ts";
 import {
   getMDHDTimescale,
   getInitTrackInfo,
   getIsobmfTimeInfo,
   getTrackFragmentDecodeTime,
-} from "../../src/ts-worker/isobmff-utils.ts";
+} from "../../../src/ts-worker/isobmff-utils.ts";
 
 function getMDHDTimescales(buffer: Uint8Array) {
   return getInitTrackInfo(buffer);
@@ -14,7 +14,11 @@ function getSegmentTimeInformation(
   buffer: Uint8Array,
   initTrackInfoByTrackId: Map<
     number,
-    { timescale: number; type: "audio" | "video" | "other" }
+    {
+      timescale: number;
+      type: "audio" | "video" | "other";
+      defaultSampleDuration: number | undefined;
+    }
   >,
 ) {
   const info = getIsobmfTimeInfo(buffer, initTrackInfoByTrackId);

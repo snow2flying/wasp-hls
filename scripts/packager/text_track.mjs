@@ -31,7 +31,7 @@ export function createTextTrackAssets(ports, subtitleFormat) {
   }
 
   const commonAssetData = {
-    sourcePath: `udp://127.0.0.1:${ports.text1}`,
+    sourcePath: `udp://127.0.0.1:${ports.text1}/`,
     inputFormat: "webvtt",
     liveWriterMode: "webvtt",
     port: ports.text1,

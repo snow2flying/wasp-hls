@@ -145,3 +145,213 @@ jobs:
 
       - name: Build package and release artifacts
         run: npm run build -- --release
+
+  core_tests:
+    name: Core tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Rust
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-bin-wasm-bindgen-${{ env.WASM_BINDGEN_CLI_VERSION }}
+
+      - name: Cache Rust target
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-target-tests-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-target-tests-
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_CLI_VERSION }} --locked --force
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Build artifacts for tests
+        run: npm run build
+
+      - name: Run Rust unit tests
+        run: npm test -- rust
+
+      - name: Run transmux tests
+        run: npm test -- transmux
+
+  integration_tests:
+    name: Integration tests (${{ matrix.os }}, ${{ matrix.browser }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    continue-on-error: ${{ matrix.allow_failure }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            browser: chrome
+            allow_failure: false
+          - os: ubuntu-24.04
+            browser: firefox
+            allow_failure: false
+          - os: macos-15
+            browser: chrome
+            allow_failure: false
+          - os: macos-15
+            browser: firefox
+            allow_failure: false
+          # Windows hosted-runner behavior has proven highly unstable and
+          # low-signal for this live-packager scenario. Keep a single
+          # best-effort smoke lane instead of blocking the full CI matrix on it.
+          - os: windows-2025
+            browser: firefox
+            allow_failure: true
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Rust
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-bin-wasm-bindgen-${{ env.WASM_BINDGEN_CLI_VERSION }}
+
+      - name: Cache Rust target
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-target-integration-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-target-integration-
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_CLI_VERSION }} --locked --force
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install ffmpeg and gpac on Ubuntu
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl ffmpeg
+          sudo install -m 0755 -d /etc/apt/keyrings
+          sudo curl -fsSL https://dist.gpac.io/gpac/linux/gpg.asc -o /etc/apt/keyrings/gpac.asc
+          sudo chmod a+r /etc/apt/keyrings/gpac.asc
+          sudo tee /etc/apt/sources.list.d/gpac.sources >/dev/null <<EOF
+          Types: deb
+          URIs: https://dist.gpac.io/gpac/linux/ubuntu
+          Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+          Components: main
+          Signed-By: /etc/apt/keyrings/gpac.asc
+          EOF
+          sudo apt-get update
+          sudo apt-get install -y gpac
+
+      - name: Install ffmpeg and gpac on macOS
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg gpac
+
+      - name: Install ffmpeg and gpac on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          choco upgrade ffmpeg gpac -y
+
+          $gpacCandidates = @(@(
+            (Join-Path $env:ProgramFiles 'GPAC\gpac.exe'),
+            (Join-Path ${env:ProgramFiles(x86)} 'GPAC\gpac.exe'),
+            (Join-Path $env:ChocolateyInstall 'bin\gpac.exe'),
+            (Join-Path $env:ChocolateyInstall 'lib\gpac\tools\gpac.exe'),
+            (Join-Path $env:ChocolateyInstall 'lib\gpac.portable\tools\gpac.exe')
+          ) | Where-Object { $_ -and (Test-Path $_) })
+
+          if ($gpacCandidates.Count -eq 0) {
+            throw 'GPAC was installed but gpac.exe could not be located.'
+          }
+
+          Write-Host "Resolved GPAC candidates:"
+          $gpacCandidates | ForEach-Object { Write-Host "  $_" }
+
+          $gpacBinary = $gpacCandidates[0]
+          Write-Host "Selected GPAC binary: $gpacBinary"
+          if (-not (Test-Path $gpacBinary)) {
+            throw "Resolved GPAC binary does not exist: $gpacBinary"
+          }
+          Split-Path -Parent $gpacBinary | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Write-Host "Windows GPAC binary exists and was added to PATH."
+
+          Write-Host "Windows GPAC install step completed."
+          exit 0
+
+      - name: Print media tool versions on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ffmpeg -version
+
+          Write-Host "gpac command resolution:"
+          Get-Command gpac -All | Format-List *
+
+          Write-Host "Windows media tool version step completed."
+          exit 0
+
+      - name: Print media tool versions
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          ffmpeg -version
+          gpac -h
+
+      - name: Build artifacts for integration tests
+        run: npm run build
+
+      - name: Run integration tests
+        run: npm test -- integration --browser ${{ matrix.browser }}

@@ -962,18 +962,21 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
     if (this.__worker__ === null) {
       return;
     }
+    const worker = this.__worker__;
     if (this.__contentMetadata__ !== null) {
       requestStopForContent(
         this.__contentMetadata__,
         this.videoElement,
-        this.__worker__,
+        worker,
       );
+      for (const sourceBuffer of this.__contentMetadata__.sourceBuffers) {
+        sourceBuffer.queuedSourceBuffer.dispose();
+      }
+      this.__contentMetadata__.disposeMediaSource?.();
+      this.__contentMetadata__.disposeMediaSource = null;
+      this.__contentMetadata__.sourceBuffers = [];
     }
-    // NOTE: is this still needed? What about GC once it is set to `null`?
-    postMessageToWorker(this.__worker__, {
-      type: MainMessageType.DisposePlayer,
-      value: null,
-    });
+    worker.terminate();
     this.__worker__ = null;
     if (this.__logLevelChangeListener__ !== null) {
       logger.removeEventListener(

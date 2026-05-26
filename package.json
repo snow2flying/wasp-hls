@@ -40,7 +40,10 @@
     "scripts": "node scripts/list-npm-scripts.mjs",
     "serve": "node scripts/tasks/index.mjs serve",
     "start": "node scripts/tasks/index.mjs start",
-    "test:transmux": "node --test tests/transmux-timeline-anchor.test.mjs"
+    "test": "node scripts/tasks/index.mjs test",
+    "test:integration": "node scripts/tasks/index.mjs test integration",
+    "test:rust": "node scripts/tasks/index.mjs test rust",
+    "test:transmux": "node scripts/tasks/index.mjs test transmux"
   },
   "scripts-list": {
     "Build": {
@@ -59,7 +62,13 @@
       "check -- main": "Typecheck and lint the main-thread TypeScript code.",
       "check -- worker": "Typecheck and lint the worker and transmux TypeScript code.",
       "check -- demo": "Typecheck and lint the demo app.",
-      "check -- rust": "Run clippy on the Rust code."
+      "check -- rust": "Run clippy on the Rust code.",
+      "test": "Run every test suite: Rust unit tests, transmux tests, and browser integration tests.",
+      "test -- rust": "Run only Rust unit tests.",
+      "test -- transmux": "Run only the Node-based transmux tests.",
+      "test -- integration": "Run only the browser integration tests.",
+      "test -- integration --browser firefox": "Run browser integration tests in Firefox.",
+      "test -- integration --filter dash_live_packaged": "Run only matching browser integration tests."
     },
     "Development": {
       "start": "Serve build/ and watch-rebuild the demo during development.",
@@ -80,16 +89,18 @@
     "@canalplus/readme.doc": "0.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@typescript-eslint/eslint-plugin": "^8.59.1",
-    "@typescript-eslint/parser": "^8.59.1",
+    "@typescript-eslint/eslint-plugin": "^8.59.3",
+    "@typescript-eslint/parser": "^8.59.3",
+    "@vitest/browser-webdriverio": "^4.1.6",
     "esbuild": "^0.28.0",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-jsdoc": "^62.9.0",
     "prettier": "^3.8.3",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "typescript": "^6.0.3"
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6"
   }
 }
