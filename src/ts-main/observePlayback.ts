@@ -30,8 +30,11 @@ const OBSERVATION_EVENTS = [
   ["ended", PlaybackTickReason.Ended],
   ["pause", PlaybackTickReason.Pause],
   ["play", PlaybackTickReason.Play],
+  ["playing", PlaybackTickReason.Playing],
   ["ratechange", PlaybackTickReason.RateChange],
   ["stalled", PlaybackTickReason.Stalled],
+  ["waiting", PlaybackTickReason.Waiting],
+  ["error", PlaybackTickReason.Error],
   // "durationchange",
 ] as const;
 

@@ -571,10 +571,16 @@ pub enum PlaybackTickReason {
     Pause = 9,
     /// The HTMLMediaElement's "play" event has just been triggered
     Play = 10,
+    /// The HTMLMediaElement's "playing" event has just been triggered
+    Playing = 11,
     /// The HTMLMediaElement's "ratechange" event has just been triggered
-    RateChange = 11,
+    RateChange = 12,
     /// The HTMLMediaElement's "stalled" event has just been triggered
-    Stalled = 12,
+    Stalled = 13,
+    /// The HTMLMediaElement's "waiting" event has just been triggered
+    Waiting = 14,
+    /// The HTMLMediaElement's "error" event has just been triggered
+    Error = 15,
 }
 
 impl PlaybackTickReason {
@@ -591,8 +597,11 @@ impl PlaybackTickReason {
             8 => Self::Ended,
             9 => Self::Pause,
             10 => Self::Play,
-            11 => Self::RateChange,
-            12 => Self::Stalled,
+            11 => Self::Playing,
+            12 => Self::RateChange,
+            13 => Self::Stalled,
+            14 => Self::Waiting,
+            15 => Self::Error,
             _ => Self::Init,
         }
     }

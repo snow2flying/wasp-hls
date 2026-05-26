@@ -582,16 +582,34 @@
             "The HTMLMediaElement's \"play\" event has just been triggered"
           ]
         },
-        "RateChange": {
+        "Playing": {
           "value": 11,
+          "doc": [
+            "The HTMLMediaElement's \"playing\" event has just been triggered"
+          ]
+        },
+        "RateChange": {
+          "value": 12,
           "doc": [
             "The HTMLMediaElement's \"ratechange\" event has just been triggered"
           ]
         },
         "Stalled": {
-          "value": 12,
+          "value": 13,
           "doc": [
             "The HTMLMediaElement's \"stalled\" event has just been triggered"
+          ]
+        },
+        "Waiting": {
+          "value": 14,
+          "doc": [
+            "The HTMLMediaElement's \"waiting\" event has just been triggered"
+          ]
+        },
+        "Error": {
+          "value": 15,
+          "doc": [
+            "The HTMLMediaElement's \"error\" event has just been triggered"
           ]
         }
       }

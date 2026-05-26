@@ -478,13 +478,25 @@ export const PlaybackTickReason = Object.freeze({
    */
   Play: 10,
   /**
+   * The HTMLMediaElement's "playing" event has just been triggered
+   */
+  Playing: 11,
+  /**
    * The HTMLMediaElement's "ratechange" event has just been triggered
    */
-  RateChange: 11,
+  RateChange: 12,
   /**
    * The HTMLMediaElement's "stalled" event has just been triggered
    */
-  Stalled: 12,
+  Stalled: 13,
+  /**
+   * The HTMLMediaElement's "waiting" event has just been triggered
+   */
+  Waiting: 14,
+  /**
+   * The HTMLMediaElement's "error" event has just been triggered
+   */
+  Error: 15,
 } as const);
 export type PlaybackTickReason =
   (typeof PlaybackTickReason)[keyof typeof PlaybackTickReason];
