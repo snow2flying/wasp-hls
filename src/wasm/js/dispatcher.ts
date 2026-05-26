@@ -1,8 +1,12 @@
-import {
-  registerFinalizer,
-  unregisterFinalizer,
-  FinalizerState,
-} from "./finalization_registry.js";
+/**
+ * dispatcher.ts
+ * -------------
+ *
+ * JS wrapper around the wasm dispatcher.
+ * Forwards browser/player events to wasm and owns the native pointer lifetime.
+ */
+
+import { Finalizer } from "./finalization_registry.js";
 import { getWasmExports, withFloat64Array, withString } from "./memory.js";
 import { optionalIdToRaw } from "./helpers.js";
 import type {
@@ -13,28 +17,39 @@ import type {
 } from "./enums.js";
 import { JsTimeRanges, MediaObservation, StartingPosition } from "./results.js";
 
+/**
+ * JS wrapper around `rs-core`'s Dispatcher instance, which is its meain export.
+ */
 export class Dispatcher {
+  /** Raw pointer to the underlying wasm dispatcher. */
   private __ptr: number;
-  private __finalizer: FinalizerState;
 
+  /**
+   * Creates the native dispatcher and binds it to this JS wrapper.
+   * @param initial_bandwidth - The initial bandwidth we should start from in the
+   * Adaptive BitRate logic, in bits per seconds.
+   */
   constructor(initial_bandwidth: number) {
     this.__ptr = getWasmExports().wasp_dispatcher_new(initial_bandwidth);
-    this.__finalizer = {
-      cleanup(ptr) {
-        getWasmExports().wasp_dispatcher_free(ptr);
-      },
-    };
-    registerFinalizer(this, this.__ptr, this.__finalizer);
+    dispatcherFinalizer.register(this, this.__ptr);
   }
 
+  /** Frees the native dispatcher immediately. Safe to call more than once. */
   public free(): void {
     if (this.__ptr !== 0) {
-      unregisterFinalizer(this, this.__finalizer);
+      dispatcherFinalizer.unregister(this);
       getWasmExports().wasp_dispatcher_free(this.__ptr);
       this.__ptr = 0;
     }
   }
 
+  /**
+   * Starts loading content from the given URL, optionally from a chosen position.
+   * @param content_url - The content URL to load. Should be to a multivariant playlist
+   * or to a media playlist.
+   * @param starting_pos - Optional information on the initial position to start from. If
+   * `null` will take one based on the playlist and HLS spec instead.
+   */
   public load_content(
     content_url: string,
     starting_pos?: StartingPosition | null,
@@ -51,36 +66,44 @@ export class Dispatcher {
     });
   }
 
+  /** Returns the earliest seekable position when known. */
   public minimum_position(): number | undefined {
     const value = getWasmExports().wasp_dispatcher_minimum_position(this.__ptr);
     return Number.isNaN(value) ? undefined : value;
   }
 
+  /** Returns the latest known media position when available. */
   public maximum_position(): number | undefined {
     const value = getWasmExports().wasp_dispatcher_maximum_position(this.__ptr);
     return Number.isNaN(value) ? undefined : value;
   }
 
+  /** Updates the playback speed the dispatcher should target. */
   public set_wanted_speed(speed: number): void {
     getWasmExports().wasp_dispatcher_set_wanted_speed(this.__ptr, speed);
   }
 
+  /** Updates the buffer goal used by the dispatcher. */
   public set_buffer_goal(buffer_goal: number): void {
     getWasmExports().wasp_dispatcher_set_buffer_goal(this.__ptr, buffer_goal);
   }
 
+  /** Stops the dispatcher and any related ongoing work. */
   public stop(): void {
     getWasmExports().wasp_dispatcher_stop(this.__ptr);
   }
 
+  /** Locks playback to a specific variant. */
   public lock_variant(variant_id: number): void {
     getWasmExports().wasp_dispatcher_lock_variant(this.__ptr, variant_id);
   }
 
+  /** Clears any previously locked variant. */
   public unlock_variant(): void {
     getWasmExports().wasp_dispatcher_unlock_variant(this.__ptr);
   }
 
+  /** Selects the audio track to use, or clears the selection. */
   public set_audio_track(track_id?: number | null): void {
     getWasmExports().wasp_dispatcher_set_audio_track(
       this.__ptr,
@@ -88,6 +111,7 @@ export class Dispatcher {
     );
   }
 
+  /** Sets the maximum retry count for segment requests. */
   public set_segment_request_max_retry(max_retry: number): void {
     getWasmExports().wasp_dispatcher_set_segment_request_max_retry(
       this.__ptr,
@@ -95,6 +119,7 @@ export class Dispatcher {
     );
   }
 
+  /** Sets the timeout used for segment requests. */
   public set_segment_request_timeout(timeout: number): void {
     getWasmExports().wasp_dispatcher_set_segment_request_timeout(
       this.__ptr,
@@ -102,14 +127,17 @@ export class Dispatcher {
     );
   }
 
+  /** Sets the base delay used for segment-request backoff. */
   public set_segment_backoff_base(base: number): void {
     getWasmExports().wasp_dispatcher_set_segment_backoff_base(this.__ptr, base);
   }
 
+  /** Sets the maximum delay used for segment-request backoff. */
   public set_segment_backoff_max(max: number): void {
     getWasmExports().wasp_dispatcher_set_segment_backoff_max(this.__ptr, max);
   }
 
+  /** Sets the maximum retry count for multivariant playlist requests. */
   public set_multi_variant_playlist_request_max_retry(max_retry: number): void {
     getWasmExports().wasp_dispatcher_set_multi_variant_playlist_request_max_retry(
       this.__ptr,
@@ -117,6 +145,7 @@ export class Dispatcher {
     );
   }
 
+  /** Sets the timeout used for multivariant playlist requests. */
   public set_multi_variant_playlist_request_timeout(timeout: number): void {
     getWasmExports().wasp_dispatcher_set_multi_variant_playlist_request_timeout(
       this.__ptr,
@@ -124,6 +153,7 @@ export class Dispatcher {
     );
   }
 
+  /** Sets the base delay used for multivariant-playlist backoff. */
   public set_multi_variant_playlist_backoff_base(base: number): void {
     getWasmExports().wasp_dispatcher_set_multi_variant_playlist_backoff_base(
       this.__ptr,
@@ -131,6 +161,7 @@ export class Dispatcher {
     );
   }
 
+  /** Sets the maximum delay used for multivariant-playlist backoff. */
   public set_multi_variant_playlist_backoff_max(max: number): void {
     getWasmExports().wasp_dispatcher_set_multi_variant_playlist_backoff_max(
       this.__ptr,
@@ -138,6 +169,7 @@ export class Dispatcher {
     );
   }
 
+  /** Sets the maximum retry count for media playlist requests. */
   public set_media_playlist_request_max_retry(max_retry: number): void {
     getWasmExports().wasp_dispatcher_set_media_playlist_request_max_retry(
       this.__ptr,
@@ -145,6 +177,7 @@ export class Dispatcher {
     );
   }
 
+  /** Sets the timeout used for media playlist requests. */
   public set_media_playlist_request_timeout(timeout: number): void {
     getWasmExports().wasp_dispatcher_set_media_playlist_request_timeout(
       this.__ptr,
@@ -152,6 +185,7 @@ export class Dispatcher {
     );
   }
 
+  /** Sets the base delay used for media-playlist backoff. */
   public set_media_playlist_backoff_base(base: number): void {
     getWasmExports().wasp_dispatcher_set_media_playlist_backoff_base(
       this.__ptr,
@@ -159,6 +193,7 @@ export class Dispatcher {
     );
   }
 
+  /** Sets the maximum delay used for media-playlist backoff. */
   public set_media_playlist_backoff_max(max: number): void {
     getWasmExports().wasp_dispatcher_set_media_playlist_backoff_max(
       this.__ptr,
@@ -166,6 +201,7 @@ export class Dispatcher {
     );
   }
 
+  /** Notifies wasm that a network request completed successfully. */
   public on_request_finished(
     request_id: number,
     resource_id: number,
@@ -186,6 +222,7 @@ export class Dispatcher {
     });
   }
 
+  /** Notifies wasm that a network request failed. */
   public on_request_failed(
     request_id: number,
     has_timeouted: boolean,
@@ -199,10 +236,12 @@ export class Dispatcher {
     );
   }
 
+  /** Forwards a `MediaSource` ready-state update to wasm. */
   public on_media_source_state_change(state: MediaSourceReadyState): void {
     getWasmExports().__web_event__media_source_state_change(this.__ptr, state);
   }
 
+  /** Forwards a `SourceBuffer` buffered-range update to wasm. */
   public on_source_buffer_update(
     source_buffer_id: number,
     buffered: JsTimeRanges,
@@ -217,6 +256,7 @@ export class Dispatcher {
     });
   }
 
+  /** Reports a source-buffer creation error to wasm. */
   public on_source_buffer_creation_error(
     source_buffer_id: number,
     code: AddSourceBufferErrorCode,
@@ -233,6 +273,7 @@ export class Dispatcher {
     });
   }
 
+  /** Reports an append-buffer failure to wasm. */
   public on_append_buffer_error(
     source_buffer_id: number,
     code: PushedSegmentErrorCode,
@@ -249,6 +290,7 @@ export class Dispatcher {
     });
   }
 
+  /** Reports a remove-buffer failure to wasm. */
   public on_remove_buffer_error(
     source_buffer_id: number,
     buffered: JsTimeRanges,
@@ -263,6 +305,7 @@ export class Dispatcher {
     });
   }
 
+  /** Forwards the latest playback observation snapshot to wasm. */
   public on_playback_tick(observation: MediaObservation): void {
     withFloat64Array(
       observation.buffered.buffered,
@@ -311,11 +354,18 @@ export class Dispatcher {
     );
   }
 
+  /** Signals that a timer managed by wasm has completed. */
   public on_timer_ended(id: number, reason: TimerReason): void {
     getWasmExports().__web_event__timer_ended(this.__ptr, id, reason);
   }
 
+  /** Signals that codec support information changed and should be re-checked. */
   public on_codecs_support_update(): void {
     getWasmExports().__web_event__codecs_support_update(this.__ptr);
   }
 }
+
+/** Shared fallback cleanup for dispatcher instances dropped by JS without `free()`. */
+const dispatcherFinalizer = new Finalizer((ptr) => {
+  getWasmExports().wasp_dispatcher_free(ptr);
+});
