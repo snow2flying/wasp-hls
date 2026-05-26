@@ -57,10 +57,6 @@ class PlayerInstance {
       );
       return;
     }
-    jsMemoryResources.freeEverything();
-    requestsStore.freeEverything((request) => {
-      request.abortController.abort();
-    });
     this._instanceInfo.content = content;
   }
 
