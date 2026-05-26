@@ -112,6 +112,12 @@ export interface ContentMetadata {
   maximumPosition: number | undefined;
 
   /**
+   * Monotonic timestamp in milliseconds at which content info was last
+   * synchronized from the worker.
+   */
+  lastContentInfoUpdateTimestamp: number | undefined;
+
+  /**
    * Information on the currently loaded HLS variant.
    * `undefined` if unknown.
    */

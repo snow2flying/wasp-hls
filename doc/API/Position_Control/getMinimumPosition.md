@@ -3,15 +3,15 @@
 ## Description
 
 `getMinimumPosition` is a method allowing to obtain the minimum playlist
-position in seconds where playable data is currently available.
+position in seconds applications should currently consider available.
 
 Basically, it is the first reachable position in the fetched media playlist, or
 if there's separate audio and a video Media Playlists, the minimum of that first
 reachable position between both of them (written another way: the minimum
 reachable position with both audio and video playable data).
 
-Its intended purpose is to indicate to you the range where you may be able to
-[seek](./seek.md) in the content (i.e. change the position).
+Its intended purpose is to expose an application-facing lower content
+boundary.
 
 If no content is currently loaded, `getMinimumPosition` will return `undefined`.
 
@@ -51,17 +51,15 @@ of the Media Playlist is updated.
 This might be counter-intuitive if for example you expect the minimum position
 to increase linearly (for example a 1 second increase every seconds) over time.
 
-If you want to simulate a linear increase, for example, to simulate a UI
-progress bar advancing at a regular pace, you'll have to calculate that linear
-progression yourself (you may still want to regularly re-synchronize it by
-getting `getMinimumPosition`).
+If you need the minimum currently known seekable bound instead, you can call
+[`getSeekableMinimumPosition`](./getSeekableMinimumPosition.md).
 
-As a general rule, changes of the minimum position may be expected unless the
-content is a VoD content.
-You can know is you're playing a VoD content by calling the [`isVod`
-method](../Playback_Information/isVod.md) after reaching the `"Loaded"`
+As a general rule, changes of the minimum position should be expected if it is a
+live content.
+You can know is you're playing a live content by calling the [`isLive`
+method](../Playback_Information/isLive.md) after reaching the `"Loaded"`
 [state](../Basic_Methods/getPlayerState.md) for that content or by reading the
-`isVod` property from a `contentInfoUpdate` event (which is moreover first sent
+`isLive` property from a `contentInfoUpdate` event (which is moreover first sent
 even before the `"Loaded"` state is reached).
 
 On live contents, the minimum position increase can generally be approximated as

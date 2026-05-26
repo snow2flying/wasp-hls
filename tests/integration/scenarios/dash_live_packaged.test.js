@@ -35,6 +35,8 @@ function getPlayerStateSnapshot(player, videoElement, lastPlayerError) {
     position: player.getPosition(),
     minimumPosition: player.getMinimumPosition(),
     maximumPosition: player.getMaximumPosition(),
+    seekableMinimumPosition: player.getSeekableMinimumPosition(),
+    seekableMaximumPosition: player.getSeekableMaximumPosition(),
     currentTime: videoElement.currentTime,
     readyState: videoElement.readyState,
     networkState: videoElement.networkState,
@@ -139,10 +141,21 @@ describe("Live packaged content", function () {
       const basePos = player.getPosition();
       const baseMin = player.getMinimumPosition();
       const baseMax = player.getMaximumPosition();
+      const baseSeekableMin = player.getSeekableMinimumPosition();
+      const baseSeekableMax = player.getSeekableMaximumPosition();
       const baseGap = baseMax - basePos;
 
       expect(baseGap).toBeGreaterThan(5);
       expect(baseGap).toBeLessThan(20);
+
+      await sleep(2000);
+
+      const shortMin = player.getMinimumPosition();
+      const shortMax = player.getMaximumPosition();
+      expect(shortMin - baseMin).toBeGreaterThanOrEqual(1.5);
+      expect(shortMax - baseMax).toBeGreaterThanOrEqual(1.5);
+      expect(player.getSeekableMinimumPosition()).toEqual(baseSeekableMin);
+      expect(player.getSeekableMaximumPosition()).toEqual(baseSeekableMax);
 
       const secondsWaiting = LIVE_PLAYBACK_ASSERTION_WINDOW_S;
       await sleep(secondsWaiting * 1000);
@@ -150,9 +163,17 @@ describe("Live packaged content", function () {
       const newPos = player.getPosition();
       const newMin = player.getMinimumPosition();
       const newMax = player.getMaximumPosition();
+      const newSeekableMin = player.getSeekableMinimumPosition();
+      const newSeekableMax = player.getSeekableMaximumPosition();
 
       expect(newMax - baseMax).toBeGreaterThanOrEqual(secondsWaiting * 0.8);
       expect(newMin - baseMin).toBeGreaterThanOrEqual(secondsWaiting * 0.8);
+      expect(newSeekableMax - baseSeekableMax).toBeGreaterThanOrEqual(
+        secondsWaiting * 0.8,
+      );
+      expect(newSeekableMin - baseSeekableMin).toBeGreaterThanOrEqual(
+        secondsWaiting * 0.8,
+      );
       expect(newMax - newPos).toBeGreaterThan(5);
       expect(newMax - newPos).toBeLessThan(20);
       expect(newPos - basePos).toBeGreaterThanOrEqual(secondsWaiting * 0.8);

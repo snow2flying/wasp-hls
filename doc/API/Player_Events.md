@@ -243,11 +243,11 @@ calling the [`isRebuffering`](./Playback_Information/isRebuffering.md) method.
 The `"contentInfoUpdate"` event is sent when the following characteristics of
 the last loaded content are either known or updated:
 
-- The ["minimum position"](./Position_Control/getMinimumPosition.md) reachable
-  in the content.
+- The ["minimum seekable position"](./Position_Control/getSeekableMinimumPosition.md)
+  currently known in the content.
 
-- The ["maximum position"](./Position_Control/getMaximumPosition.md) reachable
-  in the content.
+- The ["maximum seekable position"](./Position_Control/getSeekableMaximumPosition.md)
+  currently known in the content.
 
 - Whether the current content is a ["live content"](./Playback_Information/isLive.md).
 
@@ -255,9 +255,11 @@ the last loaded content are either known or updated:
 
 The payload of that event is an object with the following self-explanatory properties:
 
-- `minimumPosition` (`number | undefined`): the new minimum position.
+- `minimumPosition` (`number | undefined`): the new minimum seekable
+  position.
 
-- `maximumPosition` (`number | undefined`): the new maximum position.
+- `maximumPosition` (`number | undefined`): the new maximum seekable
+  position.
 
 - `isLive` (`boolean`): If `true`, the content is a live content.
 

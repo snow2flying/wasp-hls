@@ -42,6 +42,10 @@ export default React.memo(function ControlBar({
 }): React.JSX.Element {
   const [volume, setVolume] = React.useState(player.videoElement.volume);
   const [position, setPosition] = React.useState<number | undefined>(undefined);
+  const [seekableMinimumPosition, setSeekableMinimumPosition] =
+    React.useState(0);
+  const [seekableMaximumPosition, setSeekableMaximumPosition] =
+    React.useState(Infinity);
   const [minimumPosition, setMinimumPosition] = React.useState(0);
   const [maximumPosition, setMaximumPosition] = React.useState(Infinity);
   const [duration, setDuration] = React.useState(NaN);
@@ -176,6 +180,8 @@ export default React.memo(function ControlBar({
 
     function resetTimeInfo() {
       setPosition(undefined);
+      setSeekableMinimumPosition(0);
+      setSeekableMaximumPosition(Infinity);
       setMinimumPosition(0);
       setMaximumPosition(Infinity);
       setDuration(NaN);
@@ -185,10 +191,14 @@ export default React.memo(function ControlBar({
     function onPositionUpdateInterval() {
       const pos = player.getPosition();
       setPosition(pos);
-      const minPos = player.getMinimumPosition();
-      setMinimumPosition(minPos ?? 0);
-      const maxPos = player.getMaximumPosition();
-      setMaximumPosition(maxPos ?? Infinity);
+      const minPos = player.getSeekableMinimumPosition();
+      setSeekableMinimumPosition(minPos ?? 0);
+      const maxPos = player.getSeekableMaximumPosition();
+      setSeekableMaximumPosition(maxPos ?? Infinity);
+      const windowMinPos = player.getMinimumPosition();
+      setMinimumPosition(windowMinPos ?? minPos ?? 0);
+      const windowMaxPos = player.getMaximumPosition();
+      setMaximumPosition(windowMaxPos ?? maxPos ?? Infinity);
       setDuration(player.getMediaDuration());
       setBufferGap(player.getCurrentBufferGap());
       if (!player.isPaused()) {
@@ -303,7 +313,7 @@ export default React.memo(function ControlBar({
           break;
         case "ArrowRight":
           if (player.getPlayerState() === PlayerState.Loaded) {
-            const maxPosition = player.getMaximumPosition();
+            const maxPosition = player.getSeekableMaximumPosition();
             if (maxPosition !== undefined) {
               evt.preventDefault();
               const newPosition = Math.min(
@@ -317,7 +327,7 @@ export default React.memo(function ControlBar({
           break;
         case "ArrowLeft":
           if (player.getPlayerState() === PlayerState.Loaded) {
-            const minPosition = player.getMinimumPosition();
+            const minPosition = player.getSeekableMinimumPosition();
             if (minPosition !== undefined) {
               evt.preventDefault();
               const newPosition = Math.max(
@@ -375,6 +385,19 @@ export default React.memo(function ControlBar({
             />
             {areControlsDisabled || position === undefined ? null : (
               <PositionIndicator position={position} duration={duration} />
+            )}
+            {areControlsDisabled || position === undefined ? null : (
+              <span
+                style={{
+                  color: "#d0d0d0",
+                  fontSize: "11px",
+                  marginLeft: "10px",
+                }}
+                title={`Seekable window: ${seekableMinimumPosition.toFixed(2)} - ${seekableMaximumPosition.toFixed(2)}`}
+              >
+                seekable {seekableMinimumPosition.toFixed(1)} -{" "}
+                {seekableMaximumPosition.toFixed(1)}
+              </span>
             )}
           </div>
           <div className="video-controls-right">

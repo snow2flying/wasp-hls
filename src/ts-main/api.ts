@@ -3,6 +3,7 @@ import EventEmitter from "../ts-common/EventEmitter.ts";
 import idGenerator from "../ts-common/idGenerator.ts";
 import type { LoggerLevel } from "../ts-common/logger.ts";
 import logger from "../ts-common/logger.ts";
+import monotonicNow from "../ts-common/monotonicNow.ts";
 import noop from "../ts-common/noop.ts";
 import type {
   AudioTrackInfo,
@@ -62,7 +63,6 @@ import {
 
 // Allows to ensure a never-seen-before identifier is used for each content.
 const generateContentId = idGenerator();
-
 /** List events triggered by a `WaspHlsPlayer` and corresponding payloads. */
 interface WaspHlsPlayerEvents {
   /**
@@ -154,9 +154,9 @@ interface WaspHlsPlayerEvents {
 
 /** Payload sent with a `contentInfoUpdate` event. */
 export interface ContentInfoUpdatePayload {
-  /** New minimum position reachable in the current content. */
+  /** New minimum currently known seekable position in the current content. */
   minimumPosition: number | undefined;
-  /** New maximum position reachable in the current content. */
+  /** New maximum currently known seekable position in the current content. */
   maximumPosition: number | undefined;
   /** if `true` the content is a still pending live content. */
   isLive: boolean;
@@ -412,6 +412,7 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
       wantedSpeed: 1,
       minimumPosition: undefined,
       maximumPosition: undefined,
+      lastContentInfoUpdateTimestamp: undefined,
       playlistType: undefined,
       topLevelPlaylistType: undefined,
       loadingAborter,
@@ -726,24 +727,70 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
   }
 
   /**
-   * Returns the minimum position with a reachable segment currently in the
-   * content.
+   * Returns the minimum position applications should currently consider
+   * available in the content.
    *
    * Returns `undefined` if unknown or if no content is loaded.
    * @returns {number|undefined} s
    */
   public getMinimumPosition(): number | undefined {
+    const minimumPosition = getEstimatedPosition(
+      this.__contentMetadata__,
+      "minimumPosition",
+    );
+    const maximumPosition = getEstimatedPosition(
+      this.__contentMetadata__,
+      "maximumPosition",
+    );
+    return maximumPosition === undefined
+      ? minimumPosition
+      : Math.min(minimumPosition ?? Infinity, maximumPosition);
+  }
+
+  /**
+   * Returns the minimum currently known seekable position in the content.
+   *
+   * Unlike `getMinimumPosition`, this value is not extrapolated between
+   * playlist updates.
+   *
+   * Returns `undefined` if unknown or if no content is loaded.
+   * @returns {number|undefined} s
+   */
+  public getSeekableMinimumPosition(): number | undefined {
     return this.__contentMetadata__?.minimumPosition;
   }
 
   /**
-   * Returns the maximum position with a reachable segment currently in the
-   * content.
+   * Returns the maximum position applications should currently consider
+   * available in the content.
    *
    * Returns `undefined` if unknown or if no content is loaded.
    * @returns {number|undefined} s
    */
   public getMaximumPosition(): number | undefined {
+    const maximumPosition = getEstimatedPosition(
+      this.__contentMetadata__,
+      "maximumPosition",
+    );
+    const minimumPosition = getEstimatedPosition(
+      this.__contentMetadata__,
+      "minimumPosition",
+    );
+    return minimumPosition === undefined
+      ? maximumPosition
+      : Math.max(maximumPosition ?? -Infinity, minimumPosition);
+  }
+
+  /**
+   * Returns the maximum currently known seekable position in the content.
+   *
+   * Unlike `getMaximumPosition`, this value is not extrapolated between
+   * playlist updates.
+   *
+   * Returns `undefined` if unknown or if no content is loaded.
+   * @returns {number|undefined} s
+   */
+  public getSeekableMaximumPosition(): number | undefined {
     return this.__contentMetadata__?.maximumPosition;
   }
 
@@ -1322,4 +1369,57 @@ interface FromBeginningStartingPosition {
 interface FromEndStartingPosition {
   startType: "FromEnd";
   position: number;
+}
+
+/**
+ * Returns whether the given position should progress linearly between
+ * playlist refreshes for the current playlist nature.
+ * @param {ContentMetadata|null} contentMetadata
+ * @param {"minimumPosition"|"maximumPosition"} primaryKey
+ * @returns {boolean}
+ */
+function shouldEstimatePosition(
+  contentMetadata: ContentMetadata | null,
+  primaryKey: "minimumPosition" | "maximumPosition",
+): boolean {
+  switch (contentMetadata?.playlistType) {
+    case PlaylistNature.Live:
+      return true;
+    case PlaylistNature.Event:
+      return primaryKey === "maximumPosition";
+    default:
+      return false;
+  }
+}
+
+/**
+ * Returns the user-facing position for the corresponding content boundary.
+ *
+ * This is the last known seekable bound for VoD contents, and a linearly
+ * progressing estimate between playlist updates for live boundaries that
+ * normally advance over time.
+ *
+ * @param {ContentMetadata|null} contentMetadata
+ * @param {"minimumPosition"|"maximumPosition"} primaryKey
+ * @returns {number|undefined}
+ */
+function getEstimatedPosition(
+  contentMetadata: ContentMetadata | null,
+  primaryKey: "minimumPosition" | "maximumPosition",
+): number | undefined {
+  const position = contentMetadata?.[primaryKey];
+  if (position === undefined) {
+    return undefined;
+  }
+  if (!shouldEstimatePosition(contentMetadata, primaryKey)) {
+    return position;
+  }
+  if (contentMetadata === null) {
+    return position;
+  }
+  const lastUpdate = contentMetadata.lastContentInfoUpdateTimestamp;
+  if (lastUpdate === undefined) {
+    return position;
+  }
+  return position + Math.max(monotonicNow() - lastUpdate, 0) / 1000;
 }

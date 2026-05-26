@@ -17,6 +17,7 @@
 - Add `NotAPlaylist` error code: a new `WaspOtherError` for when the given resource URL does not seem to be a valid HLS playlist URL
 - Add `MultivariantPlaylistVariableDefinitionError` and `MediaPlaylistVariableDefinitionError` error codes for when an `#EXT-X-DEFINE` tag or usage is not compliant to the HLS specification respectively on the MultiVariant Playlist or the Media Playlist.
 - Add `SourceBufferEmptyMimeType`, `SourceBufferMediaSourceIsClosed`, `SourceBufferNoMediaSourceAttached` and `SourceBufferQuotaExceededError` error codes on a `WaspSourceBufferCreationError` error type.
+- Add `getSeekableMinimumPosition` and `getSeekableMaximumPosition` methods to expose the currently known seekable bounds in playlist time
 - Light handling of QuotaExceededError by removing data from buffers if/when it happens. More advanced handling would be to reduce buffer goal adaptively (not done yet)
 - Add parsing of `#EXT-X-DEFINE` tags
 - Handle `#EXT-X-MEDIA-SEQUENCE` tags and use it both for segment staleness detection and contiguity checks
@@ -27,6 +28,7 @@
 - `SourceBufferAlreadyCreatedWithSameType` mistakenly also regrouped other kinds of SourceBuffer-related bug than what's documented. This is now fixed.
 - Better handle edge speed settings: negative speeds, non-finite speeds, `NaN` speed
 - Better handling of gap jumping, previous behavior could skip legitimate data
+- `getMinimumPosition` and `getMaximumPosition` now progress linearly between playlist updates when it makes sense, while `EVENT` playlists only do so for the maximum position
 
 ### Other
 

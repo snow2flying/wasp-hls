@@ -1,5 +1,6 @@
 import idGenerator from "../ts-common/idGenerator.ts";
 import logger from "../ts-common/logger.ts";
+import monotonicNow from "../ts-common/monotonicNow.ts";
 import QueuedSourceBuffer, {
   SourceBufferOperationCancelledError,
 } from "../ts-common/QueuedSourceBuffer.ts";
@@ -65,15 +66,6 @@ import {
   getTransmuxedType,
 } from "./transmux.js";
 import { formatErrMessage, shouldTransmux } from "./utils.js";
-
-// Some environments (such as Safari Desktop) weirdly do not support
-// `performance.now` inside a WebWorker
-const timerFn =
-  typeof performance !== "object" ||
-  performance === null ||
-  typeof performance.now !== "function"
-    ? Date.now.bind(Date)
-    : performance.now.bind(performance);
 
 const generateMediaSourceId = idGenerator();
 const cachedTextDecoder = new TextDecoder("utf-8", {
@@ -389,7 +381,7 @@ export function getResourceData(
  * @param {string} logStr
  */
 export function log(logLevel: LogLevel, logStr: string) {
-  const now = timerFn().toFixed(2);
+  const now = monotonicNow().toFixed(2);
   switch (logLevel) {
     case LogLevel.Error:
       logger.error(now, logStr);
@@ -445,7 +437,7 @@ export function doFetch(
   let timeouted = false;
   const abortController = new AbortController();
   const currentRequestId = requestsStore.create({ abortController });
-  const timestampBef = timerFn();
+  const timestampBef = monotonicNow();
 
   let timeoutTimeoutId: number | undefined;
   if (timeout >= 0) {
@@ -466,7 +458,7 @@ export function doFetch(
       const dispatcher = playerInstance.getDispatcher();
       if (res.status >= 300) {
         logger.warn(
-          `Worker: fetch failed id=${currentRequestId} status=${res.status} elapsed=${(timerFn() - timestampBef).toFixed(1)}ms url=${res.url || url}`,
+          `Worker: fetch failed id=${currentRequestId} status=${res.status} elapsed=${(monotonicNow() - timestampBef).toFixed(1)}ms url=${res.url || url}`,
         );
         requestsStore.delete(currentRequestId);
         dispatcher?.on_request_failed(currentRequestId, false, res.status);
@@ -474,7 +466,7 @@ export function doFetch(
       }
 
       const arrRes = await res.arrayBuffer();
-      const elapsedMs = timerFn() - timestampBef;
+      const elapsedMs = monotonicNow() - timestampBef;
       requestsStore.delete(currentRequestId);
       if (dispatcher !== null) {
         const segmentArray = new Uint8Array(arrRes);
@@ -502,7 +494,7 @@ export function doFetch(
         return;
       }
       logger.warn(
-        `Worker: fetch error id=${currentRequestId} elapsed=${(timerFn() - timestampBef).toFixed(1)}ms url=${url} err=${formatErrMessage(err, "Unknown fetch error")}`,
+        `Worker: fetch error id=${currentRequestId} elapsed=${(monotonicNow() - timestampBef).toFixed(1)}ms url=${url} err=${formatErrMessage(err, "Unknown fetch error")}`,
       );
       dispatcher?.on_request_failed(currentRequestId, false, undefined);
     });

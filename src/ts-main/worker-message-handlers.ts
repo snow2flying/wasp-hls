@@ -1,5 +1,6 @@
 import assertNever from "../ts-common/assertNever.ts";
 import logger from "../ts-common/logger.ts";
+import monotonicNow from "../ts-common/monotonicNow.ts";
 import QueuedSourceBuffer, {
   SourceBufferOperation,
   SourceBufferOperationCancelledError,
@@ -893,6 +894,7 @@ export function onContentInfoUpdateMessage(
     logger.info("API: Ignoring warning due to wrong `contentId`");
     return false;
   }
+  contentMetadata.lastContentInfoUpdateTimestamp = monotonicNow();
   let hasChanged = false;
   if (msg.value.minimumPosition !== contentMetadata.minimumPosition) {
     contentMetadata.minimumPosition = msg.value.minimumPosition;

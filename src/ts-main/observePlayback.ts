@@ -1,4 +1,5 @@
 import EventEmitter from "../ts-common/EventEmitter.ts";
+import monotonicNow from "../ts-common/monotonicNow.ts";
 import timeRangesToFloat64Array from "../ts-common/timeRangesToFloat64Array.ts";
 import type { MediaObservation } from "../ts-common/types.ts";
 import { PlaybackTickReason } from "../ts-common/types.ts";
@@ -122,8 +123,7 @@ export default class PlaybackObserver extends EventEmitter<PlaybackObserverEvent
     if (newInterval !== this._minimumObservationInterval) {
       this._minimumObservationInterval = newInterval;
       if (this._stop !== null) {
-        const timeSinceLast =
-          performance.now() - this._lastObservationTimeStamp;
+        const timeSinceLast = monotonicNow() - this._lastObservationTimeStamp;
         const nextTimeout = this._minimumObservationInterval - timeSinceLast;
         this._currentTimeoutId = window.setTimeout(() => {
           this._generateObservation(PlaybackTickReason.RegularInterval);
@@ -165,7 +165,7 @@ export default class PlaybackObserver extends EventEmitter<PlaybackObserverEvent
     const { currentTime, readyState, paused, seeking, ended, duration } =
       this._mediaElement;
 
-    this._lastObservationTimeStamp = performance.now();
+    this._lastObservationTimeStamp = monotonicNow();
     this.trigger("newObservation", {
       reason,
       currentTime,

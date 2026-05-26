@@ -1683,11 +1683,9 @@ seg-4.ts
 seg-5.ts
 "#;
 
-        let playlist = TopLevelPlaylist::parse(
-            media.as_bytes(),
-            parse_url("https://example.com/live.m3u8"),
-        )
-        .unwrap();
+        let playlist =
+            TopLevelPlaylist::parse(media.as_bytes(), parse_url("https://example.com/live.m3u8"))
+                .unwrap();
         let store = PlaylistStore::try_new(playlist, 10_000.).unwrap();
 
         assert_eq!(store.expected_start_time(), 8.);
