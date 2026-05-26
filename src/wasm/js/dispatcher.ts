@@ -1,3 +1,8 @@
+import {
+  registerFinalizer,
+  unregisterFinalizer,
+  FinalizerState,
+} from "./finalization_registry.js";
 import { getWasmExports, withFloat64Array, withString } from "./memory.js";
 import { optionalIdToRaw } from "./helpers.js";
 import type {
@@ -8,59 +13,23 @@ import type {
 } from "./enums.js";
 import { JsTimeRanges, MediaObservation, StartingPosition } from "./results.js";
 
-interface FinalizationRegistryLike {
-  register(target: object, heldValue: number, unregisterToken?: object): void;
-  unregister(unregisterToken: object): void;
-}
-
-interface FinalizationRegistryConstructorLike {
-  new (cleanup: (heldValue: number) => void): FinalizationRegistryLike;
-}
-
-interface FinalizerState {
-  cleanup(ptr: number): void;
-  registry?: FinalizationRegistryLike;
-}
-
-const FinalizationRegistryCtor = (
-  globalThis as { FinalizationRegistry?: FinalizationRegistryConstructorLike }
-).FinalizationRegistry;
-
-function registerFinalizer(
-  target: object,
-  ptr: number,
-  finalizer: FinalizerState,
-): void {
-  if (FinalizationRegistryCtor === undefined) {
-    return;
-  }
-  finalizer.registry ??= new FinalizationRegistryCtor((heldValue: number) =>
-    finalizer.cleanup(heldValue),
-  );
-  finalizer.registry.register(target, ptr, target);
-}
-
-function unregisterFinalizer(target: object, finalizer: FinalizerState): void {
-  finalizer.registry?.unregister(target);
-}
-
-const dispatcherFinalizer: FinalizerState = {
-  cleanup(ptr) {
-    getWasmExports().wasp_dispatcher_free(ptr);
-  },
-};
-
 export class Dispatcher {
   private __ptr: number;
+  private __finalizer: FinalizerState;
 
   constructor(initial_bandwidth: number) {
     this.__ptr = getWasmExports().wasp_dispatcher_new(initial_bandwidth);
-    registerFinalizer(this, this.__ptr, dispatcherFinalizer);
+    this.__finalizer = {
+      cleanup(ptr) {
+        getWasmExports().wasp_dispatcher_free(ptr);
+      },
+    };
+    registerFinalizer(this, this.__ptr, this.__finalizer);
   }
 
   public free(): void {
     if (this.__ptr !== 0) {
-      unregisterFinalizer(this, dispatcherFinalizer);
+      unregisterFinalizer(this, this.__finalizer);
       getWasmExports().wasp_dispatcher_free(this.__ptr);
       this.__ptr = 0;
     }
