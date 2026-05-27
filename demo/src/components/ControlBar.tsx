@@ -42,16 +42,11 @@ export default React.memo(function ControlBar({
 }): React.JSX.Element {
   const [volume, setVolume] = React.useState(player.videoElement.volume);
   const [position, setPosition] = React.useState<number | undefined>(undefined);
-  const [seekableMinimumPosition, setSeekableMinimumPosition] =
-    React.useState(0);
-  const [seekableMaximumPosition, setSeekableMaximumPosition] =
-    React.useState(Infinity);
   const [minimumPosition, setMinimumPosition] = React.useState(0);
   const [maximumPosition, setMaximumPosition] = React.useState(Infinity);
   const [duration, setDuration] = React.useState(NaN);
   const [bufferGap, setBufferGap] = React.useState(0);
   const [isPaused, setIsPaused] = React.useState(true);
-  const [usesProgramDateTime, setUsesProgramDateTime] = React.useState(false);
   const [isControlBarDisplayed, setIsControlBarDisplayed] =
     React.useState(true);
   const [areControlsDisabled, setAreControlsDisabled] = React.useState(true);
@@ -181,29 +176,23 @@ export default React.memo(function ControlBar({
 
     function resetTimeInfo() {
       setPosition(undefined);
-      setSeekableMinimumPosition(0);
-      setSeekableMaximumPosition(Infinity);
       setMinimumPosition(0);
       setMaximumPosition(Infinity);
       setDuration(NaN);
       setBufferGap(0);
-      setUsesProgramDateTime(false);
     }
 
     function onPositionUpdateInterval() {
       const pos = player.getPosition();
       setPosition(pos);
       const minPos = player.getSeekableMinimumPosition();
-      setSeekableMinimumPosition(minPos ?? 0);
       const maxPos = player.getSeekableMaximumPosition();
-      setSeekableMaximumPosition(maxPos ?? Infinity);
       const windowMinPos = player.getMinimumPosition();
       setMinimumPosition(windowMinPos ?? minPos ?? 0);
       const windowMaxPos = player.getMaximumPosition();
       setMaximumPosition(windowMaxPos ?? maxPos ?? Infinity);
       setDuration(player.getMediaDuration());
       setBufferGap(player.getCurrentBufferGap());
-      setUsesProgramDateTime(player.usesProgramDateTime());
       if (!player.isPaused()) {
         if (minPos !== undefined && minPos > pos + 2) {
           // eslint-disable-next-line no-console
@@ -391,26 +380,7 @@ export default React.memo(function ControlBar({
                 position={position}
                 duration={duration}
                 currentDate={player.positionToDate(position)}
-                minimumDate={player.positionToDate(minimumPosition)}
-                maximumDate={player.positionToDate(maximumPosition)}
               />
-            )}
-            {areControlsDisabled || position === undefined ? null : (
-              <span
-                style={{
-                  color: "#d0d0d0",
-                  fontSize: "11px",
-                  marginLeft: "10px",
-                }}
-                title={
-                  usesProgramDateTime
-                    ? `Seekable window: ${seekableMinimumPosition.toFixed(2)} - ${seekableMaximumPosition.toFixed(2)} (${player.positionToDate(seekableMinimumPosition)?.toUTCString() ?? "unknown"} -> ${player.positionToDate(seekableMaximumPosition)?.toUTCString() ?? "unknown"})`
-                    : `Seekable window: ${seekableMinimumPosition.toFixed(2)} - ${seekableMaximumPosition.toFixed(2)}`
-                }
-              >
-                seekable {seekableMinimumPosition.toFixed(1)} -{" "}
-                {seekableMaximumPosition.toFixed(1)}
-              </span>
             )}
           </div>
           <div className="video-controls-right">
