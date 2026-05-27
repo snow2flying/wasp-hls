@@ -10,7 +10,7 @@ directories:
 
   This is the directory to go to when trying to first rely on this project.
 
-- `API` (TODO): Exhaustive documentation of all WaspHlsPlayer's API
+- `API`:
 
   This is the directory to go to when wanting to read the exact actions each
   API will do.

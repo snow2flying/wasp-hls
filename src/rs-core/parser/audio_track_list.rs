@@ -201,6 +201,12 @@ impl AudioTrack {
             .collect()
     }
 
+    /// Returns whether that audio track is selectable through a distinct audio
+    /// playlist, not just shared through the variant media playlist.
+    pub fn is_selectable(&self) -> bool {
+        self.media_tags.iter().any(|t| t.url().is_some())
+    }
+
     /// Returns slice of the various `MediaTag` objects that audio track is associated with.
     ///
     /// These are usually several qualities representing the same content.

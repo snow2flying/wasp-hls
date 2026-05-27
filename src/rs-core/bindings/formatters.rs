@@ -89,9 +89,13 @@ pub(crate) fn format_source_buffer_creation_err_for_js(
 }
 
 pub(crate) unsafe fn format_audio_tracks_for_js(tracks: &[AudioTrack]) -> Vec<u32> {
+    let selectable_tracks = tracks
+        .iter()
+        .filter(|track| track.is_selectable())
+        .collect::<Vec<_>>();
     let mut ret: Vec<u32> = vec![];
-    ret.push(tracks.len() as u32);
-    tracks.iter().for_each(|t| {
+    ret.push(selectable_tracks.len() as u32);
+    selectable_tracks.iter().for_each(|t| {
         ret.push(t.id());
 
         let language = t.language().unwrap_or("");

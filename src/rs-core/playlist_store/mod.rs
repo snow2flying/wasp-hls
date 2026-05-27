@@ -1446,6 +1446,7 @@ seg.ts
             MediaType::Video,
         );
 
+        assert_eq!(store.current_audio_track_id(), None);
         assert_eq!(store.current_codec(MediaType::Audio), None);
         assert_eq!(
             store.current_codec(MediaType::Video).as_deref(),

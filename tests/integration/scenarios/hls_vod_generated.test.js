@@ -382,6 +382,54 @@ describe("Generated VoD content", function () {
   );
 
   it(
+    "does not announce audio tracks for muxed direct media playlists",
+    { timeout: VOD_TEST_TIMEOUT_MS },
+    async () => {
+      player.addEventListener("playerStateChange", (state) => {
+        if (state === "Loaded") {
+          player.resume();
+        }
+      });
+
+      const audioTrackListPromise = waitForPlayerEvent(
+        player,
+        "audioTrackListUpdate",
+      );
+      player.load(getVodScenarioUrl("fmp4-direct-media"));
+      const announcedTracks = await audioTrackListPromise;
+      await waitForLoadedState(player, videoElement, () => lastPlayerError);
+
+      expect(announcedTracks).toEqual([]);
+      expect(player.getAudioTrackList()).toEqual([]);
+      expect(player.getCurrentAudioTrack()).toBeUndefined();
+    },
+  );
+
+  it(
+    "does not announce audio tracks for shared muxed multivariant playlists",
+    { timeout: VOD_TEST_TIMEOUT_MS },
+    async () => {
+      player.addEventListener("playerStateChange", (state) => {
+        if (state === "Loaded") {
+          player.resume();
+        }
+      });
+
+      const audioTrackListPromise = waitForPlayerEvent(
+        player,
+        "audioTrackListUpdate",
+      );
+      player.load(getVodScenarioUrl("fmp4-shared-audio-muxed"));
+      const announcedTracks = await audioTrackListPromise;
+      await waitForLoadedState(player, videoElement, () => lastPlayerError);
+
+      expect(announcedTracks).toEqual([]);
+      expect(player.getAudioTrackList()).toEqual([]);
+      expect(player.getCurrentAudioTrack()).toBeUndefined();
+    },
+  );
+
+  it(
     "switches alternate audio tracks through setAudioTrack",
     { timeout: VOD_TEST_TIMEOUT_MS },
     async () => {

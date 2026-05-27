@@ -270,6 +270,31 @@ const SCENARIOS = {
       return null;
     },
   },
+  "fmp4-shared-audio-muxed": {
+    entryPath: "master.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath === "master.m3u8") {
+        return {
+          body:
+            "#EXTM3U\n" +
+            "#EXT-X-VERSION:7\n" +
+            "#EXT-X-INDEPENDENT-SEGMENTS\n" +
+            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-main",NAME="Main",DEFAULT=YES,AUTOSELECT=YES\n' +
+            '#EXT-X-STREAM-INF:BANDWIDTH=1900000,RESOLUTION=960x540,AUDIO="audio-main"\n' +
+            "media.m3u8\n",
+          contentType: CONTENT_TYPE_M3U8,
+        };
+      }
+      if (relativePath === "media.m3u8") {
+        return createMediaPlaylistResponse(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+          context.forRecipe("fmp4-muxed-av"),
+        );
+      }
+      return null;
+    },
+  },
 };
 
 export async function getVodScenarioResponse(

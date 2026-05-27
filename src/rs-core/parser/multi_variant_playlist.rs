@@ -544,14 +544,6 @@ impl MultivariantPlaylist {
     ) -> Option<&AudioTrack> {
         match id.location() {
             MediaPlaylistUrlLocation::AudioTrack => self.audio_tracks.track_for_media_tag(id.id()),
-            MediaPlaylistUrlLocation::Variant => {
-                let variant = self.variant(id.id())?;
-                let group = variant.audio_group()?;
-                self.audio_tracks
-                    .iter_tracks_media()
-                    .find(|(_, a)| a.url().is_none() && a.group_id() == group)
-                    .map(|t| t.0)
-            }
             _ => None,
         }
     }
