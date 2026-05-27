@@ -340,8 +340,6 @@ async function main() {
     browser = DEFAULT_BROWSER;
   }
 
-  logWdioRuntimeConfig(browser);
-
   try {
     await runVitestsWithManagedExit(
       {
@@ -377,14 +375,4 @@ Available options:
                                       "chrome" by default.
   -w, --watch                         Re-run tests if any of its depended file has changed.`,
   );
-}
-
-/**
- * @param {string} browser
- */
-function logWdioRuntimeConfig(browser) {
-  console.info("WebdriverIO mode: local driver management");
-  console.info(`WebdriverIO cache dir: ${WDIO_CACHE_DIR}`);
-  console.info(`Browser under test: ${browser}`);
-  console.log();
 }
