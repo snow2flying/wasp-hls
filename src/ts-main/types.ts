@@ -165,6 +165,12 @@ export interface ContentMetadata {
   loadingAborter: AbortController | undefined;
 
   /**
+   * Prevents scheduling the same asynchronous Loaded-state transition multiple
+   * times while a content is still loading.
+   */
+  loadFinalizationPending: boolean;
+
+  /**
    * The type of the Multivariant Playlist being played: is it live? Vod?
    */
   playlistType: PlaylistNature | undefined;

@@ -682,6 +682,7 @@ impl PlaylistStore {
                         .map(|end| (end - (3. * playlist.target_duration())).max(0.))
                         .unwrap_or(0.);
                 }
+                return playlist.beginning().unwrap_or(0.);
             }
             return 0.;
         }
@@ -702,7 +703,7 @@ impl PlaylistStore {
                 .unwrap_or(0.);
         }
 
-        0.
+        self.current_estimated_minimum_position().unwrap_or(0.)
     }
 
     /// Returns the `id` of the `AudioTrack` object which is associated to the current audio
@@ -1786,5 +1787,25 @@ audio-6.ts
             .unwrap();
 
         assert_eq!(store.expected_start_time(), 6.);
+    }
+
+    #[test]
+    fn vod_expected_start_time_defaults_to_minimum_position_on_pdt_timeline() {
+        let media = r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-PROGRAM-DATE-TIME:2024-01-02T03:04:05.000Z
+#EXTINF:4,
+seg-1.ts
+#EXTINF:4,
+seg-2.ts
+#EXT-X-ENDLIST
+"#;
+
+        let playlist =
+            TopLevelPlaylist::parse(media.as_bytes(), parse_url("https://example.com/vod.m3u8"))
+                .unwrap();
+        let store = PlaylistStore::try_new(playlist, 10_000.).unwrap();
+
+        assert_eq!(store.expected_start_time(), 1_704_164_645.,);
     }
 }

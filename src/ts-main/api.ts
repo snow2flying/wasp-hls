@@ -422,6 +422,7 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
       playlistType: undefined,
       topLevelPlaylistType: undefined,
       loadingAborter,
+      loadFinalizationPending: false,
       error: null,
     };
     this.trigger("playerStateChange", PlayerState.Loading);
@@ -1208,6 +1209,13 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
           break;
         case WorkerMessageType.MediaOffsetUpdate:
           onMediaOffsetUpdateMessage(data, this.__contentMetadata__);
+          if (
+            this.__contentMetadata__?.loadingAborter !== undefined &&
+            this.getPlayerState() === PlayerState.Loading &&
+            this.usesProgramDateTime()
+          ) {
+            this._scheduleLoadedStateTransition();
+          }
           break;
         case WorkerMessageType.TopLevelPlaylistParsed:
           if (onTopLevelPlaylistParsedMessage(data, this.__contentMetadata__)) {
@@ -1290,38 +1298,22 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
           }
           break;
         case WorkerMessageType.RebufferingEnded:
-          if (
-            onRebufferingEndedMessage(
-              data,
-              this.__contentMetadata__,
-              this.videoElement,
-            )
-          ) {
+          if (this.__contentMetadata__ === null) {
+            break;
+          }
+          const exitedRebuffering = onRebufferingEndedMessage(
+            data,
+            this.__contentMetadata__,
+            this.videoElement,
+          );
+          if (exitedRebuffering) {
             if (this.getPlayerState() === PlayerState.Loaded) {
               this.trigger("rebufferingEnded", null);
-            } else if (this.__contentMetadata__?.loadingAborter !== undefined) {
+            } else if (this.__contentMetadata__.loadingAborter !== undefined) {
               // If still loading, send loaded event as soon as the
               // `HTMLMediaElement` say we can (it should generally be directly
               // as the Worker has more drastic conditions)
-              waitForLoad(
-                this.videoElement,
-                this.__contentMetadata__.loadingAborter.signal,
-              ).then(
-                () => {
-                  if (this.__contentMetadata__ !== null) {
-                    this.__contentMetadata__.loadingAborter = undefined;
-                  }
-                  this.trigger("playerStateChange", PlayerState.Loaded);
-                },
-                (reason) => {
-                  if (this.__contentMetadata__ !== null) {
-                    this.__contentMetadata__.loadingAborter = undefined;
-                  }
-                  const err =
-                    reason instanceof Error ? reason : "Unknown reason";
-                  logger.info("Could not load content:", err);
-                },
-              );
+              this._scheduleLoadedStateTransition();
             }
           }
           break;
@@ -1361,6 +1353,47 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
         value: level,
       });
     }
+  }
+
+  private _scheduleLoadedStateTransition(): void {
+    const videoElement = this.videoElement;
+    const contentMetadata = this.__contentMetadata__;
+    if (
+      contentMetadata === null ||
+      contentMetadata.loadingAborter === undefined ||
+      contentMetadata.loadFinalizationPending
+    ) {
+      return;
+    }
+
+    const { signal } = contentMetadata.loadingAborter;
+    const contentId = contentMetadata.contentId;
+    contentMetadata.loadFinalizationPending = true;
+
+    waitForLoad(videoElement, signal).then(
+      () => {
+        const currentContentMetadata = this.__contentMetadata__;
+        if (
+          currentContentMetadata?.contentId !== contentId ||
+          currentContentMetadata.loadingAborter === undefined
+        ) {
+          return;
+        }
+        currentContentMetadata.loadFinalizationPending = false;
+        currentContentMetadata.loadingAborter = undefined;
+        this.trigger("playerStateChange", PlayerState.Loaded);
+      },
+      (reason) => {
+        const currentContentMetadata = this.__contentMetadata__;
+        if (currentContentMetadata?.contentId !== contentId) {
+          return;
+        }
+        currentContentMetadata.loadFinalizationPending = false;
+        currentContentMetadata.loadingAborter = undefined;
+        const err = reason instanceof Error ? reason : "Unknown reason";
+        logger.info("Could not load content:", err);
+      },
+    );
   }
 }
 

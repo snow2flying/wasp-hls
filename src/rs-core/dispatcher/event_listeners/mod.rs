@@ -233,7 +233,7 @@ pub struct JsTimeRanges {
 
 impl JsTimeRanges {
     pub fn new(buffered: Vec<f64>) -> Self {
-        if buffered.len() % 2 != 0 {
+        if !buffered.len().is_multiple_of(2) {
             Logger::error("Incorrect JsTimeRanges object");
             Self { buffered: vec![] }
         } else {

@@ -307,11 +307,9 @@ impl SourceBuffer {
                 self.needs_reflush = true;
                 jsFlush();
             }
-            Some(SourceBufferQueueElement::PushMedia { .. }) => {
-                if self.needs_reflush {
-                    self.needs_reflush = false;
-                    jsFlush();
-                }
+            Some(SourceBufferQueueElement::PushMedia { .. }) if self.needs_reflush => {
+                self.needs_reflush = false;
+                jsFlush();
             }
             _ => {}
         }
