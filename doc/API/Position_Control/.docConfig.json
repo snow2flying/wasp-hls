@@ -23,6 +23,18 @@
     {
       "path": "./getMediaOffset.md",
       "displayName": "getMediaOffset"
+    },
+    {
+      "path": "./getSeekableMinimumPosition.md",
+      "displayName": "getSeekableMinimumPosition"
+    },
+    {
+      "path": "./getSeekableMaximumPosition.md",
+      "displayName": "getSeekableMaximumPosition"
+    },
+    {
+      "path": "./positionToDate.md",
+      "displayName": "positionToDate"
     }
   ]
 }

@@ -472,7 +472,7 @@ impl MultivariantPlaylist {
             .map(|pl| {
                 TimelineReference::from_segment_list(
                     pl.segment_list().media(),
-                    pl.has_program_date_time,
+                    pl.uses_program_date_time(),
                 )
             });
         match id.location() {

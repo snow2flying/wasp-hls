@@ -21,6 +21,9 @@ As written above, the returned time is in playlist time in seconds.
 If you wish to convert between media time and playlist time, you may obtain the
 offset between the two through the
 [`getMediaOffset` method](./getMediaOffset.md).
+If you wish to convert that playlist time into a JavaScript `Date` when the
+content timeline is based on `EXT-X-PROGRAM-DATE-TIME`, you may call the
+[`positionToDate` method](./positionToDate.md).
 
 ## Syntax
 

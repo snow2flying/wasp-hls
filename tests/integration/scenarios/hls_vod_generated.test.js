@@ -23,6 +23,7 @@ const PLAYBACK_SETTLE_MS = 2_000;
 const VOD_START_POSITION_TOLERANCE_S = 0.35;
 const VOD_MAX_INITIAL_SEEK_DELAY_MS = 4_000;
 const VOD_MAX_LOADED_DELAY_MS = 8_000;
+const PROGRAM_DATE_TIME_START = Date.parse("2024-01-02T03:04:05.000Z") / 1000;
 
 const VOD_STARTING_POSITION_CASES = [
   {
@@ -278,6 +279,82 @@ describe("Generated VoD content", function () {
     },
   );
 
+  it(
+    "uses media time as playlist time when `EXT-X-PROGRAM-DATE-TIME` is absent",
+    { timeout: VOD_TEST_TIMEOUT_MS },
+    async () => {
+      player.addEventListener("playerStateChange", (state) => {
+        if (state === "Loaded") {
+          player.resume();
+        }
+      });
+
+      player.load(getVodScenarioUrl("fmp4-player-api"));
+      await waitForLoadedState(player, videoElement, () => lastPlayerError);
+
+      expect(player.getMinimumPosition()).toBeLessThanOrEqual(0.1);
+      expect(player.getSeekableMinimumPosition()).toBeLessThanOrEqual(0.1);
+      expect(player.usesProgramDateTime()).toBe(false);
+      expect(player.positionToDate(player.getPosition())).toBeUndefined();
+      expect(Math.abs(player.getMediaOffset() ?? NaN)).toBeLessThan(0.1);
+      expect(
+        Math.abs(player.getPosition() - videoElement.currentTime),
+      ).toBeLessThan(0.1);
+    },
+  );
+
+  it(
+    "uses `EXT-X-PROGRAM-DATE-TIME` as playlist time in the public position API",
+    { timeout: VOD_TEST_TIMEOUT_MS },
+    async () => {
+      player.addEventListener("playerStateChange", (state) => {
+        if (state === "Loaded") {
+          player.resume();
+        }
+      });
+
+      player.load(getVodScenarioUrl("fmp4-player-api-program-date-time"));
+      await waitForLoadedState(player, videoElement, () => lastPlayerError);
+
+      const minimumPosition = player.getMinimumPosition();
+      const seekableMinimumPosition = player.getSeekableMinimumPosition();
+      const maximumPosition = player.getMaximumPosition();
+      const mediaOffset = player.getMediaOffset();
+      const minimumDate = player.positionToDate(minimumPosition ?? NaN);
+      const currentDate = player.positionToDate(player.getPosition());
+
+      expect(player.usesProgramDateTime()).toBe(true);
+      expect(minimumPosition).toBeGreaterThanOrEqual(
+        PROGRAM_DATE_TIME_START - 0.1,
+      );
+      expect(minimumPosition).toBeLessThanOrEqual(
+        PROGRAM_DATE_TIME_START + 0.1,
+      );
+      expect(seekableMinimumPosition).toBeGreaterThanOrEqual(
+        PROGRAM_DATE_TIME_START - 0.1,
+      );
+      expect(seekableMinimumPosition).toBeLessThanOrEqual(
+        PROGRAM_DATE_TIME_START + 0.1,
+      );
+      expect(maximumPosition).toBeGreaterThan(PROGRAM_DATE_TIME_START + 10);
+      expect(mediaOffset).toBeLessThan(-PROGRAM_DATE_TIME_START + 0.1);
+      expect(minimumDate?.getTime()).toBe(PROGRAM_DATE_TIME_START * 1000);
+      expect(currentDate).toBeInstanceOf(Date);
+      expect(
+        Math.abs(
+          player.getPosition() - (videoElement.currentTime - mediaOffset),
+        ),
+      ).toBeLessThan(0.1);
+
+      player.seek(PROGRAM_DATE_TIME_START + 4);
+      await sleep(1_500);
+
+      const currentPosition = player.getPosition();
+      expect(currentPosition).toBeGreaterThan(PROGRAM_DATE_TIME_START + 3);
+      expect(currentPosition).toBeLessThan(PROGRAM_DATE_TIME_START + 7);
+    },
+  );
+
   for (const testCase of VOD_STARTING_POSITION_CASES) {
     it(testCase.name, { timeout: VOD_TEST_TIMEOUT_MS }, async () => {
       await assertStartupBehavior({
@@ -303,6 +380,37 @@ describe("Generated VoD content", function () {
       });
     });
   }
+
+  it(
+    "interprets `startingPosition` against the PDT-based playlist timeline",
+    { timeout: VOD_TEST_TIMEOUT_MS },
+    async () => {
+      await assertStartupBehavior({
+        player,
+        videoElement,
+        lastPlayerErrorRef: () => lastPlayerError,
+        loadContent() {
+          player.load(getVodScenarioUrl("fmp4-player-api-program-date-time"), {
+            startingPosition: {
+              startType: "FromBeginning",
+              position: 6,
+            },
+          });
+        },
+        expectInitialSeek: true,
+        maxInitialSeekDelayMs: VOD_MAX_INITIAL_SEEK_DELAY_MS,
+        maxLoadedDelayMs: VOD_MAX_LOADED_DELAY_MS,
+        assertLoadedSnapshot(snapshot) {
+          expect(snapshot.position).toBeGreaterThanOrEqual(
+            PROGRAM_DATE_TIME_START + 5.7,
+          );
+          expect(snapshot.position).toBeLessThanOrEqual(
+            PROGRAM_DATE_TIME_START + 6.3,
+          );
+        },
+      });
+    },
+  );
 
   it(
     "defaults to the playlist `EXT-X-START` point when no API override is set",

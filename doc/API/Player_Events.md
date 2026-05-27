@@ -261,6 +261,10 @@ The payload of that event is an object with the following self-explanatory prope
 - `maximumPosition` (`number | undefined`): the new maximum seekable
   position.
 
+- `usesProgramDateTime` (`boolean`): If `true`, the current position values are
+  based on `EXT-X-PROGRAM-DATE-TIME` and can be converted through the
+  [`positionToDate`](./Position_Control/positionToDate.md) method.
+
 - `isLive` (`boolean`): If `true`, the content is a live content.
 
 - `isVod` (`boolean`): If `true`, the content is a VoD content.

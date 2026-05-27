@@ -158,6 +158,11 @@ export interface ContentInfoUpdatePayload {
   minimumPosition: number | undefined;
   /** New maximum currently known seekable position in the current content. */
   maximumPosition: number | undefined;
+  /**
+   * If `true`, position values for the current content are based on
+   * `EXT-X-PROGRAM-DATE-TIME`.
+   */
+  usesProgramDateTime: boolean;
   /** if `true` the content is a still pending live content. */
   isLive: boolean;
   /** if `true` the content is a finished VOD content. */
@@ -409,6 +414,7 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
       playbackObserver: null,
       isRebuffering: false,
       mediaOffset: undefined,
+      usesProgramDateTime: false,
       wantedSpeed: 1,
       minimumPosition: undefined,
       maximumPosition: undefined,
@@ -562,6 +568,40 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
    */
   public getMediaOffset(): number | undefined {
     return this.__contentMetadata__?.mediaOffset ?? undefined;
+  }
+
+  /**
+   * Returns `true` if the current playlist timeline is based on
+   * `EXT-X-PROGRAM-DATE-TIME`.
+   *
+   * When it returns `true`, position values exposed by this API can be
+   * converted to JavaScript `Date`s.
+   *
+   * @returns {boolean}
+   */
+  public usesProgramDateTime(): boolean {
+    return this.__contentMetadata__?.usesProgramDateTime ?? false;
+  }
+
+  /**
+   * Convert a playlist position into a JavaScript `Date` when the current
+   * content timeline is based on `EXT-X-PROGRAM-DATE-TIME`.
+   *
+   * Returns `undefined` if no content is loaded, if the content timeline is not
+   * based on `EXT-X-PROGRAM-DATE-TIME`, or if the given position is not finite.
+   *
+   * @param {number} position
+   * @returns {Date|undefined}
+   */
+  public positionToDate(position: number): Date | undefined {
+    if (
+      this.__contentMetadata__ === null ||
+      !this.__contentMetadata__.usesProgramDateTime ||
+      !Number.isFinite(position)
+    ) {
+      return undefined;
+    }
+    return new Date(position * 1000);
   }
 
   /**
@@ -1218,6 +1258,7 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
             this.trigger("contentInfoUpdate", {
               minimumPosition: this.getMinimumPosition(),
               maximumPosition: this.getMaximumPosition(),
+              usesProgramDateTime: this.usesProgramDateTime(),
               isLive: this.isLive(),
               isVod: this.isVod(),
             });

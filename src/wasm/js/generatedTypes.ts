@@ -277,6 +277,7 @@ export interface HostBindings {
     minimumPosition: number | undefined,
     maximumPosition: number | undefined,
     playlistNature: PlaylistNature,
+    usesProgramDateTime: boolean,
   ): void;
 }
 

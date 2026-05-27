@@ -908,6 +908,10 @@ export function onContentInfoUpdateMessage(
     contentMetadata.playlistType = msg.value.playlistType;
     hasChanged = true;
   }
+  if (msg.value.usesProgramDateTime !== contentMetadata.usesProgramDateTime) {
+    contentMetadata.usesProgramDateTime = msg.value.usesProgramDateTime;
+    hasChanged = true;
+  }
   return hasChanged;
 }
 

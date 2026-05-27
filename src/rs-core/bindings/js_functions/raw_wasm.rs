@@ -251,5 +251,6 @@ unsafe extern "C" {
         has_maximum_position: u32,
         maximum_position: f64,
         playlist_nat: u32,
+        uses_program_date_time: u32,
     );
 }

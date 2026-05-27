@@ -93,6 +93,12 @@ export interface ContentMetadata {
   mediaOffset: number | undefined;
 
   /**
+   * If `true`, the current playlist timeline is based on
+   * `EXT-X-PROGRAM-DATE-TIME`.
+   */
+  usesProgramDateTime: boolean;
+
+  /**
    * The `playbackRate` wanted when not in a rebuffering phase.
    */
   wantedSpeed: number;

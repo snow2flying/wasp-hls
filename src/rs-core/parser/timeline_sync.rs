@@ -7,7 +7,7 @@ use crate::Logger;
 pub(super) struct TimelineReference {
     /// Whether at least one EXT-X-PROGRAM-DATE-TIME tag was found in the playlist.
     /// This greatly simplifies synchronization.
-    has_program_date_time: bool,
+    uses_program_date_time: bool,
     /// Sequence number of the first announced segment in that playlist.
     first_sequence: Option<u32>,
     /// `start`, in seconds, for the first announced segment in that playlist.
@@ -32,7 +32,7 @@ impl TimelineReference {
     /// the intent of later synchronizing another playlist to it.
     pub(super) fn from_segment_list(
         media: &[MediaSegmentInfo],
-        has_program_date_time: bool,
+        uses_program_date_time: bool,
     ) -> Self {
         let middle_pdt_anchor = media
             .iter()
@@ -62,7 +62,7 @@ impl TimelineReference {
         }
 
         Self {
-            has_program_date_time,
+            uses_program_date_time,
             first_sequence: media.first().map(|segment| segment.sequence),
             first_start: media.first().map(MediaSegmentInfo::start),
             last_sequence: media.last().map(|segment| segment.sequence),
@@ -77,6 +77,10 @@ impl TimelineReference {
         self.align_by_discontinuity_sequence(media_segments)
             .or_else(|| self.align_by_program_date_time(media_segments))
             .or_else(|| self.align_by_sequence_number(media_segments))
+    }
+
+    pub(super) fn uses_program_date_time(&self) -> bool {
+        self.uses_program_date_time
     }
 
     // ---- Private methods ----
@@ -145,10 +149,12 @@ impl TimelineReference {
     }
 
     fn align_by_program_date_time(&self, media_segments: &[MediaSegmentInfo]) -> Option<f64> {
-        if !self.has_program_date_time
-            || !media_segments
-                .iter()
-                .any(|seg| seg.program_date_time.is_some())
+        if !self.uses_program_date_time {
+            return None;
+        }
+        if !media_segments
+            .iter()
+            .any(|seg| seg.program_date_time.is_some())
         {
             return None;
         }

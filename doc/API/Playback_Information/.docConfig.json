@@ -23,6 +23,10 @@
     {
       "path": "./isVod.md",
       "displayName": "isVod"
+    },
+    {
+      "path": "./usesProgramDateTime.md",
+      "displayName": "usesProgramDateTime"
     }
   ]
 }

@@ -372,6 +372,7 @@ pub(super) unsafe fn __js_func__update_content_info(
     _has_maximum_position: u32,
     _maximum_position: f64,
     _playlist_nat: u32,
+    _uses_program_date_time: u32,
 ) {
     non_wasm_binding_panic("__js_func__update_content_info")
 }

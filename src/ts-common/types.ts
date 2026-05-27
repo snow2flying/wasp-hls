@@ -405,6 +405,11 @@ export interface ContentInfoUpdateWorkerMessage {
      * The type of the Multivariant Playlist being played: is it live? Vod?
      */
     playlistType: PlaylistNature;
+    /**
+     * If `true`, the current playlist timeline is based on
+     * `EXT-X-PROGRAM-DATE-TIME`.
+     */
+    usesProgramDateTime: boolean;
   };
 }
 

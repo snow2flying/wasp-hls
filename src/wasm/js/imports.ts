@@ -271,11 +271,13 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         hasMax: number,
         max: number,
         playlistNat: number,
+        usesProgramDateTime: number,
       ): void {
         bindings.updateContentInfo(
           hasMin !== 0 ? min : undefined,
           hasMax !== 0 ? max : undefined,
           playlistNat as PlaylistNature,
+          usesProgramDateTime !== 0,
         );
       },
       __js_func__announce_fetched_content(

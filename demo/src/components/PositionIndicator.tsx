@@ -1,5 +1,5 @@
 import * as React from "react";
-import { toMinutes, toHours } from "../utils/time";
+import { toDateTime, toMinutes, toHours } from "../utils/time";
 
 /**
  * Text with the following structure:
@@ -10,9 +10,15 @@ import { toMinutes, toHours } from "../utils/time";
 export default React.memo(function PositionInfos({
   position,
   duration,
+  currentDate,
+  minimumDate,
+  maximumDate,
 }: {
   position: number;
   duration: number;
+  currentDate?: Date | undefined;
+  minimumDate?: Date | undefined;
+  maximumDate?: Date | undefined;
 }) {
   const convertTime = duration >= 60 * 60 ? toHours : toMinutes;
   if (
@@ -25,9 +31,19 @@ export default React.memo(function PositionInfos({
   }
   return (
     <div className="position-info">
-      <span className="current-position">{convertTime(position)}</span>
-      <span className="separator">{" / "}</span>
-      <span className="duration">{convertTime(duration)}</span>
+      <div>
+        <span className="current-position">{convertTime(position)}</span>
+        <span className="separator">{" / "}</span>
+        <span className="duration">{convertTime(duration)}</span>
+      </div>
+      {currentDate === undefined ? null : (
+        <div className="position-date">{toDateTime(currentDate)}</div>
+      )}
+      {minimumDate === undefined || maximumDate === undefined ? null : (
+        <div className="position-window-date">
+          Window: {toDateTime(minimumDate)} {"->"} {toDateTime(maximumDate)}
+        </div>
+      )}
     </div>
   );
 });

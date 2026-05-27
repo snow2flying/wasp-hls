@@ -51,6 +51,7 @@ export default React.memo(function ControlBar({
   const [duration, setDuration] = React.useState(NaN);
   const [bufferGap, setBufferGap] = React.useState(0);
   const [isPaused, setIsPaused] = React.useState(true);
+  const [usesProgramDateTime, setUsesProgramDateTime] = React.useState(false);
   const [isControlBarDisplayed, setIsControlBarDisplayed] =
     React.useState(true);
   const [areControlsDisabled, setAreControlsDisabled] = React.useState(true);
@@ -186,6 +187,7 @@ export default React.memo(function ControlBar({
       setMaximumPosition(Infinity);
       setDuration(NaN);
       setBufferGap(0);
+      setUsesProgramDateTime(false);
     }
 
     function onPositionUpdateInterval() {
@@ -201,6 +203,7 @@ export default React.memo(function ControlBar({
       setMaximumPosition(windowMaxPos ?? maxPos ?? Infinity);
       setDuration(player.getMediaDuration());
       setBufferGap(player.getCurrentBufferGap());
+      setUsesProgramDateTime(player.usesProgramDateTime());
       if (!player.isPaused()) {
         if (minPos !== undefined && minPos > pos + 2) {
           // eslint-disable-next-line no-console
@@ -384,7 +387,13 @@ export default React.memo(function ControlBar({
               onClick={onStopButtonClick}
             />
             {areControlsDisabled || position === undefined ? null : (
-              <PositionIndicator position={position} duration={duration} />
+              <PositionIndicator
+                position={position}
+                duration={duration}
+                currentDate={player.positionToDate(position)}
+                minimumDate={player.positionToDate(minimumPosition)}
+                maximumDate={player.positionToDate(maximumPosition)}
+              />
             )}
             {areControlsDisabled || position === undefined ? null : (
               <span
@@ -393,7 +402,11 @@ export default React.memo(function ControlBar({
                   fontSize: "11px",
                   marginLeft: "10px",
                 }}
-                title={`Seekable window: ${seekableMinimumPosition.toFixed(2)} - ${seekableMaximumPosition.toFixed(2)}`}
+                title={
+                  usesProgramDateTime
+                    ? `Seekable window: ${seekableMinimumPosition.toFixed(2)} - ${seekableMaximumPosition.toFixed(2)} (${player.positionToDate(seekableMinimumPosition)?.toUTCString() ?? "unknown"} -> ${player.positionToDate(seekableMaximumPosition)?.toUTCString() ?? "unknown"})`
+                    : `Seekable window: ${seekableMinimumPosition.toFixed(2)} - ${seekableMaximumPosition.toFixed(2)}`
+                }
               >
                 seekable {seekableMinimumPosition.toFixed(1)} -{" "}
                 {seekableMaximumPosition.toFixed(1)}

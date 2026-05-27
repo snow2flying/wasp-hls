@@ -457,6 +457,14 @@ impl PlaylistStore {
         self.current_estimated_duration()
     }
 
+    /// Returns `true` if the currently selected media playlists use a timeline
+    /// based on `EXT-X-PROGRAM-DATE-TIME`.
+    pub(crate) fn uses_program_date_time(&self) -> bool {
+        self.current_media_playlists()
+            .iter()
+            .any(|(_, playlist)| playlist.uses_program_date_time())
+    }
+
     /// Returns the `id` of the variant currently considered. You can influence the
     /// variant currently selected by e.g. calling the `update_curr_bandwidth` method.
     ///

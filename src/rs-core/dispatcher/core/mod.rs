@@ -556,6 +556,7 @@ impl Dispatcher {
             playlist_store.current_estimated_minimum_position(),
             playlist_store.current_estimated_maximum_position(),
             playlist_store.playlist_type(),
+            playlist_store.uses_program_date_time(),
         );
         sync_media_source_duration(playlist_store);
 
@@ -686,6 +687,7 @@ impl Dispatcher {
             playlist_store.current_estimated_minimum_position(),
             playlist_store.current_estimated_maximum_position(),
             playlist_store.playlist_type(),
+            playlist_store.uses_program_date_time(),
         );
         sync_media_source_duration(playlist_store);
         self.recheck_player_state();

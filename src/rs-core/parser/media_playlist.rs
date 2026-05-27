@@ -116,6 +116,9 @@ pub struct MediaPlaylist {
     external_media_info: Option<ExternalMediaInfo>,
     /// Whether at least one EXT-X-PROGRAM-DATE-TIME tag was found in the playlist.
     pub(super) has_program_date_time: bool,
+    /// Whether this playlist's effective timeline is based on
+    /// `EXT-X-PROGRAM-DATE-TIME`.
+    pub(super) uses_program_date_time: bool,
     // TODO
     // pub server_control: ServerControl,
     // pub part_inf: Option<f64>,
@@ -382,12 +385,14 @@ impl MediaPlaylist {
             independent_segments = indep;
         }
 
+        let mut uses_program_date_time = saw_program_date_time;
         if !saw_program_date_time {
-            if let Some(offset) = infer_live_timeline_offset(
+            if let Some((offset, inherited_program_date_time)) = infer_live_timeline_offset(
                 prev_playlist,
                 timeline_reference,
                 media_segments.as_slice(),
             ) {
+                uses_program_date_time = inherited_program_date_time;
                 for seg in &mut media_segments {
                     seg.time_info.start += offset;
                 }
@@ -430,6 +435,7 @@ impl MediaPlaylist {
             url,
             external_media_info: prev_playlist.and_then(|p| p.external_media_info.clone()),
             has_program_date_time: saw_program_date_time,
+            uses_program_date_time,
             // TODO
             // server_control,
             // part_inf,
@@ -598,6 +604,10 @@ impl MediaPlaylist {
         self.external_media_info.as_ref()
     }
 
+    pub(crate) fn uses_program_date_time(&self) -> bool {
+        self.uses_program_date_time
+    }
+
     pub(crate) fn set_external_media_info(&mut self, media_info: ExternalMediaInfo) {
         self.external_media_info = Some(media_info);
     }
@@ -647,7 +657,7 @@ fn infer_live_timeline_offset(
     prev_playlist: Option<&MediaPlaylist>,
     timeline_reference: Option<&TimelineReference>,
     media_segments: &[MediaSegmentInfo],
-) -> Option<f64> {
+) -> Option<(f64, bool)> {
     if let Some(prev_playlist) = prev_playlist {
         for new_seg in media_segments {
             if let Some(prev_seg) = prev_playlist.segment_list.media.iter().find(|prev_seg| {
@@ -655,7 +665,10 @@ fn infer_live_timeline_offset(
                     && prev_seg.discontinuity_sequence == new_seg.discontinuity_sequence
                     && urls_match_for_reload(&prev_seg.url, &new_seg.url)
             }) {
-                return Some(prev_seg.start() - new_seg.start());
+                return Some((
+                    prev_seg.start() - new_seg.start(),
+                    prev_playlist.uses_program_date_time,
+                ));
             }
         }
 
@@ -667,14 +680,19 @@ fn infer_live_timeline_offset(
                 if prev_last.sequence.wrapping_add(1) == new_first.sequence
                     && prev_last.discontinuity_sequence == new_first.discontinuity_sequence =>
             {
-                return Some(prev_last.end() - new_first.start());
+                return Some((
+                    prev_last.end() - new_first.start(),
+                    prev_playlist.uses_program_date_time,
+                ));
             }
             _ => {}
         }
     }
 
     let reference_playlist = timeline_reference?;
-    reference_playlist.infer_offset_for(media_segments)
+    reference_playlist
+        .infer_offset_for(media_segments)
+        .map(|offset| (offset, reference_playlist.uses_program_date_time()))
 }
 
 #[cfg(test)]
@@ -956,7 +974,7 @@ audio-112.ts
         .unwrap();
         let timeline_reference = TimelineReference::from_segment_list(
             current.segment_list().media(),
-            current.has_program_date_time,
+            current.uses_program_date_time(),
         );
         let selected = MediaPlaylist::create(
             Cursor::new(newly_selected_playlist),
@@ -1012,7 +1030,7 @@ audio-512.ts
         .unwrap();
         let timeline_reference = TimelineReference::from_segment_list(
             current.segment_list().media(),
-            current.has_program_date_time,
+            current.uses_program_date_time(),
         );
         let selected = MediaPlaylist::create(
             Cursor::new(unrelated_playlist),

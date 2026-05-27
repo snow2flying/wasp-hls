@@ -187,6 +187,22 @@ const SCENARIOS = {
       );
     },
   },
+  "fmp4-player-api-program-date-time": {
+    entryPath: "playlist.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath !== "playlist.m3u8") {
+        return null;
+      }
+      return createMediaPlaylistResponse(
+        injectProgramDateTime(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+          "2024-01-02T03:04:05.000Z",
+        ),
+        context,
+      );
+    },
+  },
   "fmp4-direct-media-byterange": {
     entryPath: "playlist.m3u8",
     recipeId: "fmp4-muxed-av",
@@ -576,6 +592,21 @@ function injectExtXStart(playlistText, startTagLine) {
     throw new Error("Unexpected playlist format: missing #EXTM3U header");
   }
   return [lines[0], startTagLine, ...lines.slice(1)].join("\n");
+}
+
+function injectProgramDateTime(playlistText, iso8601DateTime) {
+  const lines = playlistText.split("\n");
+  const extInfIndex = lines.findIndex((line) =>
+    line.trim().startsWith("#EXTINF:"),
+  );
+  if (extInfIndex < 0) {
+    throw new Error("Unexpected playlist format: missing #EXTINF tag");
+  }
+  return [
+    ...lines.slice(0, extInfIndex),
+    `#EXT-X-PROGRAM-DATE-TIME:${iso8601DateTime}`,
+    ...lines.slice(extInfIndex),
+  ].join("\n");
 }
 
 function rewriteMediaPlaylistUrls(playlistText, baseUrl) {

@@ -18,6 +18,7 @@
 - Add `MultivariantPlaylistVariableDefinitionError` and `MediaPlaylistVariableDefinitionError` error codes for when an `#EXT-X-DEFINE` tag or usage is not compliant to the HLS specification respectively on the MultiVariant Playlist or the Media Playlist.
 - Add `SourceBufferEmptyMimeType`, `SourceBufferMediaSourceIsClosed`, `SourceBufferNoMediaSourceAttached` and `SourceBufferQuotaExceededError` error codes on a `WaspSourceBufferCreationError` error type.
 - Add `getSeekableMinimumPosition` and `getSeekableMaximumPosition` methods to expose the currently known seekable bounds in playlist time
+- Add `usesProgramDateTime` and `positionToDate` methods to let applications detect and convert `EXT-X-PROGRAM-DATE-TIME`-based playlist timelines
 - Light handling of QuotaExceededError by removing data from buffers if/when it happens. More advanced handling would be to reduce buffer goal adaptively (not done yet)
 - Add parsing of `#EXT-X-DEFINE` tags
 - Handle `#EXT-X-MEDIA-SEQUENCE` tags and use it both for segment staleness detection and contiguity checks

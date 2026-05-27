@@ -34,6 +34,9 @@ the API.
 If you wish to convert between media time and playlist time (for example if you
 want to exploit HTML properties), you may obtain the offset between the two
 through the [getMediaOffset method](./getMediaOffset.md).
+If you wish to convert that playlist time into a JavaScript `Date` when the
+content timeline is based on `EXT-X-PROGRAM-DATE-TIME`, you may call the
+[positionToDate method](./positionToDate.md).
 
 ## For live contents and other non-VoD contents
 
