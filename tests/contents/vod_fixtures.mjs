@@ -187,6 +187,19 @@ const SCENARIOS = {
       );
     },
   },
+  "fmp4-direct-media-byterange": {
+    entryPath: "playlist.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath !== "playlist.m3u8") {
+        return null;
+      }
+      return {
+        body: await createFmp4ByteRangePlaylist(context),
+        contentType: CONTENT_TYPE_M3U8,
+      };
+    },
+  },
   "fmp4-player-api-ext-x-start": {
     entryPath: "playlist.m3u8",
     recipeId: "fmp4-muxed-av",
@@ -562,6 +575,95 @@ function rewritePlaylistLine(line, baseUrl) {
 
 function toAbsoluteUrl(relativeUrl, baseUrl) {
   return new URL(relativeUrl, baseUrl).href;
+}
+
+async function createFmp4ByteRangePlaylist(context) {
+  const recipeId = "fmp4-muxed-av";
+  const playlistText = await readGeneratedMediaPlaylist(recipeId);
+  const outputDir = getVodRecipeOutputDir(recipeId);
+  if (outputDir === null) {
+    throw new Error(`Unknown VoD recipe: ${recipeId}`);
+  }
+
+  const segmentFileName = "byterange-segments.m4s";
+  const segmentOutputPath = path.join(outputDir, segmentFileName);
+  const playlist = await buildByteRangeMediaPlaylist(
+    playlistText,
+    outputDir,
+    context.baseUrl,
+    segmentFileName,
+  );
+  await fs.promises.writeFile(segmentOutputPath, playlist.segmentData);
+
+  return playlist.text;
+}
+
+async function buildByteRangeMediaPlaylist(
+  playlistText,
+  outputDir,
+  baseUrl,
+  combinedSegmentFileName,
+) {
+  const lines = playlistText.split("\n");
+  const playlistLines = [];
+  let pendingDurationLine = null;
+  const segmentUri = toAbsoluteUrl(combinedSegmentFileName, baseUrl);
+  const segmentDataChunks = [];
+  let currentOffset = 0;
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (trimmedLine.startsWith("#EXTINF:")) {
+      pendingDurationLine = trimmedLine;
+      continue;
+    }
+
+    if (trimmedLine.length === 0) {
+      continue;
+    }
+
+    if (pendingDurationLine !== null && !trimmedLine.startsWith("#")) {
+      const segmentData = await fs.promises.readFile(
+        path.join(outputDir, trimmedLine),
+      );
+      segmentDataChunks.push(segmentData);
+      playlistLines.push(pendingDurationLine);
+      playlistLines.push(
+        `#EXT-X-BYTERANGE:${segmentData.byteLength}@${currentOffset}`,
+      );
+      playlistLines.push(segmentUri);
+      currentOffset += segmentData.byteLength;
+      pendingDurationLine = null;
+      continue;
+    }
+
+    if (trimmedLine.startsWith("#EXT-X-MAP:")) {
+      playlistLines.push(
+        trimmedLine.replace(/URI="([^"]+)"/u, (_fullMatch, uri) => {
+          return `URI="${toAbsoluteUrl(uri, baseUrl)}"`;
+        }),
+      );
+      continue;
+    }
+
+    if (!trimmedLine.startsWith("#")) {
+      playlistLines.push(toAbsoluteUrl(trimmedLine, baseUrl));
+      continue;
+    }
+
+    playlistLines.push(trimmedLine);
+  }
+
+  if (pendingDurationLine !== null) {
+    throw new Error(
+      "Malformed generated playlist: dangling EXTINF without URI",
+    );
+  }
+
+  return {
+    text: playlistLines.join("\n"),
+    segmentData: Buffer.concat(segmentDataChunks),
+  };
 }
 
 function normalizeScenarioRelativePath(relativePath) {

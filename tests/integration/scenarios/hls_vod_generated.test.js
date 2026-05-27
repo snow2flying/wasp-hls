@@ -155,6 +155,29 @@ describe("Generated VoD content", function () {
   );
 
   it(
+    "plays a direct fMP4 media playlist using EXT-X-BYTERANGE",
+    { timeout: VOD_TEST_TIMEOUT_MS },
+    async () => {
+      player.addEventListener("playerStateChange", (state) => {
+        if (state === "Loaded") {
+          player.resume();
+        }
+      });
+
+      player.load(getVodScenarioUrl("fmp4-direct-media-byterange"));
+      await waitForLoadedState(player, videoElement, () => lastPlayerError);
+
+      expect(player.isLive()).toEqual(false);
+      expect(player.isVod()).toEqual(true);
+      expect(player.getMaximumPosition()).toBeGreaterThan(10);
+
+      const startPosition = player.getPosition();
+      await sleep(PLAYBACK_SETTLE_MS);
+      expectPositionToAdvance(player, startPosition);
+    },
+  );
+
+  it(
     "plays a multivariant fMP4 playlist without CODECS",
     { timeout: VOD_TEST_TIMEOUT_MS },
     async () => {
