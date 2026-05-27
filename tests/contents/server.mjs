@@ -8,6 +8,13 @@ import * as path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import * as fs from "fs";
 import urls from "./static/urls.mjs";
+import {
+  ensureVodRecipe,
+  getVodGeneratedRelativeFilePath,
+  getVodRecipeIdFromGeneratedPath,
+  getVodRecipeOutputDir,
+  getVodScenarioResponse,
+} from "./vod_fixtures.mjs";
 
 /** To activate if you're having content packaging issues. */
 const ACTIVATE_PACKAGER_LOGS = false;
@@ -127,6 +134,7 @@ export default function createContentServer({
   port = DEFAULT_CONTENT_SERVER_PORT,
 } = {}) {
   const activeSockets = new Set();
+  const contentServerBaseUrl = "http://127.0.0.1:" + String(port);
   const server = createServer(function (req, res) {
     const requestUrl = new URL(req.url, "http://127.0.0.1");
 
@@ -157,6 +165,22 @@ export default function createContentServer({
 
     if (req.url.startsWith("/live-alt/")) {
       handlePackagedLiveRequest(res, req, "/live-alt/");
+      return;
+    }
+
+    if (req.url.startsWith("/vod/generated/")) {
+      handlePackagedVodRequest(res, req, requestUrl, "/vod/generated/");
+      return;
+    }
+
+    if (req.url.startsWith("/vod/scenario/")) {
+      handleVodScenarioRequest(
+        res,
+        req,
+        requestUrl,
+        "/vod/scenario/",
+        contentServerBaseUrl,
+      );
       return;
     }
 
@@ -401,6 +425,109 @@ function handlePackagedLiveRequest(res, req, basePath) {
     (err) => {
       console.error(
         `Live request failed ${req.url}:`,
+        err instanceof Error ? (err.stack ?? err.message) : err,
+      );
+      res.setHeader("Content-Type", "text/plain");
+      answerWithCORS(
+        res,
+        500,
+        "Error: " + (err instanceof Error ? err.toString() : "Unknown Error"),
+      );
+    },
+  );
+}
+
+function handlePackagedVodRequest(res, req, requestUrl, basePath) {
+  if (req.method.toUpperCase() === "OPTIONS") {
+    answerWithCORS(res, 200);
+    res.end();
+    return;
+  }
+  if (req.method.toUpperCase() !== "GET") {
+    res.setHeader("Content-Type", "text/plain");
+    answerWithCORS(res, 405, "405 Method Not Allowed");
+    return;
+  }
+
+  const relativeUrl = requestUrl.pathname.substring(basePath.length);
+  const recipeId = getVodRecipeIdFromGeneratedPath(relativeUrl);
+  const relativeFilePath = getVodGeneratedRelativeFilePath(relativeUrl);
+  const outputDir = recipeId === null ? null : getVodRecipeOutputDir(recipeId);
+
+  if (recipeId === null || relativeFilePath === null || outputDir === null) {
+    res.setHeader("Content-Type", "text/plain");
+    answerWithCORS(res, 404, "404 Not Found");
+    return;
+  }
+
+  ensureVodRecipe(recipeId).then(
+    async () => {
+      const file = await prepareStaticFile(outputDir, relativeFilePath);
+      if (file === null) {
+        res.setHeader("Content-Type", "text/plain");
+        answerWithCORS(res, 404, "404 Not Found");
+        return;
+      }
+      streamPreparedFile(req, res, file);
+    },
+    (err) => {
+      console.error(
+        `VoD generated request failed ${req.url}:`,
+        err instanceof Error ? (err.stack ?? err.message) : err,
+      );
+      res.setHeader("Content-Type", "text/plain");
+      answerWithCORS(
+        res,
+        500,
+        "Error: " + (err instanceof Error ? err.toString() : "Unknown Error"),
+      );
+    },
+  );
+}
+
+function handleVodScenarioRequest(
+  res,
+  req,
+  requestUrl,
+  basePath,
+  contentServerBaseUrl,
+) {
+  if (req.method.toUpperCase() === "OPTIONS") {
+    answerWithCORS(res, 200);
+    res.end();
+    return;
+  }
+  if (req.method.toUpperCase() !== "GET") {
+    res.setHeader("Content-Type", "text/plain");
+    answerWithCORS(res, 405, "405 Method Not Allowed");
+    return;
+  }
+
+  const relativeUrl = requestUrl.pathname.substring(basePath.length);
+  const slashIndex = relativeUrl.indexOf("/");
+  if (slashIndex <= 0 || slashIndex === relativeUrl.length - 1) {
+    res.setHeader("Content-Type", "text/plain");
+    answerWithCORS(res, 404, "404 Not Found");
+    return;
+  }
+
+  const scenarioId = relativeUrl.substring(0, slashIndex);
+  const scenarioPath = relativeUrl.substring(slashIndex + 1);
+  getVodScenarioResponse(scenarioId, scenarioPath, contentServerBaseUrl).then(
+    (response) => {
+      if (response === null) {
+        res.setHeader("Content-Type", "text/plain");
+        answerWithCORS(res, 404, "404 Not Found");
+        return;
+      }
+      if (typeof response.contentType === "string") {
+        res.setHeader("Content-Type", response.contentType);
+      }
+      answerWithCORS(res, 200, response.body);
+    },
+    (err) => {
+      console.error(
+        `VoD scenario request failed ${req.url}:`,
         err instanceof Error ? (err.stack ?? err.message) : err,
       );
       res.setHeader("Content-Type", "text/plain");
@@ -769,8 +896,76 @@ async function prepareStaticFile(baseDir, url) {
   return null;
 }
 
+function streamPreparedFile(req, res, file) {
+  const mimeType = getMimeTypeForExtension(file.ext);
+  const rangeHeader = req.headers["Range"] || req.headers["range"];
+
+  if (typeof rangeHeader === "string" && rangeHeader.startsWith("bytes=")) {
+    fs.promises
+      .readFile(file.filePath)
+      .then((data) => {
+        const ranges = parseRangeHeader(rangeHeader, data.byteLength);
+        const partialData = data.slice(ranges[0], ranges[1] + 1);
+        res.setHeader(
+          "Content-Range",
+          `bytes ${ranges[0]}-${ranges[1]}/${data.byteLength}`,
+        );
+        if (mimeType !== undefined) {
+          res.setHeader("Content-Type", mimeType);
+        }
+        answerWithCORS(res, 206, partialData);
+      })
+      .catch((error) => {
+        console.error(
+          `Failed to serve ranged request for ${file.filePath}:`,
+          error instanceof Error ? (error.stack ?? error.message) : error,
+        );
+        res.setHeader("Content-Type", "text/plain");
+        answerWithCORS(res, 500, "500 Internal Server Error");
+      });
+    return;
+  }
+
+  res.writeHead(200, {
+    ...(mimeType !== undefined ? { "Content-Type": mimeType } : {}),
+    "Content-Length": file.size,
+    Connection: "close",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "*",
+    "Access-Control-Allow-Credentials": true,
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+  });
+  file.stream.on("error", (err) => {
+    console.error(
+      `Static file stream error ${file.filePath}:`,
+      err instanceof Error ? (err.stack ?? err.message) : err,
+    );
+  });
+  file.stream.pipe(res);
+}
+
+function getMimeTypeForExtension(ext) {
+  switch (ext) {
+    case "m3u8":
+      return "application/vnd.apple.mpegurl";
+    case "mp4":
+      return "video/mp4";
+    case "m4s":
+      return "video/iso.segment";
+    case "ts":
+      return "video/mp2t";
+    case "aac":
+      return "audio/aac";
+    default:
+      return "application/octet-stream";
+  }
+}
+
 // If true, this script is called directly
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   const args = process.argv.slice(2);
   let port;
   for (let argOffset = 0; argOffset < args.length; argOffset++) {

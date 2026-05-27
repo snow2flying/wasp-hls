@@ -1,4 +1,5 @@
 import createContentServer from "./contents/server.mjs";
+import { ensureDefaultVodFixtures } from "./contents/vod_fixtures.mjs";
 
 let contentServer;
 
@@ -13,6 +14,8 @@ export async function setup() {
   }
   started = true;
   contentServer = createContentServer();
+  await contentServer.listeningPromise;
+  await ensureDefaultVodFixtures();
 }
 
 /**

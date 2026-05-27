@@ -9,3 +9,6 @@ by integration tests.
 
 The `static` directory contains static route definitions and metadata served by
 that server.
+
+`vod_fixtures.mjs` defines VoD assets "recipes" that should be generated and
+served at test time.

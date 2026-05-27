@@ -15,6 +15,8 @@ import { pathToFileURL } from "url";
 import { resolve } from "path";
 import { createVitest, startVitest } from "vitest/node";
 import { webdriverio } from "@vitest/browser-webdriverio";
+import getChromeCmd from "./get_chrome_cmd.mjs";
+import getFirefoxCmd from "./get_firefox_cmd.mjs";
 
 /** If not specified, run only this browser. */
 const DEFAULT_BROWSER = "chrome";
@@ -51,6 +53,28 @@ const WDIO_CACHE_DIR = resolve(
   process.cwd(),
   process.env.WASP_HLS_WDIO_CACHE_DIR ?? "tmp/wdio-cache",
 );
+
+const SYSTEM_CHROME_BINARY =
+  process.env.WASP_HLS_CHROME_BINARY ??
+  process.env.CHROME_PATH ??
+  (await getChromeCmd().catch(() => null)) ??
+  undefined;
+
+const SYSTEM_CHROMEDRIVER_BINARY =
+  process.env.WASP_HLS_CHROMEDRIVER_BINARY ??
+  process.env.CHROMEDRIVER_PATH ??
+  undefined;
+
+const SYSTEM_FIREFOX_BINARY =
+  process.env.WASP_HLS_FIREFOX_BINARY ??
+  process.env.FIREFOX_PATH ??
+  (await getFirefoxCmd().catch(() => null)) ??
+  undefined;
+
+const SYSTEM_GECKODRIVER_BINARY =
+  process.env.WASP_HLS_GECKODRIVER_BINARY ??
+  process.env.GECKODRIVER_PATH ??
+  undefined;
 
 /**
  * @param {Object} config - The test configuration object.
@@ -120,7 +144,7 @@ async function runVitestsWithManagedExit({ browser, watch }, testFilters = []) {
 
 /**
  * Generate the configuration associated to a particular browser adapted to
- * RxPlayer tests (headless, autoplay enabled, memory control...).
+ * wasp-hls tests (headless, autoplay enabled, memory control...).
  * @param {string} browser - The browser chosen to run the tests.
  * Can be `"chrome"`, `"firefox"` or `"edge"`.
  * @returns {Object} - The `vitest`'s `browser` config to set to run that
@@ -180,10 +204,22 @@ function getBrowserConfig(browser) {
  * @returns {import("@vitest/browser-webdriverio").WebdriverProviderOptions}
  */
 function getWdioProviderOptions(browser) {
+  const capabilities = buildBrowserCapabilities(browser);
+  if (browser === "chrome" && SYSTEM_CHROMEDRIVER_BINARY != null) {
+    capabilities["wdio:chromedriverOptions"] = {
+      binary: SYSTEM_CHROMEDRIVER_BINARY,
+    };
+  }
+  if (browser === "firefox" && SYSTEM_GECKODRIVER_BINARY != null) {
+    capabilities["wdio:geckodriverOptions"] = {
+      binary: SYSTEM_GECKODRIVER_BINARY,
+    };
+  }
   return {
     cacheDir: WDIO_CACHE_DIR,
     logLevel: process.env.WASP_HLS_WDIO_LOG_LEVEL ?? "warn",
-    capabilities: buildBrowserCapabilities(browser),
+    transformRequest: sanitizeWebdriverRequest,
+    capabilities,
   };
 }
 
@@ -197,6 +233,9 @@ function buildBrowserCapabilities(browser) {
       return {
         browserName: "chrome",
         "goog:chromeOptions": {
+          ...(SYSTEM_CHROME_BINARY != null
+            ? { binary: SYSTEM_CHROME_BINARY }
+            : {}),
           args: [
             "--autoplay-policy=no-user-gesture-required",
             "--enable-precise-memory-info",
@@ -208,6 +247,9 @@ function buildBrowserCapabilities(browser) {
       return {
         browserName: "firefox",
         "moz:firefoxOptions": {
+          ...(SYSTEM_FIREFOX_BINARY != null
+            ? { binary: SYSTEM_FIREFOX_BINARY }
+            : {}),
           prefs: {
             "media.autoplay.default": 0,
             "media.autoplay.enabled.user-gestures-needed": false,
@@ -226,6 +268,22 @@ function buildBrowserCapabilities(browser) {
         },
       };
   }
+}
+
+/**
+ * Temporary workaround for a dependency/runtime incompatibility:
+ * WebdriverIO's WebDriver request layer sets Content-Length manually, and that
+ * breaks session creation with the current undici/Node 26 combination.
+ * Remove once the upstream stack no longer needs this sanitization.
+ * @param {RequestInit} requestOptions
+ * @returns {RequestInit}
+ */
+function sanitizeWebdriverRequest(requestOptions) {
+  if (requestOptions.headers instanceof Headers) {
+    requestOptions.headers.delete("Content-Length");
+    requestOptions.headers.delete("content-length");
+  }
+  return requestOptions;
 }
 
 /**
@@ -251,7 +309,10 @@ function generateTestConfig({ browser }) {
 }
 
 // If true, this script is called directly
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   void main();
 }
 
