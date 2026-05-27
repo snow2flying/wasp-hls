@@ -223,7 +223,7 @@ export interface HostBindings {
     url: string,
     isInit: boolean,
     timeInfo: [number, number] | undefined,
-    mediaType: MediaType,
+    mediaType: MediaType | undefined,
     reason: RequestErrorReason,
     status: number | undefined,
   ): void;

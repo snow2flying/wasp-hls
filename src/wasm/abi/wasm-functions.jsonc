@@ -616,7 +616,7 @@
           { "name": "url", "type": "string" },
           { "name": "isInit", "type": "boolean" },
           { "name": "timeInfo", "type": "[number, number] | undefined" },
-          { "name": "mediaType", "type": "MediaType" },
+          { "name": "mediaType", "type": "MediaType | undefined" },
           { "name": "reason", "type": "RequestErrorReason" },
           { "name": "status", "type": "number | undefined" },
         ],

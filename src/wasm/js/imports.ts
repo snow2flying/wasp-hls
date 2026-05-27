@@ -338,7 +338,7 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
           start === undefined || duration === undefined
             ? undefined
             : [start, duration],
-          mediaType as MediaType,
+          rawOptionalId(mediaType) as MediaType | undefined,
           reason as RequestErrorReason,
           rawOptionalId(status),
         );

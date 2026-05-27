@@ -394,7 +394,7 @@ async function ensureVodRecipeInner(recipe) {
 
   await fs.promises.rm(outputDir, { recursive: true, force: true });
   await fs.promises.mkdir(outputDir, { recursive: true });
-  await runFfmpeg(buildRecipeFfmpegArgs(recipe, outputDir), recipe.id);
+  await runFfmpeg(buildRecipeFfmpegArgs(recipe), recipe.id);
 
   await fs.promises.writeFile(
     metadataPath,
@@ -435,13 +435,10 @@ async function readRecipeMetadata(metadataPath) {
   }
 }
 
-function buildRecipeFfmpegArgs(recipe, outputDir) {
+function buildRecipeFfmpegArgs(recipe) {
   const gop = recipe.frameRate * recipe.segmentDurationSeconds;
-  const outputPlaylistPath = path.join(outputDir, recipe.playlistName);
-  const segmentFilename = path.join(
-    outputDir,
-    `seg-%03d.${recipe.segmentExtension}`,
-  );
+  const outputPlaylistPath = recipe.playlistName;
+  const segmentFilename = `seg-%03d.${recipe.segmentExtension}`;
 
   return [
     "-hide_banner",
@@ -517,7 +514,13 @@ function buildRecipeFfmpegArgs(recipe, outputDir) {
 
 function runFfmpeg(args, recipeId) {
   return new Promise((resolve, reject) => {
+    const outputDir = getVodRecipeOutputDir(recipeId);
+    if (outputDir === null) {
+      reject(new Error(`Unknown VoD recipe: ${recipeId}`));
+      return;
+    }
     const proc = spawn("ffmpeg", args, {
+      cwd: outputDir,
       stdio: ["ignore", "ignore", "pipe"],
     });
     let stderr = "";
