@@ -36,6 +36,7 @@ import {
  * @property {"mpegts"|"fmp4"} mediaFormat   - HLS media output format.
  * @property {"none"|"webvtt"|"ttml"} subtitleFormat - HLS subtitle output format.
  * @property {"atomic"|"direct"} publishStrategy - How GPAC output is exposed publicly.
+ * @property {boolean} emitProgramDateTime - Emit HLS EXT-X-PROGRAM-DATE-TIME tags.
  * @property {boolean} lowLatency            - Enable LL-HLS packaging when supported.
  * @property {string}  [gpacPath]            - Explicit path to the gpac binary.
  * @property {string}  tmpDir                - Directory used to cache the gpac binary.
@@ -270,6 +271,7 @@ function buildGpacArgs(config, ports, outputDir) {
       `:refresh=${config.segmentDuration}` +
       `:tsb=${config.timeshiftBufferDepth}` +
       (config.mediaFormat === "mpegts" ? ":muxtype=ts" : "") +
+      (config.emitProgramDateTime ? ":hlsc" : "") +
       (config.lowLatency ? ":llhls=br" : ""),
   ];
 

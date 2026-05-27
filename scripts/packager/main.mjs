@@ -25,6 +25,7 @@ import {
   DEFAULT_MEDIA_FORMAT,
   DEFAULT_SUBTITLE_FORMAT,
   DEFAULT_PUBLISH_STRATEGY,
+  DEFAULT_PROGRAM_DATE_TIME,
 } from "./constants.mjs";
 import { isPositiveInteger, isValidPort, sanitizeDirPath } from "./utils.mjs";
 import { getMaxNbPortsUsed } from "./ports.mjs";
@@ -163,6 +164,10 @@ for (let i = 0; i < args.length; i++) {
       break;
     }
 
+    case "--program-date-time":
+      configObj.emitProgramDateTime = true;
+      break;
+
     case "--low-latency":
       configObj.lowLatency = true;
       break;
@@ -249,6 +254,10 @@ Options:
   --publish-strategy <strategy>       How GPAC output is exposed publicly.
                                       Accepted values: 'atomic', 'direct'.
                                       Defaults to ${DEFAULT_PUBLISH_STRATEGY}.
+
+  --program-date-time                 Emit HLS program date time tags in
+                                      live media playlists.
+                                      Defaults to ${DEFAULT_PROGRAM_DATE_TIME}.
 
   --no-confirmation                   Never ask for confirmation; validate all prompts.
                                       Intended for automated scripts.

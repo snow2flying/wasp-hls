@@ -83,6 +83,11 @@ export async function showConfigAndConfirm(
   );
   tableRow("Media Format", config.mediaFormat, GREEN);
   tableRow("Subtitle Format", config.subtitleFormat, GREEN);
+  tableRow(
+    "Program Date Time",
+    config.emitProgramDateTime ? "enabled" : "disabled",
+    config.emitProgramDateTime ? GREEN : YELLOW,
+  );
   if (config.subtitleFormat !== "none") {
     tableRow("Text Track Language", TEXT_TRACK_LANGUAGE, GREEN);
     tableRow("Text Cue Label", TEXT_TRACK_LABEL, GREEN);
