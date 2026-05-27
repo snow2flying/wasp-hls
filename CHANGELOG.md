@@ -29,6 +29,7 @@
 - Better handle edge speed settings: negative speeds, non-finite speeds, `NaN` speed
 - Better handling of gap jumping, previous behavior could skip legitimate data
 - `getMinimumPosition` and `getMaximumPosition` now progress linearly between playlist updates when it makes sense, while `EVENT` playlists only do so for the maximum position
+- Don't advertise audio tracks which are not selectable
 
 ### Other
 
