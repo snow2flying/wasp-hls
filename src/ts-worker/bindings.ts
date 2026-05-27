@@ -1623,7 +1623,7 @@ export function announceFetchedContent(
 
 export function announceTrackUpdate(
   mediaType: MediaType,
-  currentAudioTrack: number,
+  currentAudioTrack: number | undefined,
   isAudioTrackSelected: boolean,
 ): void {
   const contentInfo = playerInstance.getContentInfo();
@@ -1636,12 +1636,13 @@ export function announceTrackUpdate(
     value: {
       mediaType,
       contentId: contentInfo.contentId,
-      audioTrack: currentAudioTrack
-        ? {
-            current: currentAudioTrack,
-            isSelected: isAudioTrackSelected,
-          }
-        : undefined,
+      audioTrack:
+        currentAudioTrack !== undefined
+          ? {
+              current: currentAudioTrack,
+              isSelected: isAudioTrackSelected,
+            }
+          : undefined,
     },
   });
 }

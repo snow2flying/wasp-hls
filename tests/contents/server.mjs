@@ -406,6 +406,7 @@ function handlePackagedLiveRequest(res, req, basePath) {
         file.ext === "m3u8"
           ? "application/vnd.apple.mpegurl"
           : "application/octet-stream";
+      const stream = fs.createReadStream(file.filePath);
       res.writeHead(200, {
         "Content-Type": mimeType,
         Connection: "close",
@@ -414,13 +415,13 @@ function handlePackagedLiveRequest(res, req, basePath) {
         "Access-Control-Allow-Credentials": true,
         "Access-Control-Allow-Methods": "GET, OPTIONS",
       });
-      file.stream.on("error", (err) => {
+      stream.on("error", (err) => {
         console.error(
           `Live stream error ${req.url}:`,
           err instanceof Error ? (err.stack ?? err.message) : err,
         );
       });
-      file.stream.pipe(res);
+      stream.pipe(res);
     },
     (err) => {
       console.error(
@@ -854,31 +855,19 @@ async function prepareStaticFile(baseDir, url) {
     return null;
   }
   for (let attempt = 0; attempt < LIVE_FILE_OPEN_RETRY_COUNT; attempt++) {
-    let fileHandle;
     try {
-      fileHandle = await fs.promises.open(filePath, "r");
-      const stats = await fileHandle.stat();
+      const stats = await fs.promises.stat(filePath);
       if (stats.isDirectory()) {
-        await fileHandle.close();
         return null;
       }
       const ext = path.extname(filePath).substring(1).toLowerCase();
-      const stream = fileHandle.createReadStream();
       return {
         ext,
-        stream,
         filePath,
         size: stats.size,
         mtimeMs: stats.mtimeMs,
       };
     } catch (error) {
-      if (fileHandle !== undefined) {
-        try {
-          await fileHandle.close();
-        } catch {
-          // Ignore cleanup failures on transient file races.
-        }
-      }
       if (
         error instanceof Error &&
         "code" in error &&
@@ -926,6 +915,7 @@ function streamPreparedFile(req, res, file) {
     return;
   }
 
+  const stream = fs.createReadStream(file.filePath);
   res.writeHead(200, {
     ...(mimeType !== undefined ? { "Content-Type": mimeType } : {}),
     "Content-Length": file.size,
@@ -935,13 +925,13 @@ function streamPreparedFile(req, res, file) {
     "Access-Control-Allow-Credentials": true,
     "Access-Control-Allow-Methods": "GET, OPTIONS",
   });
-  file.stream.on("error", (err) => {
+  stream.on("error", (err) => {
     console.error(
       `Static file stream error ${file.filePath}:`,
       err instanceof Error ? (err.stack ?? err.message) : err,
     );
   });
-  file.stream.pipe(res);
+  stream.pipe(res);
 }
 
 function getMimeTypeForExtension(ext) {

@@ -31,6 +31,18 @@ use crate::{
 mod startup;
 
 impl Dispatcher {
+    fn announce_current_audio_track(&self) {
+        let Some(pl_store) = self.playlist_store.as_ref() else {
+            return;
+        };
+        let fixed_audio_track = pl_store.fixed_audio_track_id();
+        jsAnnounceTrackUpdate(
+            MediaType::Audio,
+            fixed_audio_track.or_else(|| pl_store.current_audio_track_id()),
+            fixed_audio_track.is_some(),
+        );
+    }
+
     /// Completely stop playback of the current content if one and free all its associated
     /// resources.
     pub(super) fn stop_current_content(&mut self) {
@@ -143,22 +155,34 @@ impl Dispatcher {
 
     /// Set an audio track whose `id` is given in argument.
     pub(super) fn set_audio_track_core(&mut self, track_id: Option<u32>) {
-        if let Some(ref mut pl_store) = self.playlist_store {
+        let update_result = if let Some(ref mut pl_store) = self.playlist_store {
             match pl_store.set_audio_track(track_id) {
-                SetAudioTrackResponse::AudioMediaUpdate => {
-                    self.handle_media_playlist_update(&[MediaType::Audio], true, true)
-                }
+                SetAudioTrackResponse::AudioMediaUpdate => Some((true, None)),
                 SetAudioTrackResponse::VariantUpdate {
                     updates,
                     unlocked_variant,
-                } => {
-                    self.handle_variant_update(updates, true);
-                    if unlocked_variant {
-                        jsAnnounceVariantLockStatusChange(None);
-                    }
-                }
-                _ => {}
+                } => Some((true, Some((updates, unlocked_variant)))),
+                SetAudioTrackResponse::NoUpdate => Some((false, None)),
             }
+        } else {
+            None
+        };
+
+        let Some((should_announce_track, variant_update)) = update_result else {
+            return;
+        };
+
+        if should_announce_track {
+            self.announce_current_audio_track();
+        }
+
+        if let Some((updates, unlocked_variant)) = variant_update {
+            self.handle_variant_update(updates, true);
+            if unlocked_variant {
+                jsAnnounceVariantLockStatusChange(None);
+            }
+        } else if should_announce_track {
+            self.handle_media_playlist_update(&[MediaType::Audio], true, true);
         }
     }
 

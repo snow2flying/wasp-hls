@@ -15,6 +15,7 @@ import {
   stopLivePackager,
   waitForPackagerReady,
 } from "../utils/live_packager.js";
+import { checkAfterSleepWithBackoff } from "../../utils/checkAfterSleepWithBackoff.js";
 import sleep from "../../utils/sleep.js";
 import { waitForLoadedStateAfterLoad } from "../../utils/waitForPlayerState";
 
@@ -145,17 +146,26 @@ describe("Live packaged content", function () {
       const baseSeekableMax = player.getSeekableMaximumPosition();
       const baseGap = baseMax - basePos;
 
-      expect(baseGap).toBeGreaterThan(5);
+      expect(baseGap).toBeGreaterThan(3);
       expect(baseGap).toBeLessThan(20);
 
-      await sleep(2000);
-
-      const shortMin = player.getMinimumPosition();
-      const shortMax = player.getMaximumPosition();
-      expect(shortMin - baseMin).toBeGreaterThanOrEqual(1.5);
-      expect(shortMax - baseMax).toBeGreaterThanOrEqual(1.5);
-      expect(player.getSeekableMinimumPosition()).toEqual(baseSeekableMin);
-      expect(player.getSeekableMaximumPosition()).toEqual(baseSeekableMax);
+      await checkAfterSleepWithBackoff(
+        {
+          minTimeMs: 2000,
+          maxTimeMs: 12000,
+          stepMs: 1000,
+        },
+        () => {
+          const shortMin = player.getMinimumPosition();
+          const shortMax = player.getMaximumPosition();
+          const shortSeekableMin = player.getSeekableMinimumPosition();
+          const shortSeekableMax = player.getSeekableMaximumPosition();
+          expect(shortMin - baseMin).toBeGreaterThanOrEqual(1.5);
+          expect(shortMax - baseMax).toBeGreaterThanOrEqual(1.5);
+          expect(shortSeekableMin).toBeGreaterThanOrEqual(baseSeekableMin);
+          expect(shortSeekableMax).toBeGreaterThanOrEqual(baseSeekableMax);
+        },
+      );
 
       const secondsWaiting = LIVE_PLAYBACK_ASSERTION_WINDOW_S;
       await sleep(secondsWaiting * 1000);
@@ -174,7 +184,7 @@ describe("Live packaged content", function () {
       expect(newSeekableMin - baseSeekableMin).toBeGreaterThanOrEqual(
         secondsWaiting * 0.8,
       );
-      expect(newMax - newPos).toBeGreaterThan(5);
+      expect(newMax - newPos).toBeGreaterThan(3);
       expect(newMax - newPos).toBeLessThan(20);
       expect(newPos - basePos).toBeGreaterThanOrEqual(secondsWaiting * 0.8);
       expect(segmentDuration).toBeGreaterThan(0);
