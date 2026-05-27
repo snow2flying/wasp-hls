@@ -203,6 +203,22 @@ const SCENARIOS = {
       );
     },
   },
+  "fmp4-player-api-ext-x-start-imprecise": {
+    entryPath: "playlist.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath !== "playlist.m3u8") {
+        return null;
+      }
+      return createMediaPlaylistResponse(
+        injectExtXStart(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+          "#EXT-X-START:TIME-OFFSET=5,PRECISE=NO",
+        ),
+        context,
+      );
+    },
+  },
   "fmp4-alt-audio": {
     entryPath: "master.m3u8",
     recipeId: "fmp4-video-only",

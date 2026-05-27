@@ -304,6 +304,30 @@ describe("Generated VoD content", function () {
   );
 
   it(
+    "snaps `EXT-X-START` to the containing segment start when `PRECISE=NO`",
+    { timeout: VOD_TEST_TIMEOUT_MS },
+    async () => {
+      await assertStartupBehavior({
+        player,
+        videoElement,
+        lastPlayerErrorRef: () => lastPlayerError,
+        loadContent() {
+          player.load(
+            getVodScenarioUrl("fmp4-player-api-ext-x-start-imprecise"),
+          );
+        },
+        expectInitialSeek: true,
+        maxInitialSeekDelayMs: VOD_MAX_INITIAL_SEEK_DELAY_MS,
+        maxLoadedDelayMs: VOD_MAX_LOADED_DELAY_MS,
+        assertLoadedSnapshot(snapshot) {
+          expect(snapshot.position).toBeGreaterThanOrEqual(3.7);
+          expect(snapshot.position).toBeLessThanOrEqual(4.3);
+        },
+      });
+    },
+  );
+
+  it(
     "exposes alternate audio tracks through the player API",
     { timeout: VOD_TEST_TIMEOUT_MS },
     async () => {
