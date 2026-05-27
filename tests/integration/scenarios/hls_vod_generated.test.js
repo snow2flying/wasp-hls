@@ -14,11 +14,63 @@ import {
   waitForLoadedState,
   waitForPlayerEvent,
 } from "../utils/player_test_tools.js";
+import { assertStartupBehavior } from "../utils/startup_test_tools.js";
 import { getVodScenarioUrl } from "../utils/vod_scenarios.js";
 import sleep from "../../utils/sleep.js";
 
 const VOD_TEST_TIMEOUT_MS = 60_000;
 const PLAYBACK_SETTLE_MS = 2_000;
+const VOD_START_POSITION_TOLERANCE_S = 0.35;
+const VOD_MAX_INITIAL_SEEK_DELAY_MS = 4_000;
+const VOD_MAX_LOADED_DELAY_MS = 8_000;
+
+const VOD_STARTING_POSITION_CASES = [
+  {
+    name: "defaults to the beginning without `startingPosition`",
+    options: undefined,
+    expectedPosition: 0,
+    expectInitialSeek: false,
+  },
+  {
+    name: "honors numeric absolute `startingPosition`",
+    options: { startingPosition: 4 },
+    expectedPosition: 4,
+    expectInitialSeek: true,
+  },
+  {
+    name: "honors object absolute `startingPosition`",
+    options: {
+      startingPosition: {
+        startType: "Absolute",
+        position: 6,
+      },
+    },
+    expectedPosition: 6,
+    expectInitialSeek: true,
+  },
+  {
+    name: "honors `FromBeginning` `startingPosition`",
+    options: {
+      startingPosition: {
+        startType: "FromBeginning",
+        position: 3,
+      },
+    },
+    expectedPosition: 3,
+    expectInitialSeek: true,
+  },
+  {
+    name: "honors `FromEnd` `startingPosition`",
+    options: {
+      startingPosition: {
+        startType: "FromEnd",
+        position: 5,
+      },
+    },
+    expectedPosition: 7,
+    expectInitialSeek: true,
+  },
+];
 
 function expectPositionToAdvance(player, startPosition) {
   const newPosition = player.getPosition();
@@ -200,6 +252,54 @@ describe("Generated VoD content", function () {
           (seekableMaximumAfterSeek ?? 0) - (seekableMaximumPosition ?? 0),
         ),
       ).toBeLessThan(0.3);
+    },
+  );
+
+  for (const testCase of VOD_STARTING_POSITION_CASES) {
+    it(testCase.name, { timeout: VOD_TEST_TIMEOUT_MS }, async () => {
+      await assertStartupBehavior({
+        player,
+        videoElement,
+        lastPlayerErrorRef: () => lastPlayerError,
+        loadContent() {
+          player.load(getVodScenarioUrl("fmp4-player-api"), testCase.options);
+        },
+        expectInitialSeek: testCase.expectInitialSeek,
+        maxInitialSeekDelayMs: VOD_MAX_INITIAL_SEEK_DELAY_MS,
+        maxLoadedDelayMs: VOD_MAX_LOADED_DELAY_MS,
+        assertLoadedSnapshot(snapshot) {
+          expect(snapshot.playerState).toEqual("Loaded");
+          expect(snapshot.playerError).toBeNull();
+          expect(snapshot.position).toBeGreaterThanOrEqual(
+            testCase.expectedPosition - VOD_START_POSITION_TOLERANCE_S,
+          );
+          expect(snapshot.position).toBeLessThanOrEqual(
+            testCase.expectedPosition + VOD_START_POSITION_TOLERANCE_S,
+          );
+        },
+      });
+    });
+  }
+
+  it(
+    "defaults to the playlist `EXT-X-START` point when no API override is set",
+    { timeout: VOD_TEST_TIMEOUT_MS },
+    async () => {
+      await assertStartupBehavior({
+        player,
+        videoElement,
+        lastPlayerErrorRef: () => lastPlayerError,
+        loadContent() {
+          player.load(getVodScenarioUrl("fmp4-player-api-ext-x-start"));
+        },
+        expectInitialSeek: true,
+        maxInitialSeekDelayMs: VOD_MAX_INITIAL_SEEK_DELAY_MS,
+        maxLoadedDelayMs: VOD_MAX_LOADED_DELAY_MS,
+        assertLoadedSnapshot(snapshot) {
+          expect(snapshot.position).toBeGreaterThanOrEqual(5.7);
+          expect(snapshot.position).toBeLessThanOrEqual(6.3);
+        },
+      });
     },
   );
 

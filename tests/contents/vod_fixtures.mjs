@@ -187,6 +187,22 @@ const SCENARIOS = {
       );
     },
   },
+  "fmp4-player-api-ext-x-start": {
+    entryPath: "playlist.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath !== "playlist.m3u8") {
+        return null;
+      }
+      return createMediaPlaylistResponse(
+        injectExtXStart(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+          "#EXT-X-START:TIME-OFFSET=6,PRECISE=YES",
+        ),
+        context,
+      );
+    },
+  },
   "fmp4-alt-audio": {
     entryPath: "master.m3u8",
     recipeId: "fmp4-video-only",
@@ -495,6 +511,14 @@ function createMediaPlaylistResponse(playlistText, context) {
     body: rewriteMediaPlaylistUrls(playlistText, context.baseUrl),
     contentType: CONTENT_TYPE_M3U8,
   };
+}
+
+function injectExtXStart(playlistText, startTagLine) {
+  const lines = playlistText.split("\n");
+  if (lines[0]?.trim() !== "#EXTM3U") {
+    throw new Error("Unexpected playlist format: missing #EXTM3U header");
+  }
+  return [lines[0], startTagLine, ...lines.slice(1)].join("\n");
 }
 
 function rewriteMediaPlaylistUrls(playlistText, baseUrl) {

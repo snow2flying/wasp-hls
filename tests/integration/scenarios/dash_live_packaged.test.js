@@ -18,6 +18,7 @@ import {
 import { checkAfterSleepWithBackoff } from "../../utils/checkAfterSleepWithBackoff.js";
 import sleep from "../../utils/sleep.js";
 import { waitForLoadedStateAfterLoad } from "../../utils/waitForPlayerState";
+import { assertStartupBehavior } from "../utils/startup_test_tools.js";
 
 const LIVE_PACKAGER_PUBLISH_STRATEGY =
   globalThis.__WASP_HLS_TEST_PUBLISH_STRATEGY__ === "direct" ||
@@ -28,6 +29,92 @@ const LIVE_PACKAGER_PUBLISH_STRATEGY =
 const PLAYER_LOAD_TIMEOUT_MS = 90_000;
 const LIVE_PLAYBACK_ASSERTION_WINDOW_S = 100;
 const LIVE_PLAYBACK_TEST_TIMEOUT_MS = 240_000;
+const LIVE_MAX_INITIAL_SEEK_DELAY_MS = 5_000;
+const LIVE_MAX_LOADED_DELAY_MS = 12_000;
+const LIVE_POSITION_TOLERANCE_S = 2.5;
+
+const LIVE_STARTING_POSITION_CASES = [
+  {
+    name: "defaults to a safe distance from the live edge without `startingPosition`",
+    options: undefined,
+    expectInitialSeek: true,
+    assertLoadedSnapshot(snapshot, _timings, context) {
+      const gap = snapshot.maximumPosition - snapshot.position;
+      expect(gap).toBeGreaterThanOrEqual(context.segmentDuration * 3 - 0.5);
+      expect(gap).toBeLessThanOrEqual(context.segmentDuration * 4 + 1);
+    },
+  },
+  {
+    name: "honors numeric absolute `startingPosition` on live",
+    options: { startingPosition: 6 },
+    expectInitialSeek: true,
+    assertLoadedSnapshot(snapshot) {
+      expect(snapshot.position).toBeGreaterThanOrEqual(
+        6 - LIVE_POSITION_TOLERANCE_S,
+      );
+      expect(snapshot.position).toBeLessThanOrEqual(
+        6 + LIVE_POSITION_TOLERANCE_S,
+      );
+    },
+  },
+  {
+    name: "honors object absolute `startingPosition` on live",
+    options: {
+      startingPosition: {
+        startType: "Absolute",
+        position: 8,
+      },
+    },
+    expectInitialSeek: true,
+    assertLoadedSnapshot(snapshot) {
+      expect(snapshot.position).toBeGreaterThanOrEqual(
+        8 - LIVE_POSITION_TOLERANCE_S,
+      );
+      expect(snapshot.position).toBeLessThanOrEqual(
+        8 + LIVE_POSITION_TOLERANCE_S,
+      );
+    },
+  },
+  {
+    name: "honors `FromBeginning` `startingPosition` on live",
+    options: {
+      startingPosition: {
+        startType: "FromBeginning",
+        position: 4,
+      },
+    },
+    expectInitialSeek: true,
+    assertLoadedSnapshot(snapshot) {
+      expect(snapshot.position).toBeGreaterThanOrEqual(
+        4 - LIVE_POSITION_TOLERANCE_S,
+      );
+      expect(snapshot.position).toBeLessThanOrEqual(
+        4 + LIVE_POSITION_TOLERANCE_S,
+      );
+    },
+  },
+  {
+    name: "honors `FromEnd` `startingPosition` on live",
+    options: {
+      startingPosition: {
+        startType: "FromEnd",
+        position: 8,
+      },
+    },
+    expectInitialSeek: true,
+    assertLoadedSnapshot(snapshot, _timings, context) {
+      const gap = snapshot.maximumPosition - snapshot.position;
+      expect(gap).toBeGreaterThanOrEqual(8 - LIVE_POSITION_TOLERANCE_S);
+      expect(gap).toBeLessThanOrEqual(8 + LIVE_POSITION_TOLERANCE_S);
+      expect(snapshot.position).toBeGreaterThanOrEqual(
+        snapshot.minimumPosition,
+      );
+      expect(snapshot.position).toBeLessThanOrEqual(
+        context.timeShiftBufferDepth,
+      );
+    },
+  },
+];
 
 function getPlayerStateSnapshot(player, videoElement, lastPlayerError) {
   return {
@@ -191,4 +278,31 @@ describe("Live packaged content", function () {
       expect(timeShiftBufferDepth).toBeGreaterThan(0);
     },
   );
+
+  for (const testCase of LIVE_STARTING_POSITION_CASES) {
+    it(testCase.name, { timeout: LIVE_PLAYBACK_TEST_TIMEOUT_MS }, async () => {
+      await assertStartupBehavior({
+        player,
+        videoElement,
+        lastPlayerErrorRef: () => lastPlayerError,
+        loadContent() {
+          player.load(playlistUrl, testCase.options);
+        },
+        expectInitialSeek: testCase.expectInitialSeek,
+        maxInitialSeekDelayMs: LIVE_MAX_INITIAL_SEEK_DELAY_MS,
+        maxLoadedDelayMs: LIVE_MAX_LOADED_DELAY_MS,
+        assertLoadedSnapshot(snapshot, timings) {
+          expect(snapshot.playerState).toEqual("Loaded");
+          expect(snapshot.playerError).toBeNull();
+          expect(snapshot.maximumPosition).toBeGreaterThan(
+            snapshot.minimumPosition,
+          );
+          testCase.assertLoadedSnapshot(snapshot, timings, {
+            segmentDuration,
+            timeShiftBufferDepth,
+          });
+        },
+      });
+    });
+  }
 });
