@@ -52,16 +52,14 @@ const LIVE_FILE_OPEN_RETRY_COUNT = 20;
 const LIVE_FILE_OPEN_RETRY_DELAY_MS = 25;
 
 function attachPackagerLogDrain(proc) {
-  proc.stdout?.on("data", (data) => {
-    if (ACTIVATE_PACKAGER_LOGS) {
+  if (ACTIVATE_PACKAGER_LOGS) {
+    proc.stdout?.on("data", (data) => {
       console.log("Content packaging script stdout:", data.toString());
-    }
-  });
-  proc.stderr?.on("data", (data) => {
-    if (ACTIVATE_PACKAGER_LOGS) {
+    });
+    proc.stderr?.on("data", (data) => {
       console.error("Content packaging script stderr:", data.toString());
-    }
-  });
+    });
+  }
 }
 
 function sleep(ms) {
