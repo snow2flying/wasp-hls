@@ -26,7 +26,7 @@ const DEFAULT_BROWSER = "chrome";
  * through WebdriverIO, which is counted against Vitest's browser connect
  * timeout. Use a higher value to avoid timing out on slower connections.
  */
-const BROWSER_CONNECT_TIMEOUT = 5 * 60 * 1000;
+const BROWSER_CONNECT_TIMEOUT = 15 * 60 * 1000;
 
 /** Paths were integration tests are defined. */
 const INTEGRATION_TEST_FILES = [
