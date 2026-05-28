@@ -45,9 +45,8 @@ const DEFAULT_CONTENT_SERVER_PORT = 3000;
 
 /** Global variable to track the "content packaging" process */
 let packagingProcessInfo = null;
-// Windows publication swaps can briefly leave the public pathname missing.
-// Keep the live server tolerant enough that slow CI machines do not surface
-// that transient gap as a fake 404.
+// Slow Windows CI machines can briefly make newly written live files
+// unavailable. Retry opening them a few times before surfacing a 404.
 const LIVE_FILE_OPEN_RETRY_COUNT = 20;
 const LIVE_FILE_OPEN_RETRY_DELAY_MS = 25;
 
@@ -226,7 +225,6 @@ export default function createContentServer({
                 playlistPath: packagingProcessInfo.playlistPath,
                 timeShiftBufferDepth: packagingProcessInfo.timeShiftBufferDepth,
                 segmentDuration: packagingProcessInfo.segmentDuration,
-                publishStrategy: packagingProcessInfo.publishStrategy,
               },
             };
       answerWithCORS(res, 200, JSON.stringify(jsonResponse));
@@ -557,15 +555,6 @@ async function handleStartPackager(res, requestUrl) {
       "packager",
       "main.mjs",
     );
-    const publishStrategyFromRequest =
-      requestUrl.searchParams.get("publishStrategy");
-    const publishStrategy =
-      publishStrategyFromRequest === "atomic" ||
-      publishStrategyFromRequest === "direct"
-        ? publishStrategyFromRequest
-        : process.env.WASP_HLS_PACKAGER_PUBLISH_STRATEGY === "direct"
-          ? "direct"
-          : "atomic";
     const proc = spawn(
       process.execPath,
       [
@@ -579,8 +568,6 @@ async function handleStartPackager(res, requestUrl) {
         "35951",
         "--output-dir",
         DEFAULT_PACKAGED_LIVE_OS_PATH,
-        "--publish-strategy",
-        publishStrategy,
       ],
       {
         stdio: ["ignore", "pipe", "pipe"], // Don't inherit stdio, capture output
@@ -593,7 +580,6 @@ async function handleStartPackager(res, requestUrl) {
       timeShiftBufferDepth: 40,
       segmentDuration: 2,
       playlistPath: "/live/master.m3u8",
-      publishStrategy,
     };
     attachPackagerLogDrain(packagingProcessInfo.process);
 
@@ -617,7 +603,6 @@ async function handleStartPackager(res, requestUrl) {
           playlistPath: packagingProcessInfo.playlistPath,
           timeShiftBufferDepth: packagingProcessInfo.timeShiftBufferDepth,
           segmentDuration: packagingProcessInfo.segmentDuration,
-          publishStrategy: packagingProcessInfo.publishStrategy,
         },
       }),
     );

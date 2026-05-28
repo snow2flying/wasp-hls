@@ -4,25 +4,12 @@ import { spawn } from "child_process";
 import { mkdirSync } from "fs";
 import { resolve } from "path";
 import launchStaticServer from "../launch_static_server.mjs";
-import {
-  commandExists,
-  outputDirHasMediaFiles,
-  cleanupMediaFiles,
-} from "./utils.mjs";
+import { commandExists, outputDirHasMediaFiles, cleanupMediaFiles } from "./utils.mjs";
 import { checkPortRange, buildPortMap } from "./ports.mjs";
 import { resolveGpacBinary } from "./gpac_packager.mjs";
 import { buildFfmpegArgs, spawnFfmpeg } from "./ffmpeg.mjs";
 import { showConfigAndConfirm, askConfirmation } from "./ui.mjs";
-import {
-  setPackagerProc,
-  setFfmpegProc,
-  createChildExitPromise,
-} from "./cleanup.mjs";
-import {
-  cleanupGpacWorkDir,
-  getGpacWorkDir,
-  startLiveOutputPublisher,
-} from "./publisher.mjs";
+import { setPackagerProc, setFfmpegProc, createChildExitPromise } from "./cleanup.mjs";
 
 /**
  * @typedef {object} PackageConfig
@@ -35,7 +22,6 @@ import {
  * @property {number}  timeshiftBufferDepth  - DVR window depth in seconds.
  * @property {"mpegts"|"fmp4"} mediaFormat   - HLS media output format.
  * @property {"none"|"webvtt"|"ttml"} subtitleFormat - HLS subtitle output format.
- * @property {"atomic"|"direct"} publishStrategy - How GPAC output is exposed publicly.
  * @property {boolean} emitProgramDateTime - Emit HLS EXT-X-PROGRAM-DATE-TIME tags.
  * @property {boolean} serve                 - Start a local HTTP static server.
  * @property {number} serveHttpPort         - HTTP port used by the static server.
@@ -84,18 +70,7 @@ export async function packageLiveContent(config) {
   console.log("Starting...");
   console.log("Cleaning up any existing media files before starting...");
   cleanupMediaFiles(config.outputDir);
-  cleanupGpacWorkDir(config.outputDir);
   ensureOutputDir(config);
-  const useAtomicPublisher = config.publishStrategy !== "direct";
-  const gpacOutputDir = useAtomicPublisher
-    ? getGpacWorkDir(config.outputDir)
-    : config.outputDir;
-  const publisher = useAtomicPublisher
-    ? startLiveOutputPublisher({
-        sourceDir: gpacOutputDir,
-        targetDir: config.outputDir,
-      })
-    : { stop() {} };
   const staticServer = config.serve
     ? launchStaticServer(config.outputDir, {
         httpPort: config.serveHttpPort,
@@ -103,14 +78,11 @@ export async function packageLiveContent(config) {
         verbose: true,
       })
     : null;
-  console.log(
-    `Publishing strategy: ${useAtomicPublisher ? "atomic publisher" : "direct GPAC output"}`,
-  );
   if (staticServer !== null) {
     await staticServer.listeningPromise;
   }
 
-  const gpacArgs = buildGpacArgs(config, ports, gpacOutputDir);
+  const gpacArgs = buildGpacArgs(config, ports, config.outputDir);
 
   console.log(`Starting GPAC with command: ${gpacCmd}`);
   const gpac = spawn(gpacCmd, gpacArgs, { stdio: "inherit" });
@@ -136,7 +108,6 @@ export async function packageLiveContent(config) {
     await Promise.race([ffmpegExited, gpacExited]);
   } finally {
     staticServer?.close();
-    publisher.stop();
   }
 }
 

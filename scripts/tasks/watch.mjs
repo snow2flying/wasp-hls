@@ -113,11 +113,11 @@ export async function watchDemo(root, { release }) {
         process.off("SIGINT", closeAll);
         process.off("SIGTERM", closeAll);
         watchTree.close();
-      if (signal === "SIGTERM" || signal === "SIGINT" || code === 0) {
-        resolve();
-      } else {
-        reject(
-          new Error(`esbuild watch exited with ${signal ?? `code ${code}`}.`),
+        if (signal === "SIGTERM" || signal === "SIGINT" || code === 0) {
+          resolve();
+        } else {
+          reject(
+            new Error(`esbuild watch exited with ${signal ?? `code ${code}`}.`),
           );
         }
       });

@@ -245,13 +245,13 @@ function readAndStripWasm(readStream, writeStream) {
       "data",
       /** @param {string | Buffer} chunk */
       (chunk) => {
-      const chunkBuffer =
-        typeof chunk === "string" ? Buffer.from(chunk) : chunk;
-      const buff =
-        prevBuffered === null
-          ? toArrayBuffer(chunkBuffer)
-          : concatArrayBuffers(prevBuffered, toArrayBuffer(chunkBuffer));
-      onNext(buff);
+        const chunkBuffer =
+          typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+        const buff =
+          prevBuffered === null
+            ? toArrayBuffer(chunkBuffer)
+            : concatArrayBuffers(prevBuffered, toArrayBuffer(chunkBuffer));
+        onNext(buff);
       },
     );
 

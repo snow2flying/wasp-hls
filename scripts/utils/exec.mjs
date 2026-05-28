@@ -17,11 +17,11 @@ export function exec(commandName, args, options = {}) {
         stdio: options.stdio ?? "inherit",
       });
       child.on("error", reject);
-    child.on("exit", (code, signal) => {
-      if (signal != null) {
-        reject(new Error(`${commandName} exited with signal ${signal}.`));
-      } else if (code !== 0) {
-        reject(new Error(`${commandName} exited with code ${code}.`));
+      child.on("exit", (code, signal) => {
+        if (signal != null) {
+          reject(new Error(`${commandName} exited with signal ${signal}.`));
+        } else if (code !== 0) {
+          reject(new Error(`${commandName} exited with code ${code}.`));
         } else {
           resolve();
         }

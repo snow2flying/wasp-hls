@@ -8,12 +8,6 @@ import {
   waitForPackagerReady,
 } from "./live_packager.js";
 
-const LIVE_PACKAGER_PUBLISH_STRATEGY =
-  globalThis.__WASP_HLS_TEST_PUBLISH_STRATEGY__ === "direct" ||
-  globalThis.__WASP_HLS_TEST_PUBLISH_STRATEGY__ === "atomic"
-    ? globalThis.__WASP_HLS_TEST_PUBLISH_STRATEGY__
-    : "atomic";
-
 /**
  * Registers standard beforeAll/afterAll/beforeEach/afterEach hooks for tests
  * and returns a context object whose properties are kept up-to-date by those
@@ -37,7 +31,7 @@ export default function setupPlayer(
     async () => {
       document.body.appendChild(ctx.videoElement);
       if (packageLiveContent) {
-        await startLivePackager(LIVE_PACKAGER_PUBLISH_STRATEGY);
+        await startLivePackager();
         const readyInfos = await waitForPackagerReady();
         ctx.liveInfo = { ...readyInfos };
       }

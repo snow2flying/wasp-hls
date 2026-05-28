@@ -134,12 +134,9 @@ async function waitForStableLiveOutput(playlistUrl) {
   throw new Error("Live packager output did not become fetchable");
 }
 
-export async function startLivePackager(publishStrategy) {
+export async function startLivePackager() {
   await consumeFetchResponse(
-    fetch(
-      `${getStartPackagerUrl()}?enableTextTrack=1&publishStrategy=${publishStrategy}`,
-      { method: "POST" },
-    ),
+    fetch(`${getStartPackagerUrl()}?enableTextTrack=1`, { method: "POST" }),
   );
 }
 

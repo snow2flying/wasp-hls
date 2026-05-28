@@ -24,7 +24,6 @@ import {
   DEFAULT_BASE_PORT,
   DEFAULT_MEDIA_FORMAT,
   DEFAULT_SUBTITLE_FORMAT,
-  DEFAULT_PUBLISH_STRATEGY,
   DEFAULT_PROGRAM_DATE_TIME,
   DEFAULT_SERVE_HTTP_PORT,
 } from "./constants.mjs";
@@ -155,17 +154,6 @@ for (let i = 0; i < args.length; i++) {
       break;
     }
 
-    case "--publish-strategy": {
-      const { value, nextIndex } = requireNextArg(arg, i);
-      if (value !== "atomic" && value !== "direct") {
-        panic('--publish-strategy must be either "atomic" or "direct".');
-      } else {
-        configObj.publishStrategy = value;
-      }
-      i = nextIndex;
-      break;
-    }
-
     case "--program-date-time":
       configObj.emitProgramDateTime = true;
       break;
@@ -266,10 +254,6 @@ Options:
                                       Defaults to ${DEFAULT_SUBTITLE_FORMAT}.
                                       The current GPAC live path only supports
                                       'none'.
-
-  --publish-strategy <strategy>       How GPAC output is exposed publicly.
-                                      Accepted values: 'atomic', 'direct'.
-                                      Defaults to ${DEFAULT_PUBLISH_STRATEGY}.
 
   --program-date-time                 Emit HLS program date time tags in
                                       live media playlists.
