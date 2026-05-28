@@ -90,10 +90,12 @@ export async function testIntegration(root, { browser, filters, watch }) {
 }
 
 /**
+ * @param {string} root
  * @param {string} testsDirectory
  * @returns {Promise<string[]>}
  */
 async function collectNodeTestFiles(root, testsDirectory) {
+  /** @type {string[]} */
   const discoveredFiles = [];
   await walkTestsDirectory(root, testsDirectory, discoveredFiles);
   return discoveredFiles.sort();
@@ -114,6 +116,7 @@ function selectTests(files, filters) {
 }
 
 /**
+ * @param {string} root
  * @param {string} directory
  * @param {string[]} output
  * @returns {Promise<void>}

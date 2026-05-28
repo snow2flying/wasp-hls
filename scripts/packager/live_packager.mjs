@@ -196,7 +196,7 @@ async function checkIfOutputContainsMediaFiles(outputDir, noConfirm) {
  * @param {string} outputDir
  * @returns {string[]}
  */
-function buildGpacArgs(config, ports, outputDir) {
+export function buildGpacArgs(config, ports, outputDir) {
   const out = outputDir;
   const inputs = [
     {

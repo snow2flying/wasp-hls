@@ -11,6 +11,9 @@ import { fileURLToPath } from "node:url";
 import prettier from "prettier";
 import readWasmAbiFunctionsManifest from "./utils/parse_wasm-functions_file.mjs";
 
+/** @typedef {import("./utils/parse_wasm-functions_file.mjs").AbiArg} AbiArg */
+/** @typedef {import("./utils/parse_wasm-functions_file.mjs").AbiFunctionManifestEntry} AbiFunctionManifestEntry */
+
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`Usage: node ./scripts/generate_wasm_abi_bindings.mjs
 
@@ -66,6 +69,10 @@ await writeFile(
   }),
 );
 
+/**
+ * @param {AbiFunctionManifestEntry[]} functions
+ * @returns {string}
+ */
 function renderRustExterns(functions) {
   const aliasImports = collectRustAliases(functions);
   const blocks = [
@@ -91,6 +98,10 @@ function renderRustExterns(functions) {
   return `${blocks.join("\n").trimEnd()}\n`;
 }
 
+/**
+ * @param {AbiFunctionManifestEntry[]} functions
+ * @returns {string}
+ */
 function renderRustHostStubs(functions) {
   const aliasImports = collectRustAliases(functions);
   const blocks = [
@@ -120,6 +131,11 @@ function renderRustHostStubs(functions) {
   return `${blocks.join("\n").trimEnd()}\n`;
 }
 
+/**
+ * @param {AbiFunctionManifestEntry[]} importsList
+ * @param {AbiFunctionManifestEntry[]} exportsList
+ * @returns {string}
+ */
 function renderTsInterfaces(importsList, exportsList) {
   const enumImports = collectTsImports(importsList, exportsList);
   const helperImports = collectTsHelperImports(importsList);
@@ -161,10 +177,19 @@ function renderTsInterfaces(importsList, exportsList) {
   return `${blocks.join("\n").trimEnd()}\n`;
 }
 
+/**
+ * @param {string} type
+ * @returns {string}
+ */
 function renderRustReturnType(type) {
   return type === "void" ? "" : ` -> ${type}`;
 }
 
+/**
+ * @param {AbiFunctionManifestEntry} fn
+ * @param {"extern" | "host"} mode
+ * @returns {string[]}
+ */
 function renderRustSignature(fn, mode) {
   const args =
     mode === "host"
@@ -190,6 +215,11 @@ function renderRustSignature(fn, mode) {
   return lines;
 }
 
+/**
+ * @param {string[]} doc
+ * @param {string} [indent]
+ * @returns {string[]}
+ */
 function renderRustDoc(doc, indent = "") {
   if (doc.length === 0) {
     return [];
@@ -199,6 +229,11 @@ function renderRustDoc(doc, indent = "") {
   );
 }
 
+/**
+ * @param {string[]} doc
+ * @param {string} [indent]
+ * @returns {string[]}
+ */
 function renderTsDoc(doc, indent = "") {
   if (doc.length === 0) {
     return [];
@@ -211,10 +246,18 @@ function renderTsDoc(doc, indent = "") {
   return out;
 }
 
+/**
+ * @param {AbiArg[]} args
+ * @returns {string}
+ */
 function renderTsArgs(args) {
   return args.map((arg) => `${arg.name}: ${arg.type}`).join(", ");
 }
 
+/**
+ * @param {AbiFunctionManifestEntry[]} functions
+ * @returns {string[]}
+ */
 function collectRustAliases(functions) {
   const knownAliases = ["RequestId", "ResourceId", "SourceBufferId", "TimerId"];
   const found = new Set();
@@ -237,6 +280,11 @@ function collectRustAliases(functions) {
   return knownAliases.filter((alias) => found.has(alias));
 }
 
+/**
+ * @param {AbiFunctionManifestEntry[]} importsList
+ * @param {AbiFunctionManifestEntry[]} exportsList
+ * @returns {string[]}
+ */
 function collectTsImports(importsList, exportsList) {
   const builtins = new Set([
     "ArrayBuffer",
@@ -292,6 +340,10 @@ function collectTsImports(importsList, exportsList) {
   return [...found].sort();
 }
 
+/**
+ * @param {AbiFunctionManifestEntry[]} importsList
+ * @returns {string[]}
+ */
 function collectTsHelperImports(importsList) {
   const knownHelpers = [
     "AppendBufferValue",
@@ -316,10 +368,19 @@ function collectTsHelperImports(importsList) {
   return knownHelpers.filter((helper) => found.has(helper));
 }
 
+/**
+ * @param {string} signature
+ * @param {string} token
+ * @returns {boolean}
+ */
 function containsTypeToken(signature, token) {
   return new RegExp(`\\b${token}\\b`).test(signature);
 }
 
+/**
+ * @param {AbiFunctionManifestEntry[]} importsList
+ * @returns {AbiFunctionManifestEntry[]}
+ */
 function dedupeHostBindingEntries(importsList) {
   const seen = new Map();
   for (const entry of importsList) {

@@ -21,7 +21,7 @@ export function reportSuccess(operationName) {
 
 /**
  * @param {string} operationName
- * @param {error} err
+ * @param {unknown} err
  */
 export function reportError(operationName, err) {
   console.info();

@@ -14,6 +14,8 @@ import {
   generateWasmAbi,
 } from "./build.mjs";
 
+/** @typedef {{ roots: string[]; filter: (path: string) => boolean; onChange: () => void }} TreeWatchConfig */
+
 /**
  * @param {string} root
  * @param {{ release: boolean }} options
@@ -38,6 +40,10 @@ export async function watchDemo(root, { release }) {
   });
 
   let buildQueue = Promise.resolve();
+  /**
+   * @param {string} label
+   * @param {() => Promise<void>} task
+   */
   const enqueue = (label, task) => {
     buildQueue = buildQueue
       .then(async () => {
@@ -100,34 +106,41 @@ export async function watchDemo(root, { release }) {
   process.on("SIGINT", closeAll);
   process.on("SIGTERM", closeAll);
 
-  await new Promise((resolve, reject) => {
-    demoWatcher.on("error", reject);
-    demoWatcher.on("exit", (code, signal) => {
-      process.off("SIGINT", closeAll);
-      process.off("SIGTERM", closeAll);
-      watchTree.close();
+  await /** @type {Promise<void>} */ (
+    new Promise((resolve, reject) => {
+      demoWatcher.on("error", reject);
+      demoWatcher.on("exit", (code, signal) => {
+        process.off("SIGINT", closeAll);
+        process.off("SIGTERM", closeAll);
+        watchTree.close();
       if (signal === "SIGTERM" || signal === "SIGINT" || code === 0) {
         resolve();
       } else {
         reject(
           new Error(`esbuild watch exited with ${signal ?? `code ${code}`}.`),
-        );
-      }
-    });
-  });
+          );
+        }
+      });
+    })
+  );
 }
 
 /**
  * @param {string} root
- * @param {Array<{ roots: string[], filter: (path: string) => boolean, onChange: () => void }>} configs
+ * @param {TreeWatchConfig[]} configs
  */
 function createTreeWatcher(root, configs) {
+  /** @type {Map<string, import("fs").FSWatcher>} */
   const watchers = new Map();
+  /** @type {Map<string, ReturnType<typeof setTimeout>>} */
   const refreshTimers = new Map();
+  /** @type {Map<TreeWatchConfig, ReturnType<typeof setTimeout>>} */
   const triggerTimers = new Map();
 
+  /** @param {string} watchRoot @param {string} dir */
   const watcherKey = (watchRoot, dir) => `${watchRoot}\n${dir}`;
 
+  /** @param {string} watchRoot */
   const refreshRoot = (watchRoot) => {
     const absoluteRoot = join(root, watchRoot);
     const nextDirectories = new Set(listDirectories(absoluteRoot));
@@ -165,6 +178,7 @@ function createTreeWatcher(root, configs) {
     }
   };
 
+  /** @param {string} watchRoot */
   const scheduleRefresh = (watchRoot) => {
     clearTimeout(refreshTimers.get(watchRoot));
     refreshTimers.set(
@@ -176,6 +190,10 @@ function createTreeWatcher(root, configs) {
     );
   };
 
+  /**
+   * @param {TreeWatchConfig} config
+   * @param {string} changedPath
+   */
   const scheduleTrigger = (config, changedPath) => {
     clearTimeout(triggerTimers.get(config));
     triggerTimers.set(
@@ -203,6 +221,10 @@ function createTreeWatcher(root, configs) {
   };
 }
 
+/**
+ * @param {string} root
+ * @returns {string[]}
+ */
 function listDirectories(root) {
   if (!existsSync(root)) return [];
   const directories = [root];
@@ -214,6 +236,11 @@ function listDirectories(root) {
   return directories;
 }
 
+/**
+ * @param {string} root
+ * @param {string} path
+ * @returns {string}
+ */
 function relativeFromRoot(root, path) {
   return path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path;
 }

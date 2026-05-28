@@ -15,6 +15,7 @@ export async function checkAll(root) {
     checkWorker(root),
     checkCommon(root),
     checkDemo(root),
+    checkScripts(root),
     checkRust(root),
   ]);
 }
@@ -75,6 +76,15 @@ export async function checkDemo(root) {
   const eslint = npmExecCommand("eslint", ["src/**/*"]);
   await exec(eslint.command, eslint.args, {
     cwd: join(root, "demo"),
+  });
+}
+
+/** @param {string} root */
+export async function checkScripts(root) {
+  reportStep("CHECK", "typechecking JSDoc-checked scripts...");
+  const tsc = npmExecCommand("tsc", ["--project", "./scripts/tsconfig.json"]);
+  await exec(tsc.command, tsc.args, {
+    cwd: root,
   });
 }
 

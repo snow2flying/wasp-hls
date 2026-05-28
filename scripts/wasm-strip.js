@@ -73,8 +73,15 @@ const CUSTOM_SECTION_ID = 0;
 
 run();
 
+/** @typedef {{ sectionType: number; offset: number; contentSize: number; length: number }} WasmSectionInfo */
+/** @typedef {{ keptSections: WasmSectionInfo[]; removedSections: WasmSectionInfo[] }} StripResult */
+
+/** @returns {Promise<void>} */
 async function run() {
-  let fileName, tmpName;
+  /** @type {string} */
+  let fileName;
+  /** @type {string} */
+  let tmpName;
 
   try {
     fileName = extractFileNameFromArgs();
@@ -165,26 +172,38 @@ async function run() {
   process.exit(0);
 }
 
+/**
+ * @param {unknown} err
+ * @param {string} [tmpName]
+ * @returns {never}
+ */
 function onFatalError(err, tmpName) {
-  console.error("Error:", err?.message ?? "Unknown");
+  const message = err instanceof Error ? err.message : String(err ?? "Unknown");
+  console.error("Error:", message);
   if (tmpName !== undefined) {
     try {
       fs.unlinkSync(tmpName);
-    } catch (err) {
+    } catch (_err) {
       console.error("Error: Could not remove temporary file:", tmpName);
     }
   }
   process.exit(1);
 }
 
+/**
+ * @param {fs.WriteStream} writeStream
+ * @returns {Promise<void>}
+ */
 function waitForWriteStreamFinish(writeStream) {
-  return new Promise((res, rej) => {
-    writeStream.on("finish", () => {
-      res();
-    });
-    writeStream.on("error", rej);
-    writeStream.end();
-  });
+  return /** @type {Promise<void>} */ (
+    new Promise((res, rej) => {
+      writeStream.on("finish", () => {
+        res();
+      });
+      writeStream.on("error", rej);
+      writeStream.end();
+    })
+  );
 }
 
 /**
@@ -193,14 +212,16 @@ function waitForWriteStreamFinish(writeStream) {
  * way to do both)
  * @param {fs.ReadStream} readStream
  * @param {fs.WriteStream} writeStream
- * @returns {Promise.<Object>}
+ * @returns {Promise<StripResult>}
  */
 function readAndStripWasm(readStream, writeStream) {
   return new Promise((res, rej) => {
+    /** @type {StripResult} */
     const result = {
       keptSections: [],
       removedSections: [],
     };
+    /** @type {ArrayBuffer | null} */
     let prevBuffered = null;
     let checkedMagicAndVersion = false;
     let currOffset = 0;
@@ -220,14 +241,21 @@ function readAndStripWasm(readStream, writeStream) {
       res(result);
     });
 
-    readStream.on("data", (chunk) => {
+    readStream.on(
+      "data",
+      /** @param {string | Buffer} chunk */
+      (chunk) => {
+      const chunkBuffer =
+        typeof chunk === "string" ? Buffer.from(chunk) : chunk;
       const buff =
         prevBuffered === null
-          ? chunk.buffer
-          : concatArrayBuffers(prevBuffered, chunk.buffer);
+          ? toArrayBuffer(chunkBuffer)
+          : concatArrayBuffers(prevBuffered, toArrayBuffer(chunkBuffer));
       onNext(buff);
-    });
+      },
+    );
 
+    /** @param {ArrayBuffer} buff */
     function onNext(buff) {
       maxOffsetInChunk = currOffset + buff.byteLength;
       const chunkBaseOffset = currOffset;
@@ -257,6 +285,7 @@ function readAndStripWasm(readStream, writeStream) {
           const sectionType = dataView.getUint8(relativeOffset);
           const [size, sizeOfSize] = readULeb128(dataView, relativeOffset + 1);
 
+          /** @type {WasmSectionInfo} */
           const sectionInfo = {
             sectionType,
             offset: currOffset,
@@ -296,6 +325,9 @@ function readAndStripWasm(readStream, writeStream) {
   });
 }
 
+/**
+ * @param {ArrayBuffer} buff
+ */
 function checkMagicNumberAndVersion(buff) {
   if (buff.byteLength < 8) {
     throw new Error("Error: Not a valid WebAssembly file: file too short");
@@ -306,12 +338,23 @@ function checkMagicNumberAndVersion(buff) {
   }
   if (dataView.getUint32(4, true) !== 1) {
     throw new Error(
-      "Error: Unsupported WebAssembly version: ",
-      dataView.getUint32(4, true),
+      `Error: Unsupported WebAssembly version: ${dataView.getUint32(4, true)}`,
     );
   }
 }
 
+/**
+ * @param {Buffer} buff
+ * @returns {ArrayBuffer}
+ */
+function toArrayBuffer(buff) {
+  return Uint8Array.from(buff).buffer;
+}
+
+/**
+ * @param {...ArrayBuffer} buffers
+ * @returns {ArrayBuffer}
+ */
 function concatArrayBuffers(...buffers) {
   const ret = new Uint8Array(
     buffers.reduce((acc, buff) => acc + buff.byteLength, 0),
@@ -319,7 +362,7 @@ function concatArrayBuffers(...buffers) {
   let currOffset = 0;
   for (let i = 0; i < buffers.length; i++) {
     const buffer = buffers[i];
-    ret.set(buffer, currOffset);
+    ret.set(new Uint8Array(buffer), currOffset);
     currOffset += buffer.byteLength;
   }
   return ret.buffer;
@@ -332,7 +375,7 @@ function concatArrayBuffers(...buffers) {
  * @param {DataView} dv
  * @param {number} offset - Offset, in bytes, in the buffer where that number
  * starts.
- * @returns {Array.<number>}
+ * @returns {[number, number]}
  */
 function readULeb128(dv, offset) {
   let res = 0;
@@ -382,17 +425,17 @@ async function getTmpName(fileName) {
       );
     }
 
-    let tmpFileName;
+    const tmpFileName = fileName + ".tmp" + (i === 1 ? "" : `_${i}`);
     try {
-      tmpFileName = fileName + ".tmp" + (i === 1 ? "" : `_${i}`);
       await access(tmpFileName);
       i++;
-    } catch (e) {
+    } catch (_e) {
       return tmpFileName;
     }
   }
 }
 
+/** @returns {string} */
 function extractFileNameFromArgs() {
   const processArgs = process.argv.slice(2);
 

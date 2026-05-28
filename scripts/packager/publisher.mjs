@@ -16,6 +16,7 @@ import { resolve } from "path";
 const WORK_DIR_NAME = ".gpac-workdir";
 const STATUS_FILE_NAME = ".publisher-status.json";
 const MIN_PUBLISHED_FRAGMENT_BYTES = 128;
+/** @typedef {{ relativePath: string; sourcePath: string; size: number; mtimeMs: number; content: Buffer; fingerprint: string }} BinaryAsset */
 
 /**
  * @param {string} publicOutputDir
@@ -70,6 +71,7 @@ export function startLiveOutputPublisher({
   let isPublishing = false;
   let cycleCount = 0;
 
+  /** @param {Record<string, unknown>} status */
   const writeStatus = (status) => {
     try {
       writeFileSync(
@@ -189,6 +191,7 @@ export function startLiveOutputPublisher({
       if (
         state.master !== null &&
         state.master.requiredPlaylistPaths.every(
+          /** @param {string} playlistPath */
           (playlistPath) =>
             readyPlaylistPaths.has(playlistPath) ||
             existsSync(resolve(targetDir, playlistPath)),
@@ -512,7 +515,7 @@ function buildPublishableStateFromMaster({
     };
   }
 
-  /** @type {Map<string, { relativePath: string; sourcePath: string; size: number; mtimeMs: number; content: Buffer; fingerprint: string }>} */
+  /** @type {Map<string, BinaryAsset>} */
   const assetsByPath = new Map();
   /** @type {Array<{ relativePath: string; content: string; size: number; mtimeMs: number; fingerprint: string; requiredAssetPaths: string[]; mediaPlaylist: { headerLines: string[]; mapUris: string[]; mediaSequence: number | null; segments: Array<{ extinfLine: string; uri: string }> } }>} */
   const playlists = [];
@@ -662,7 +665,7 @@ function buildPublishableStateFromMaster({
 /**
  * @param {{ playlistName: string; playlist: { content: string; size: number; mtimeMs: number }; sourceDir: string; targetDir: string }} params
  * @returns {
- * | { status: "ready"; content: string; assets: Array<{ relativePath: string; sourcePath: string; size: number; mtimeMs: number; content: Buffer; fingerprint: string }>; requiredAssetPaths: string[]; mediaPlaylist: { headerLines: string[]; mapUris: string[]; mediaSequence: number | null; segments: Array<{ extinfLine: string; uri: string }> } }
+ * | { status: "ready"; content: string; assets: BinaryAsset[]; requiredAssetPaths: string[]; mediaPlaylist: { headerLines: string[]; mapUris: string[]; mediaSequence: number | null; segments: Array<{ extinfLine: string; uri: string }> } }
  * | { status: string; detail?: string }
  * }
  */
@@ -677,7 +680,7 @@ function prepareMediaPlaylistForPublication({
     return { status: "invalid-playlist" };
   }
 
-  /** @type {Map<string, { relativePath: string; sourcePath: string; size: number; mtimeMs: number; content: Buffer; fingerprint: string }>} */
+  /** @type {Map<string, BinaryAsset>} */
   const assetsByPath = new Map();
 
   for (const mapUri of mediaPlaylist.mapUris) {
@@ -736,7 +739,7 @@ function prepareMediaPlaylistForPublication({
     lastAvailableIndex + 1,
   );
   for (const segment of retainedSegments) {
-    if (segment.asset !== "already-published") {
+    if (segment.asset !== null && segment.asset !== "already-published") {
       assetsByPath.set(segment.asset.relativePath, segment.asset);
     }
   }
@@ -773,6 +776,7 @@ export function buildPlaylistPublicationSnapshot(
   targetDir,
   readyAssetPaths,
 ) {
+  /** @param {string} assetPath */
   const isAssetAvailable = (assetPath) =>
     readyAssetPaths.has(assetPath) || existsSync(resolve(targetDir, assetPath));
 

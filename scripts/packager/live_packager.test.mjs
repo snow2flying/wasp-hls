@@ -31,6 +31,9 @@ test("buildGpacArgs optionally enables HLS program date time tags", () => {
 
   assert.equal(typeof withoutOutputArg, "string");
   assert.equal(typeof withOutputArg, "string");
+  if (withoutOutputArg === undefined || withOutputArg === undefined) {
+    throw new Error("GPAC args should always include an output argument.");
+  }
   assert.doesNotMatch(withoutOutputArg, /:hlsc(?:$|:)/);
   assert.match(withOutputArg, /:hlsc(?:$|:)/);
 });

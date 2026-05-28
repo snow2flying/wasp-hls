@@ -21,9 +21,11 @@ defined in src/wasm/abi/wasm-functions.jsonc.`);
 const wasmPath = new URL("../build/wasp_hls_bg.wasm", import.meta.url);
 const manifest = await readWasmAbiFunctionsManifest();
 const expectedImports = (manifest.imports ?? []).map(
+  /** @param {AbiFunctionManifestEntry} entry */
   (entry) => entry.wasmSymbol,
 );
 const expectedExports = (manifest.exports ?? []).map(
+  /** @param {AbiFunctionManifestEntry} entry */
   (entry) => entry.wasmSymbol,
 );
 
@@ -37,6 +39,11 @@ const exports = WebAssembly.Module.exports(module)
   .map((entry) => entry.name)
   .sort();
 
+/**
+ * @param {string[]} expected
+ * @param {string[]} actual
+ * @returns {string[]}
+ */
 function diff(expected, actual) {
   return expected.filter((value) => !actual.includes(value));
 }
@@ -56,3 +63,4 @@ if (missingImports.length !== 0 || missingExports.length !== 0) {
 }
 
 console.log("WASM ABI check passed.");
+/** @typedef {import("./utils/parse_wasm-functions_file.mjs").AbiFunctionManifestEntry} AbiFunctionManifestEntry */

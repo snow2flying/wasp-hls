@@ -22,6 +22,7 @@ import {
   checkDemo,
   checkMain,
   checkRust,
+  checkScripts,
   checkWorker,
 } from "./check.mjs";
 import { exec } from "../utils/exec.mjs";
@@ -135,6 +136,10 @@ async function run() {
           await checkDemo(ROOT);
           reportSuccess("demo checks");
           return;
+        case "scripts":
+          await checkScripts(ROOT);
+          reportSuccess("scripts checks");
+          return;
         case "rust":
           await checkRust(ROOT);
           reportSuccess("Rust checks");
@@ -237,6 +242,10 @@ async function run() {
   }
 }
 
+/**
+ * @param {string} root
+ * @param {{ release: boolean }} options
+ */
 async function buildDemoFull(root, { release }) {
   await generateWasmAbi(root);
   cleanBuildDirectory(join(root, "build"), { preserveDemoBundle: true });
@@ -245,6 +254,9 @@ async function buildDemoFull(root, { release }) {
   await buildDemoBundle(root, { release });
 }
 
+/**
+ * @param {string} root
+ */
 async function startStaticBuildServer(root) {
   const server = launchStaticServer(join(ROOT, "build"), {
     verbose: true,
@@ -265,6 +277,11 @@ async function startStaticBuildServer(root) {
   return server;
 }
 
+/**
+ * @param {string[]} args
+ * @param {string[]} allowedFlags
+ * @returns {{ flags: Set<string>; scope: string | undefined }}
+ */
 function parseArgs(args, allowedFlags) {
   const allowed = new Set(allowedFlags);
   const flags = new Set();
@@ -285,12 +302,19 @@ function parseArgs(args, allowedFlags) {
   return { flags, scope: positionals[0] };
 }
 
+/**
+ * @param {string[]} args
+ */
 function ensureNoArgs(args) {
   if (args.length !== 0) {
     throw new Error(`Unexpected arguments.\n\n${helpText()}`);
   }
 }
 
+/**
+ * @param {string[]} args
+ * @returns {{ browser: string | undefined; filters: string[]; scope: string | undefined; watch: boolean }}
+ */
 function parseTestArgs(args) {
   let scope;
   let watch = false;
@@ -340,14 +364,27 @@ function parseTestArgs(args) {
   };
 }
 
+/**
+ * @param {Set<string>} flags
+ * @param {string} flag
+ * @param {string} message
+ */
 function assertNoFlag(flags, flag, message) {
   if (flags.has(flag)) throw new Error(message);
 }
 
+/**
+ * @param {Set<string>} flags
+ * @param {string} message
+ */
 function assertNoFlags(flags, message) {
   if (flags.size !== 0) throw new Error(message);
 }
 
+/**
+ * @param {{ watch: boolean; browser: string | undefined; filters: string[] }} options
+ * @param {string} scope
+ */
 function ensureNoTestOptions(options, scope) {
   if (options.watch || options.browser != null || options.filters.length > 0) {
     throw new Error(
@@ -356,6 +393,10 @@ function ensureNoTestOptions(options, scope) {
   }
 }
 
+/**
+ * @param {{ browser: string | undefined }} options
+ * @param {string} scope
+ */
 function assertNoBrowserOption(options, scope) {
   if (options.browser != null) {
     throw new Error(
@@ -364,6 +405,10 @@ function assertNoBrowserOption(options, scope) {
   }
 }
 
+/**
+ * @param {{ watch: boolean }} options
+ * @param {string} scope
+ */
 function assertNoWatchOption(options, scope) {
   if (options.watch) {
     throw new Error(`"--watch" is not supported for "test ${scope}".`);
@@ -388,6 +433,7 @@ Commands
     worker      Check worker TypeScript
     common      Check common TypeScript
     demo        Check demo TypeScript
+    scripts     Check JSDoc-checked Node scripts with TypeScript
     rust        Run cargo clippy
 
   test [scope] [--filter <value>] [--watch] [--browser <name>]

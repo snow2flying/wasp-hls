@@ -58,10 +58,11 @@
       "docs": "Build the documentation site."
     },
     "Checks": {
-      "check": "Run the standard TypeScript checks for the repo.",
+      "check": "Run the standard TypeScript and Rust checks for the repo.",
       "check -- main": "Typecheck and lint the main-thread TypeScript code.",
       "check -- worker": "Typecheck and lint the worker and transmux TypeScript code.",
       "check -- demo": "Typecheck and lint the demo app.",
+      "check -- scripts": "Typecheck the JSDoc-annotated Node scripts that opt into `// @ts-check`.",
       "check -- rust": "Run clippy on the Rust code.",
       "test": "Run every test suite: Rust unit tests, transmux tests, and browser integration tests.",
       "test -- rust": "Run only Rust unit tests.",

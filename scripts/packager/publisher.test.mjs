@@ -17,16 +17,31 @@ import {
   startLiveOutputPublisher,
 } from "../../scripts/packager/publisher.mjs";
 
+/**
+ * @param {string} rootDir
+ * @param {string} relativePath
+ * @param {string} content
+ */
 function writeTextFile(rootDir, relativePath, content) {
   mkdirSync(rootDir, { recursive: true });
   writeFileSync(join(rootDir, relativePath), content, "utf8");
 }
 
+/**
+ * @param {string} rootDir
+ * @param {string} relativePath
+ * @param {Uint8Array | Buffer} content
+ */
 function writeBinaryFile(rootDir, relativePath, content) {
   mkdirSync(rootDir, { recursive: true });
   writeFileSync(join(rootDir, relativePath), content);
 }
 
+/**
+ * @param {string} type
+ * @param {Buffer} [payload]
+ * @returns {Buffer}
+ */
 function makeBox(type, payload = Buffer.alloc(0)) {
   const header = Buffer.alloc(8);
   header.writeUInt32BE(payload.length + 8, 0);
@@ -34,6 +49,10 @@ function makeBox(type, payload = Buffer.alloc(0)) {
   return Buffer.concat([header, payload]);
 }
 
+/**
+ * @param {string} payloadText
+ * @returns {Buffer}
+ */
 function makeMediaSegment(payloadText) {
   const payload = Buffer.alloc(256, 0);
   payload.write(payloadText, 0, "utf8");
@@ -58,6 +77,11 @@ function makeMediaSegment(payloadText) {
   ]);
 }
 
+/**
+ * @param {() => void} assertion
+ * @param {number} [timeoutMs]
+ * @returns {Promise<void>}
+ */
 async function waitFor(assertion, timeoutMs = 2000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -82,6 +106,12 @@ h264_720p.m3u8
 `;
 }
 
+/**
+ * @param {string[]} segmentNames
+ * @param {number} [mediaSequence]
+ * @param {string | null} [initSegment]
+ * @returns {string}
+ */
 function buildMediaPlaylist(
   segmentNames,
   mediaSequence = 0,

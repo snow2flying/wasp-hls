@@ -18,7 +18,12 @@ import { webdriverio } from "@vitest/browser-webdriverio";
 import getChromeCmd from "./get_chrome_cmd.mjs";
 import getFirefoxCmd from "./get_firefox_cmd.mjs";
 
+/** @typedef {"chrome" | "firefox" | "edge"} BrowserName */
+/** @typedef {"trace" | "debug" | "info" | "warn" | "error" | "silent"} WebdriverLogLevel */
+/** @typedef {{ browser: BrowserName; watch: boolean }} RunVitestConfig */
+
 /** If not specified, run only this browser. */
+/** @type {BrowserName} */
 const DEFAULT_BROWSER = "chrome";
 
 /**
@@ -77,12 +82,8 @@ const SYSTEM_GECKODRIVER_BINARY =
   undefined;
 
 /**
- * @param {Object} config - The test configuration object.
- * @param {string} config.browser - The browser chosen to run the tests.
- * Can be `"chrome"`, `"firefox"` or `"edge"`.
- * @param {boolean} config.watch - If `true`, re-run tests when a depended file
- * changed.
- * @param {Array.<string>} testFilters - The filters you can pass to vitest ot
+ * @param {RunVitestConfig} config - The test configuration object.
+ * @param {string[]} testFilters - The filters you can pass to vitest ot
  * only run some tests.
  * @returns {Promise.<Object>} - The vitest object.
  */
@@ -96,16 +97,20 @@ export default function runVitests({ browser, watch }, testFilters = []) {
       globalSetup: "tests/globalSetup.mjs",
       projects: [generateTestConfig({ browser })],
     },
-    {
+    /** @type {import("vitest/config").ViteUserConfig} */ ({
       test: {
         browser: {
           connectTimeout: BROWSER_CONNECT_TIMEOUT,
         },
       },
-    },
+    }),
   );
 }
 
+/**
+ * @param {RunVitestConfig} config
+ * @param {string[]} [testFilters]
+ */
 async function runVitestsWithManagedExit({ browser, watch }, testFilters = []) {
   if (watch) {
     return runVitests({ browser, watch }, testFilters);
@@ -123,13 +128,13 @@ async function runVitestsWithManagedExit({ browser, watch }, testFilters = []) {
       globalSetup: "tests/globalSetup.mjs",
       projects: [generateTestConfig({ browser })],
     },
-    {
+    /** @type {import("vitest/config").ViteUserConfig} */ ({
       test: {
         browser: {
           connectTimeout: BROWSER_CONNECT_TIMEOUT,
         },
       },
-    },
+    }),
   );
 
   try {
@@ -145,8 +150,7 @@ async function runVitestsWithManagedExit({ browser, watch }, testFilters = []) {
 /**
  * Generate the configuration associated to a particular browser adapted to
  * wasp-hls tests (headless, autoplay enabled, memory control...).
- * @param {string} browser - The browser chosen to run the tests.
- * Can be `"chrome"`, `"firefox"` or `"edge"`.
+ * @param {BrowserName} browser - The browser chosen to run the tests.
  * @returns {Object} - The `vitest`'s `browser` config to set to run that
  * browser.
  */
@@ -217,10 +221,28 @@ function getWdioProviderOptions(browser) {
   }
   return {
     cacheDir: WDIO_CACHE_DIR,
-    logLevel: process.env.WASP_HLS_WDIO_LOG_LEVEL ?? "warn",
+    logLevel: toWebdriverLogLevel(process.env.WASP_HLS_WDIO_LOG_LEVEL),
     transformRequest: sanitizeWebdriverRequest,
     capabilities,
   };
+}
+
+/**
+ * @param {string | undefined} value
+ * @returns {WebdriverLogLevel}
+ */
+function toWebdriverLogLevel(value) {
+  switch (value) {
+    case "trace":
+    case "debug":
+    case "info":
+    case "warn":
+    case "error":
+    case "silent":
+      return value;
+    default:
+      return "warn";
+  }
 }
 
 /**
@@ -287,9 +309,7 @@ function sanitizeWebdriverRequest(requestOptions) {
 }
 
 /**
- * @param {Object} config - The test configuration object.
- * @param {string} config.browser - The browser chosen to run the tests.
- * Can be `"chrome"`, `"firefox"` or `"edge"`.
+ * @param {{ browser: BrowserName }} config - The test configuration object.
  * @returns {Object} - The corresponding `vitest` config.
  */
 function generateTestConfig({ browser }) {
@@ -320,6 +340,7 @@ async function main() {
   const args = process.argv.slice(2);
   let shouldWatch = false;
   // TODO: multiple browsers?
+  /** @type {BrowserName | ""} */
   let browser = "";
   const filters = [];
 
@@ -359,19 +380,20 @@ async function main() {
       case "--browser":
         {
           argOffset++;
-          browser = args[argOffset];
-          if (browser === undefined) {
+          const requestedBrowser = args[argOffset];
+          if (requestedBrowser === undefined) {
             console.error("ERROR: no browser name provided\n");
             displayHelp();
             process.exit(1);
           }
-          if (!["chrome", "firefox", "edge"].includes(browser)) {
+          if (!["chrome", "firefox", "edge"].includes(requestedBrowser)) {
             console.error(
               'ERROR: Invalid browser name provided.\nOnly "chrome", "firefox" or "edge" is authorized',
             );
             displayHelp();
             process.exit(1);
           }
+          browser = /** @type {BrowserName} */ (requestedBrowser);
         }
         break;
 

@@ -10,22 +10,24 @@ import { spawn } from "child_process";
  * @param {{ cwd?: string, stdio?: "inherit" | "pipe" | "ignore" }} [options]
  */
 export function exec(commandName, args, options = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(commandName, args, {
-      cwd: options.cwd,
-      stdio: options.stdio ?? "inherit",
-    });
-    child.on("error", reject);
+  return /** @type {Promise<void>} */ (
+    new Promise((resolve, reject) => {
+      const child = spawn(commandName, args, {
+        cwd: options.cwd,
+        stdio: options.stdio ?? "inherit",
+      });
+      child.on("error", reject);
     child.on("exit", (code, signal) => {
       if (signal != null) {
         reject(new Error(`${commandName} exited with signal ${signal}.`));
       } else if (code !== 0) {
         reject(new Error(`${commandName} exited with code ${code}.`));
-      } else {
-        resolve();
-      }
-    });
-  });
+        } else {
+          resolve();
+        }
+      });
+    })
+  );
 }
 
 /**
