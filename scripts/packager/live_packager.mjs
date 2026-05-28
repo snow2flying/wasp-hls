@@ -15,7 +15,6 @@ import { showConfigAndConfirm, askConfirmation } from "./ui.mjs";
 import {
   setPackagerProc,
   setFfmpegProc,
-  cleanup,
   createChildExitPromise,
 } from "./cleanup.mjs";
 import {

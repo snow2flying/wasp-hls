@@ -1,30 +1,9 @@
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from "vitest";
-import WaspHlsPlayer from "../../../build/es6/ts-main/index.js";
-import EmbeddedWorker from "../../../build/embedded/worker.js";
-import EmbeddedWasm from "../../../build/embedded/wasm.js";
-import {
-  startLivePackager,
-  stopLivePackager,
-  waitForPackagerReady,
-} from "../utils/live_packager.js";
+import { describe, expect, it } from "vitest";
 import { checkAfterSleepWithBackoff } from "../../utils/checkAfterSleepWithBackoff.js";
 import sleep from "../../utils/sleep.js";
 import { waitForLoadedStateAfterLoad } from "../../utils/waitForPlayerState";
+import setupPlayer from "../utils/player_setup";
 import { assertStartupBehavior } from "../utils/startup_test_tools.js";
-
-const LIVE_PACKAGER_PUBLISH_STRATEGY =
-  globalThis.__WASP_HLS_TEST_PUBLISH_STRATEGY__ === "direct" ||
-  globalThis.__WASP_HLS_TEST_PUBLISH_STRATEGY__ === "atomic"
-    ? globalThis.__WASP_HLS_TEST_PUBLISH_STRATEGY__
-    : "atomic";
 
 const PLAYER_LOAD_TIMEOUT_MS = 90_000;
 const LIVE_PLAYBACK_ASSERTION_WINDOW_S = 100;
@@ -170,67 +149,32 @@ async function waitForLoadedState(player, videoElement, lastPlayerErrorRef) {
 }
 
 describe("Live packaged content", function () {
-  let player;
-  let playlistUrl;
-  let segmentDuration;
-  let timeShiftBufferDepth;
-  let lastPlayerError = null;
-  const videoElement = document.createElement("video");
-
-  beforeAll(
-    async () => {
-      document.body.appendChild(videoElement);
-      await startLivePackager(LIVE_PACKAGER_PUBLISH_STRATEGY);
-
-      const readyInfos = await waitForPackagerReady();
-      playlistUrl = readyInfos.playlistUrl;
-      segmentDuration = readyInfos.segmentDuration;
-      timeShiftBufferDepth = readyInfos.timeShiftBufferDepth;
-    },
-    (3600 / 2) * 1000,
-  );
-
-  afterAll(async () => {
-    document.body.removeChild(videoElement);
-    await stopLivePackager();
-  });
-
-  beforeEach(() => {
-    lastPlayerError = null;
-    player = new WaspHlsPlayer(videoElement);
-    player.initialize({
-      workerUrl: EmbeddedWorker,
-      wasmUrl: EmbeddedWasm,
-    });
-    player.addEventListener("error", (error) => {
-      lastPlayerError = error;
-    });
-  });
-
-  afterEach(() => {
-    player.dispose();
-  });
+  const ctx = setupPlayer({ packageLiveContent: true });
 
   it(
     "should fetch, update and play the Manifest",
     { timeout: LIVE_PLAYBACK_TEST_TIMEOUT_MS },
     async function () {
-      player.addEventListener("playerStateChange", (state) => {
+      ctx.player.addEventListener("playerStateChange", (state) => {
         if (state === "Loaded") {
-          player.resume();
+          ctx.player.resume();
         }
       });
 
-      player.load(playlistUrl);
-      await waitForLoadedState(player, videoElement, () => lastPlayerError);
+      ctx.player.load(ctx.liveInfo.playlistUrl);
+      await waitForLoadedState(
+        ctx.player,
+        ctx.videoElement,
+        () => ctx.lastPlayerError,
+      );
 
-      expect(player.isLive()).toEqual(true);
+      expect(ctx.player.isLive()).toEqual(true);
 
-      const basePos = player.getPosition();
-      const baseMin = player.getMinimumPosition();
-      const baseMax = player.getMaximumPosition();
-      const baseSeekableMin = player.getSeekableMinimumPosition();
-      const baseSeekableMax = player.getSeekableMaximumPosition();
+      const basePos = ctx.player.getPosition();
+      const baseMin = ctx.player.getMinimumPosition();
+      const baseMax = ctx.player.getMaximumPosition();
+      const baseSeekableMin = ctx.player.getSeekableMinimumPosition();
+      const baseSeekableMax = ctx.player.getSeekableMaximumPosition();
       const baseGap = baseMax - basePos;
 
       expect(baseGap).toBeGreaterThan(3);
@@ -243,10 +187,10 @@ describe("Live packaged content", function () {
           stepMs: 1000,
         },
         () => {
-          const shortMin = player.getMinimumPosition();
-          const shortMax = player.getMaximumPosition();
-          const shortSeekableMin = player.getSeekableMinimumPosition();
-          const shortSeekableMax = player.getSeekableMaximumPosition();
+          const shortMin = ctx.player.getMinimumPosition();
+          const shortMax = ctx.player.getMaximumPosition();
+          const shortSeekableMin = ctx.player.getSeekableMinimumPosition();
+          const shortSeekableMax = ctx.player.getSeekableMaximumPosition();
           expect(shortMin - baseMin).toBeGreaterThanOrEqual(1.5);
           expect(shortMax - baseMax).toBeGreaterThanOrEqual(1.5);
           expect(shortSeekableMin).toBeGreaterThanOrEqual(baseSeekableMin);
@@ -257,11 +201,11 @@ describe("Live packaged content", function () {
       const secondsWaiting = LIVE_PLAYBACK_ASSERTION_WINDOW_S;
       await sleep(secondsWaiting * 1000);
 
-      const newPos = player.getPosition();
-      const newMin = player.getMinimumPosition();
-      const newMax = player.getMaximumPosition();
-      const newSeekableMin = player.getSeekableMinimumPosition();
-      const newSeekableMax = player.getSeekableMaximumPosition();
+      const newPos = ctx.player.getPosition();
+      const newMin = ctx.player.getMinimumPosition();
+      const newMax = ctx.player.getMaximumPosition();
+      const newSeekableMin = ctx.player.getSeekableMinimumPosition();
+      const newSeekableMax = ctx.player.getSeekableMaximumPosition();
 
       expect(newMax - baseMax).toBeGreaterThanOrEqual(secondsWaiting * 0.8);
       expect(newMin - baseMin).toBeGreaterThanOrEqual(secondsWaiting * 0.8);
@@ -274,19 +218,19 @@ describe("Live packaged content", function () {
       expect(newMax - newPos).toBeGreaterThan(3);
       expect(newMax - newPos).toBeLessThan(20);
       expect(newPos - basePos).toBeGreaterThanOrEqual(secondsWaiting * 0.8);
-      expect(segmentDuration).toBeGreaterThan(0);
-      expect(timeShiftBufferDepth).toBeGreaterThan(0);
+      expect(ctx.liveInfo.segmentDuration).toBeGreaterThan(0);
+      expect(ctx.liveInfo.timeShiftBufferDepth).toBeGreaterThan(0);
     },
   );
 
   for (const testCase of LIVE_STARTING_POSITION_CASES) {
     it(testCase.name, { timeout: LIVE_PLAYBACK_TEST_TIMEOUT_MS }, async () => {
       await assertStartupBehavior({
-        player,
-        videoElement,
-        lastPlayerErrorRef: () => lastPlayerError,
+        player: ctx.player,
+        videoElement: ctx.videoElement,
+        lastPlayerErrorRef: () => ctx.lastPlayerError,
         loadContent() {
-          player.load(playlistUrl, testCase.options);
+          ctx.player.load(ctx.liveInfo.playlistUrl, testCase.options);
         },
         expectInitialSeek: testCase.expectInitialSeek,
         maxInitialSeekDelayMs: LIVE_MAX_INITIAL_SEEK_DELAY_MS,
@@ -298,8 +242,8 @@ describe("Live packaged content", function () {
             snapshot.minimumPosition,
           );
           testCase.assertLoadedSnapshot(snapshot, timings, {
-            segmentDuration,
-            timeShiftBufferDepth,
+            segmentDuration: ctx.liveInfo.segmentDuration,
+            timeShiftBufferDepth: ctx.liveInfo.timeShiftBufferDepth,
           });
         },
       });

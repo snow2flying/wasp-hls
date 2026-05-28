@@ -158,8 +158,9 @@ for (let i = 0; i < args.length; i++) {
       const { value, nextIndex } = requireNextArg(arg, i);
       if (value !== "atomic" && value !== "direct") {
         panic('--publish-strategy must be either "atomic" or "direct".');
+      } else {
+        configObj.publishStrategy = value;
       }
-      configObj.publishStrategy = value;
       i = nextIndex;
       break;
     }
