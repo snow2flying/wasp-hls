@@ -12,7 +12,7 @@ see options.
 For local playback, `main.mjs` can also serve the generated output over HTTP
 through the existing static server by passing `--serve`. The served manifest
 will then be available at `http://localhost:<port>/master.m3u8`, with port
-`9911` by default or a custom one through `--serve-http-port`.
+`9911` by default or a custom one through `--serve <port>`.
 
 When running it, `ffmpeg` and `gpac` both have to be accessible in path (for the latter,
 unless the GPAC binary is explicitly provided through `--gpac-path`). On Windows, the

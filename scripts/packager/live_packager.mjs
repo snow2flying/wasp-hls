@@ -4,12 +4,20 @@ import { spawn } from "child_process";
 import { mkdirSync } from "fs";
 import { resolve } from "path";
 import launchStaticServer from "../launch_static_server.mjs";
-import { commandExists, outputDirHasMediaFiles, cleanupMediaFiles } from "./utils.mjs";
+import {
+  commandExists,
+  outputDirHasMediaFiles,
+  cleanupMediaFiles,
+} from "./utils.mjs";
 import { checkPortRange, buildPortMap } from "./ports.mjs";
 import { resolveGpacBinary } from "./gpac_packager.mjs";
 import { buildFfmpegArgs, spawnFfmpeg } from "./ffmpeg.mjs";
 import { showConfigAndConfirm, askConfirmation } from "./ui.mjs";
-import { setPackagerProc, setFfmpegProc, createChildExitPromise } from "./cleanup.mjs";
+import {
+  setPackagerProc,
+  setFfmpegProc,
+  createChildExitPromise,
+} from "./cleanup.mjs";
 
 /**
  * @typedef {object} PackageConfig

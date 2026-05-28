@@ -158,17 +158,16 @@ for (let i = 0; i < args.length; i++) {
       configObj.emitProgramDateTime = true;
       break;
 
-    case "--serve":
+    case "--serve": {
       configObj.serve = true;
-      break;
-
-    case "--serve-http-port": {
-      const { value, nextIndex } = requireNextArg(arg, i);
-      if (!isValidPort(value)) {
-        panic("--serve-http-port must be a valid port number (1-65535).");
+      const nextValue = args[i + 1];
+      if (nextValue !== undefined && !nextValue.startsWith("--")) {
+        if (!isValidPort(nextValue)) {
+          panic("--serve optional port must be a valid port number (1-65535).");
+        }
+        configObj.serveHttpPort = Number(nextValue);
+        i++;
       }
-      configObj.serveHttpPort = Number(value);
-      i = nextIndex;
       break;
     }
 
@@ -259,11 +258,9 @@ Options:
                                       live media playlists.
                                       Defaults to ${DEFAULT_PROGRAM_DATE_TIME}.
 
-  --serve                             Start a local HTTP server for the
+  --serve [port]                      Start a local HTTP server for the
                                       packaged output directory.
-
-  --serve-http-port <port>            HTTP port used with --serve.
-                                      Defaults to ${DEFAULT_SERVE_HTTP_PORT}.
+                                      Uses port ${DEFAULT_SERVE_HTTP_PORT} by default.
 
   --no-confirmation                   Never ask for confirmation; validate all prompts.
                                       Intended for automated scripts.
