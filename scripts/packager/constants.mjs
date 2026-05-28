@@ -13,6 +13,7 @@ export const DEFAULT_MEDIA_FORMAT = "fmp4";
 export const DEFAULT_SUBTITLE_FORMAT = "none";
 export const DEFAULT_PUBLISH_STRATEGY = "atomic";
 export const DEFAULT_PROGRAM_DATE_TIME = false;
+export const DEFAULT_SERVE_HTTP_PORT = 9911;
 
 // Text track constants
 
@@ -69,6 +70,8 @@ export const DEFAULT_CONFIG = {
   subtitleFormat: DEFAULT_SUBTITLE_FORMAT,
   publishStrategy: DEFAULT_PUBLISH_STRATEGY,
   emitProgramDateTime: DEFAULT_PROGRAM_DATE_TIME,
+  serve: false,
+  serveHttpPort: DEFAULT_SERVE_HTTP_PORT,
   lowLatency: false,
   noConfirm: false,
   gpacPath: "",

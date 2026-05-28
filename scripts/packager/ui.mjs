@@ -105,6 +105,13 @@ export async function showConfigAndConfirm(
 
   tableRow("Output Directory", config.outputDir, GREEN);
   tableRow("Output Manifest", `${config.outputDir}/master.m3u8`, GREEN);
+  if (config.serve) {
+    tableRow(
+      "Served Manifest",
+      `http://localhost:${config.serveHttpPort}/master.m3u8`,
+      GREEN,
+    );
+  }
 
   console.log(
     "└─────────────────────────────┴──────────────────────────────────────────┘",

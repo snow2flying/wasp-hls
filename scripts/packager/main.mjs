@@ -26,6 +26,7 @@ import {
   DEFAULT_SUBTITLE_FORMAT,
   DEFAULT_PUBLISH_STRATEGY,
   DEFAULT_PROGRAM_DATE_TIME,
+  DEFAULT_SERVE_HTTP_PORT,
 } from "./constants.mjs";
 import { isPositiveInteger, isValidPort, sanitizeDirPath } from "./utils.mjs";
 import { getMaxNbPortsUsed } from "./ports.mjs";
@@ -169,6 +170,20 @@ for (let i = 0; i < args.length; i++) {
       configObj.emitProgramDateTime = true;
       break;
 
+    case "--serve":
+      configObj.serve = true;
+      break;
+
+    case "--serve-http-port": {
+      const { value, nextIndex } = requireNextArg(arg, i);
+      if (!isValidPort(value)) {
+        panic("--serve-http-port must be a valid port number (1-65535).");
+      }
+      configObj.serveHttpPort = Number(value);
+      i = nextIndex;
+      break;
+    }
+
     case "--low-latency":
       configObj.lowLatency = true;
       break;
@@ -259,6 +274,12 @@ Options:
   --program-date-time                 Emit HLS program date time tags in
                                       live media playlists.
                                       Defaults to ${DEFAULT_PROGRAM_DATE_TIME}.
+
+  --serve                             Start a local HTTP server for the
+                                      packaged output directory.
+
+  --serve-http-port <port>            HTTP port used with --serve.
+                                      Defaults to ${DEFAULT_SERVE_HTTP_PORT}.
 
   --no-confirmation                   Never ask for confirmation; validate all prompts.
                                       Intended for automated scripts.

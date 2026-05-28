@@ -3,6 +3,7 @@
 import { spawn } from "child_process";
 import { mkdirSync } from "fs";
 import { resolve } from "path";
+import launchStaticServer from "../launch_static_server.mjs";
 import {
   commandExists,
   outputDirHasMediaFiles,
@@ -36,6 +37,8 @@ import {
  * @property {"none"|"webvtt"|"ttml"} subtitleFormat - HLS subtitle output format.
  * @property {"atomic"|"direct"} publishStrategy - How GPAC output is exposed publicly.
  * @property {boolean} emitProgramDateTime - Emit HLS EXT-X-PROGRAM-DATE-TIME tags.
+ * @property {boolean} serve                 - Start a local HTTP static server.
+ * @property {number} serveHttpPort         - HTTP port used by the static server.
  * @property {boolean} lowLatency            - Enable LL-HLS packaging when supported.
  * @property {string}  [gpacPath]            - Explicit path to the gpac binary.
  * @property {string}  tmpDir                - Directory used to cache the gpac binary.
@@ -93,9 +96,19 @@ export async function packageLiveContent(config) {
         targetDir: config.outputDir,
       })
     : { stop() {} };
+  const staticServer = config.serve
+    ? launchStaticServer(config.outputDir, {
+        httpPort: config.serveHttpPort,
+        noCache: true,
+        verbose: true,
+      })
+    : null;
   console.log(
     `Publishing strategy: ${useAtomicPublisher ? "atomic publisher" : "direct GPAC output"}`,
   );
+  if (staticServer !== null) {
+    await staticServer.listeningPromise;
+  }
 
   const gpacArgs = buildGpacArgs(config, ports, gpacOutputDir);
 
@@ -122,6 +135,7 @@ export async function packageLiveContent(config) {
     // Run until interrupted or one child crashes.
     await Promise.race([ffmpegExited, gpacExited]);
   } finally {
+    staticServer?.close();
     publisher.stop();
   }
 }
