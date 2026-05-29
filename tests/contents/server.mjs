@@ -42,87 +42,40 @@ const routeObj = urls.reduce((acc, elt) => {
 }, {});
 
 const DEFAULT_CONTENT_SERVER_PORT = 3000;
+const CONTENT_TYPE_M3U8 = "application/vnd.apple.mpegurl";
+const EVENT_ENDLIST_SCENARIO_SEGMENT_DURATION_S = 2;
+const EVENT_ENDLIST_SCENARIO_INITIAL_SEGMENT_COUNT = 4;
+const EVENT_ENDLIST_SCENARIO_FINAL_SEGMENT_COUNT = 6;
+// Synthetic live scenario used to exercise an EVENT playlist that later
+// becomes terminal through EXT-X-ENDLIST. This is kept outside the packager
+// because the packager shutdown path removes its output instead of finalizing
+// the manifest.
+const EVENT_ENDLIST_SCENARIO_PREFIX = "/live/scenario/event-endlist";
 
 /** Global variable to track the "content packaging" process */
 let packagingProcessInfo = null;
+let eventEndlistScenarioState = createEventEndlistScenarioState();
 // Slow Windows CI machines can briefly make newly written live files
 // unavailable. Retry opening them a few times before surfacing a 404.
 const LIVE_FILE_OPEN_RETRY_COUNT = 20;
 const LIVE_FILE_OPEN_RETRY_DELAY_MS = 25;
 
-function attachPackagerLogDrain(proc) {
-  if (ACTIVATE_PACKAGER_LOGS) {
-    proc.stdout?.on("data", (data) => {
-      console.log("Content packaging script stdout:", data.toString());
-    });
-    proc.stderr?.on("data", (data) => {
-      console.error("Content packaging script stderr:", data.toString());
-    });
-  }
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-function forceKillProcessTree(proc) {
-  if (!proc || proc.pid === undefined) {
-    return;
-  }
-  try {
-    if (process.platform === "win32") {
-      spawnSync("taskkill", ["/pid", String(proc.pid), "/t", "/f"], {
-        stdio: "ignore",
-      });
-    } else {
-      process.kill(-proc.pid);
-    }
-  } catch (_err) {
-    try {
-      proc.kill("SIGKILL");
-    } catch (_innerErr) {
-      /* process already exited */
-    }
-  }
-}
-
-async function stopPackagingProcess() {
-  const processInfo = packagingProcessInfo;
-  if (!processInfo || processInfo.process.killed) {
-    packagingProcessInfo = null;
-    return false;
-  }
-
-  const proc = processInfo.process;
-  const exitPromise = new Promise((resolve) => {
-    proc.once("exit", () => resolve(true));
-    proc.once("error", () => resolve(true));
-  });
-
-  try {
-    proc.kill("SIGINT");
-  } catch (_err) {
-    forceKillProcessTree(proc);
-  }
-
-  const forceKillTimer = setTimeout(() => {
-    forceKillProcessTree(proc);
-  }, 5000);
-  forceKillTimer.unref?.();
-
-  await Promise.race([exitPromise, sleep(6500)]);
-  clearTimeout(forceKillTimer);
-  if (packagingProcessInfo?.process === proc) {
-    packagingProcessInfo = null;
-  }
-  return true;
-}
-
 /**
  * Create simple HTTP server specifically designed to serve the contents defined
  * in this directory.
+ *
+ * Main endpoint groups:
+ *   - `/`: HTML index of statically registered routes
+ *   - `/live/*`: files produced by the live packager
+ *   - `/vod/generated/*`: generated VoD assets backing fixtures
+ *   - `/vod/scenario/*`: synthetic VoD manifests built on top of generated assets
+ *   - `/start_packager`, `/stop_packager`, `/packager_status`: live packager control API
+ *   - `/live/scenario/event-endlist/*`: synthetic live/Event manifest transition used
+ *     by the EXT-X-ENDLIST integration test
+ *
+ * Route ordering matters: more specific synthetic scenario endpoints need to be
+ * checked before generic prefixes like `/live/`.
+ *
  * @param {Object} params
  * @param {number} params.port
  * @returns {Object}
@@ -152,6 +105,61 @@ export default function createContentServer({
         "http://127.0.0.1:" + String(port),
       );
       answerWithCORS(res, 200, html);
+      return;
+    }
+
+    // Scenario control endpoint. Tests call it before loading the content so
+    // they always start from the non-finalized EVENT playlist.
+    if (requestUrl.pathname === `${EVENT_ENDLIST_SCENARIO_PREFIX}/reset`) {
+      if (req.method.toUpperCase() === "OPTIONS") {
+        answerWithCORS(res, 200);
+        res.end();
+        return;
+      }
+      if (
+        req.method.toUpperCase() !== "POST" &&
+        req.method.toUpperCase() !== "GET"
+      ) {
+        res.setHeader("Content-Type", "text/plain");
+        answerWithCORS(res, 405, "405 Method Not Allowed");
+        return;
+      }
+
+      eventEndlistScenarioState = createEventEndlistScenarioState();
+      res.setHeader("Content-Type", "application/json");
+      answerWithCORS(
+        res,
+        200,
+        JSON.stringify({
+          playlistUrl:
+            `${contentServerBaseUrl}${EVENT_ENDLIST_SCENARIO_PREFIX}` +
+            "/playlist.m3u8",
+        }),
+      );
+      return;
+    }
+
+    // Synthetic playlist endpoint. It behaves like a small EVENT playlist
+    // whose publication advances with wall-clock time after `/reset`.
+    if (
+      requestUrl.pathname === `${EVENT_ENDLIST_SCENARIO_PREFIX}/playlist.m3u8`
+    ) {
+      if (req.method.toUpperCase() === "OPTIONS") {
+        answerWithCORS(res, 200);
+        res.end();
+        return;
+      }
+      if (req.method.toUpperCase() !== "GET") {
+        res.setHeader("Content-Type", "text/plain");
+        answerWithCORS(res, 405, "405 Method Not Allowed");
+        return;
+      }
+
+      handleEventEndlistScenarioPlaylistRequest(
+        res,
+        contentServerBaseUrl,
+        eventEndlistScenarioState,
+      );
       return;
     }
 
@@ -329,31 +337,6 @@ export default function createContentServer({
         `Test Content Server started: http://localhost:${port ?? DEFAULT_CONTENT_SERVER_PORT}`,
       );
       console.log("");
-      console.log(
-        "You can request that URL directly to see the list of static contents served by this server.",
-      );
-      console.log("");
-      console.log(
-        "NOTE: You can start packaging a live content by POSTing to:\n " +
-          "     /start_packager",
-      );
-      console.log("      Only one content packaging at a time is supported.\n");
-      console.log(
-        "      A text track can be added by adding enableTextTrack=1 to its query string.\n",
-      );
-      console.log(
-        "      Stop packaging operations by POSTing to:\n      /stop_packager\n",
-      );
-      console.log(
-        "      To check if there's a packaging process going on, and its properties, do a GET at:\n" +
-          "      /packager_status",
-      );
-      console.log("");
-      console.log(
-        "You can inspect or update the server logic in its file:\n" +
-          __filename,
-      );
-      console.log("");
       res();
     });
   });
@@ -433,6 +416,84 @@ function handlePackagedLiveRequest(res, req, basePath) {
       );
     },
   );
+}
+
+async function handleEventEndlistScenarioPlaylistRequest(
+  res,
+  contentServerBaseUrl,
+  state,
+) {
+  try {
+    await ensureVodRecipe("fmp4-muxed-av");
+    const { ended, segmentCount } =
+      getEventEndlistScenarioPublicationState(state);
+    res.setHeader("Content-Type", CONTENT_TYPE_M3U8);
+    answerWithCORS(
+      res,
+      200,
+      buildEventEndlistScenarioPlaylist(contentServerBaseUrl, segmentCount, {
+        ended,
+      }),
+    );
+  } catch (error) {
+    console.error(
+      "Event ENDLIST scenario request failed:",
+      error instanceof Error ? (error.stack ?? error.message) : error,
+    );
+    res.setHeader("Content-Type", "text/plain");
+    answerWithCORS(
+      res,
+      500,
+      "Error: " + (error instanceof Error ? error.toString() : "Unknown Error"),
+    );
+  }
+}
+
+function buildEventEndlistScenarioPlaylist(
+  contentServerBaseUrl,
+  segmentCount,
+  { ended },
+) {
+  // Reuse generated fMP4 assets so this scenario only controls manifest
+  // evolution, not media generation.
+  const lines = [
+    "#EXTM3U",
+    "#EXT-X-VERSION:7",
+    "#EXT-X-TARGETDURATION:2",
+    "#EXT-X-MEDIA-SEQUENCE:0",
+    "#EXT-X-PLAYLIST-TYPE:EVENT",
+    "#EXT-X-INDEPENDENT-SEGMENTS",
+    `#EXT-X-MAP:URI="${contentServerBaseUrl}/vod/generated/fmp4-muxed-av/init.mp4"`,
+  ];
+
+  for (let i = 0; i < segmentCount; i++) {
+    lines.push("#EXTINF:2.000000,");
+    lines.push(
+      `${contentServerBaseUrl}/vod/generated/fmp4-muxed-av/seg-${String(i).padStart(3, "0")}.m4s`,
+    );
+  }
+
+  if (ended) {
+    lines.push("#EXT-X-ENDLIST");
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+function getEventEndlistScenarioPublicationState(state) {
+  const elapsedSeconds = Math.max(0, (Date.now() - state.startedAtMs) / 1000);
+  const segmentCount = Math.min(
+    EVENT_ENDLIST_SCENARIO_FINAL_SEGMENT_COUNT,
+    EVENT_ENDLIST_SCENARIO_INITIAL_SEGMENT_COUNT +
+      Math.floor(elapsedSeconds / EVENT_ENDLIST_SCENARIO_SEGMENT_DURATION_S),
+  );
+  const ended =
+    elapsedSeconds >=
+    (EVENT_ENDLIST_SCENARIO_FINAL_SEGMENT_COUNT -
+      EVENT_ENDLIST_SCENARIO_INITIAL_SEGMENT_COUNT +
+      1) *
+      EVENT_ENDLIST_SCENARIO_SEGMENT_DURATION_S;
+  return { ended, segmentCount };
 }
 
 function handlePackagedVodRequest(res, req, requestUrl, basePath) {
@@ -989,6 +1050,83 @@ if (
     console.error(`ERROR: ${err}\n`);
     process.exit(1);
   }
+}
+
+function createEventEndlistScenarioState() {
+  return {
+    // Requests observe publication state, they do not drive it.
+    startedAtMs: Date.now(),
+  };
+}
+
+function attachPackagerLogDrain(proc) {
+  if (ACTIVATE_PACKAGER_LOGS) {
+    proc.stdout?.on("data", (data) => {
+      console.log("Content packaging script stdout:", data.toString());
+    });
+    proc.stderr?.on("data", (data) => {
+      console.error("Content packaging script stderr:", data.toString());
+    });
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function forceKillProcessTree(proc) {
+  if (!proc || proc.pid === undefined) {
+    return;
+  }
+  try {
+    if (process.platform === "win32") {
+      spawnSync("taskkill", ["/pid", String(proc.pid), "/t", "/f"], {
+        stdio: "ignore",
+      });
+    } else {
+      process.kill(-proc.pid);
+    }
+  } catch (_err) {
+    try {
+      proc.kill("SIGKILL");
+    } catch (_innerErr) {
+      /* process already exited */
+    }
+  }
+}
+
+async function stopPackagingProcess() {
+  const processInfo = packagingProcessInfo;
+  if (!processInfo || processInfo.process.killed) {
+    packagingProcessInfo = null;
+    return false;
+  }
+
+  const proc = processInfo.process;
+  const exitPromise = new Promise((resolve) => {
+    proc.once("exit", () => resolve(true));
+    proc.once("error", () => resolve(true));
+  });
+
+  try {
+    proc.kill("SIGINT");
+  } catch (_err) {
+    forceKillProcessTree(proc);
+  }
+
+  const forceKillTimer = setTimeout(() => {
+    forceKillProcessTree(proc);
+  }, 5000);
+  forceKillTimer.unref?.();
+
+  await Promise.race([exitPromise, sleep(6500)]);
+  clearTimeout(forceKillTimer);
+  if (packagingProcessInfo?.process === proc) {
+    packagingProcessInfo = null;
+  }
+  return true;
 }
 
 /**

@@ -187,6 +187,22 @@ const SCENARIOS = {
       );
     },
   },
+  "fmp4-direct-media-endlist-without-playlist-type": {
+    entryPath: "playlist.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath !== "playlist.m3u8") {
+        return null;
+      }
+      return createMediaPlaylistResponse(
+        removeFirstLineMatching(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+          (line) => line.startsWith("#EXT-X-PLAYLIST-TYPE:"),
+        ),
+        context,
+      );
+    },
+  },
   "fmp4-player-api-program-date-time": {
     entryPath: "playlist.m3u8",
     recipeId: "fmp4-muxed-av",

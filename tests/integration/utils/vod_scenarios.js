@@ -10,6 +10,7 @@ const SCENARIO_ENTRY_FILES = {
   "fmp4-multivariant-no-codecs": "master.m3u8",
   "mpegts-multivariant-no-codecs": "master.m3u8",
   "fmp4-player-api": "playlist.m3u8",
+  "fmp4-direct-media-endlist-without-playlist-type": "playlist.m3u8",
   "fmp4-player-api-program-date-time": "playlist.m3u8",
   "fmp4-direct-media-byterange": "playlist.m3u8",
   "fmp4-player-api-ext-x-start": "playlist.m3u8",

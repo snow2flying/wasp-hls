@@ -99,6 +99,42 @@ describe("Generated VoD content - playback", function () {
   );
 
   it(
+    "treats EXT-X-ENDLIST as finalized VoD even without EXT-X-PLAYLIST-TYPE",
+    { timeout: VOD_TEST_TIMEOUT_MS },
+    async () => {
+      let latestContentInfoUpdate;
+
+      ctx.player.addEventListener("contentInfoUpdate", (event) => {
+        latestContentInfoUpdate = event;
+      });
+      ctx.player.addEventListener("playerStateChange", (state) => {
+        if (state === "Loaded") {
+          ctx.player.resume();
+        }
+      });
+
+      ctx.player.load(
+        getVodScenarioUrl("fmp4-direct-media-endlist-without-playlist-type"),
+      );
+      await waitForLoadedState(
+        ctx.player,
+        ctx.videoElement,
+        () => ctx.lastPlayerError,
+      );
+
+      expect(ctx.player.isLive()).toEqual(false);
+      expect(ctx.player.isVod()).toEqual(true);
+      expect(ctx.player.getMaximumPosition()).toBeGreaterThan(10);
+      expect(latestContentInfoUpdate?.isLive).toEqual(false);
+      expect(latestContentInfoUpdate?.isVod).toEqual(true);
+
+      const startPosition = ctx.player.getPosition();
+      await sleep(PLAYBACK_SETTLE_MS);
+      expectPositionToAdvance(ctx.player, startPosition);
+    },
+  );
+
+  it(
     "plays a multivariant fMP4 playlist without CODECS",
     { timeout: VOD_TEST_TIMEOUT_MS },
     async () => {
