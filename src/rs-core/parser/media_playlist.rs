@@ -3,6 +3,9 @@ use super::{
     multi_variant_playlist::MediaPlaylistContext,
     segment_list::{InitSegmentInfo, MediaSegmentInfo, SegmentList, SegmentTimeInfo},
     timeline_sync::TimelineReference,
+    top_level_playlist::{
+        is_multivariant_playlist_tag_name, media_playlist_singleton_tag_name, tag_name,
+    },
     top_level_playlist::ExternalMediaInfo,
     value_parsers::{
         parse_byte_range, parse_decimal_floating_point, parse_decimal_integer,
@@ -19,6 +22,7 @@ use crate::{
     utils::url::Url,
     Logger,
 };
+use std::collections::HashSet;
 use std::{error, fmt, io::BufRead};
 
 // #[derive(Clone, Debug)]
@@ -40,6 +44,8 @@ pub(crate) enum MediaPlaylistParsingError {
     UriMissingInMap,
     MissingTargetDuration,
     UriWithoutExtInf,
+    DuplicateTag,
+    ConflictingPlaylistTagTypes,
     VariableDefinition(VariableDefinitionError),
 }
 
@@ -66,6 +72,15 @@ impl fmt::Display for MediaPlaylistParsingError {
                     f,
                     "Invalid EXT-X-DEFINE usage in the Media Playlist: {:?}",
                     err
+                )
+            }
+            MediaPlaylistParsingError::DuplicateTag => {
+                write!(f, "A singleton tag was duplicated in the Media Playlist")
+            }
+            MediaPlaylistParsingError::ConflictingPlaylistTagTypes => {
+                write!(
+                    f,
+                    "The Media Playlist contains Multivariant Playlist tags and must fail to parse"
                 )
             }
         }
@@ -158,6 +173,7 @@ impl MediaPlaylist {
         let mut current_byte: Option<usize> = None;
         let mut next_segment_byte_range: Option<ByteRange> = None;
         let mut variable_store = VariableStore::from_url(&url);
+        let mut seen_singleton_tags = HashSet::new();
 
         let lines = playlist.lines();
         for line in lines {
@@ -165,6 +181,18 @@ impl MediaPlaylist {
             if str_line.is_empty() {
                 continue;
             } else if let Some(stripped) = str_line.strip_prefix("#EXT") {
+                if let Some(tag_name) = tag_name(&str_line) {
+                    if is_multivariant_playlist_tag_name(tag_name) {
+                        return Err(MediaPlaylistParsingError::ConflictingPlaylistTagTypes);
+                    }
+
+                    if let Some(singleton_tag_name) = media_playlist_singleton_tag_name(tag_name) {
+                        if !seen_singleton_tags.insert(singleton_tag_name) {
+                            return Err(MediaPlaylistParsingError::DuplicateTag);
+                        }
+                    }
+                }
+
                 let colon_idx = match stripped.find(':') {
                     None => str_line.len(),
                     Some(idx) => idx + 4,
@@ -697,12 +725,54 @@ fn infer_live_timeline_offset(
 
 #[cfg(test)]
 mod tests {
-    use super::{MediaPlaylist, TimelineReference};
+    use super::{MediaPlaylist, MediaPlaylistParsingError, TimelineReference};
     use crate::{
         bindings::PlaylistNature, parser::multi_variant_playlist::MediaPlaylistContext,
         utils::url::Url,
     };
     use std::io::Cursor;
+
+    fn parse_media_playlist(playlist: &str) -> Result<MediaPlaylist, MediaPlaylistParsingError> {
+        MediaPlaylist::create(
+            Cursor::new(playlist),
+            Url::new("https://example.com/media.m3u8".to_owned()),
+            None,
+            None,
+            &MediaPlaylistContext::default(),
+        )
+    }
+
+    #[test]
+    fn rejects_duplicate_singleton_tags() {
+        let err = parse_media_playlist(
+            r#"#EXTM3U
+#EXT-X-VERSION:6
+#EXT-X-VERSION:7
+#EXT-X-TARGETDURATION:4
+#EXTINF:4,
+seg.ts
+"#,
+        );
+
+        assert!(matches!(err, Err(MediaPlaylistParsingError::DuplicateTag)));
+    }
+
+    #[test]
+    fn rejects_multivariant_tags_in_media_playlists() {
+        let err = parse_media_playlist(
+            r#"#EXTM3U
+#EXT-X-TARGETDURATION:4
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+#EXTINF:4,
+seg.ts
+"#,
+        );
+
+        assert!(matches!(
+            err,
+            Err(MediaPlaylistParsingError::ConflictingPlaylistTagTypes)
+        ));
+    }
 
     #[test]
     fn infers_vod_from_endlist_without_explicit_playlist_type() {

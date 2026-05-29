@@ -166,6 +166,84 @@ pub enum PlaylistKind {
     NotAPlaylist,
 }
 
+pub(super) fn tag_name(line: &str) -> Option<&str> {
+    let stripped = line.strip_prefix("#EXT")?;
+    let colon_idx = match stripped.find(':') {
+        None => line.len(),
+        Some(idx) => idx + 4,
+    };
+    Some(&line[4..colon_idx])
+}
+
+pub(super) fn is_multivariant_playlist_tag_name(tag_name: &str) -> bool {
+    matches!(
+        tag_name,
+        "-X-MEDIA"
+            | "-X-STREAM-INF"
+            | "-X-I-FRAME-STREAM-INF"
+            | "-X-SESSION-DATA"
+            | "-X-SESSION-KEY"
+            | "-X-CONTENT-STEERING"
+    )
+}
+
+pub(super) fn is_media_playlist_tag_name(tag_name: &str) -> bool {
+    matches!(
+        tag_name,
+        "-X-TARGETDURATION"
+            | "-X-MEDIA-SEQUENCE"
+            | "-X-DISCONTINUITY-SEQUENCE"
+            | "-X-ENDLIST"
+            | "-X-PLAYLIST-TYPE"
+            | "-X-I-FRAMES-ONLY"
+            | "-X-PART-INF"
+            | "-X-SERVER-CONTROL"
+    )
+}
+
+pub(super) fn is_media_segment_tag_name(tag_name: &str) -> bool {
+    matches!(
+        tag_name,
+        "INF"
+            | "-X-BYTERANGE"
+            | "-X-DISCONTINUITY"
+            | "-X-KEY"
+            | "-X-MAP"
+            | "-X-PROGRAM-DATE-TIME"
+            | "-X-GAP"
+            | "-X-BITRATE"
+            | "-X-PART"
+    )
+}
+
+pub(super) fn media_playlist_singleton_tag_name(tag_name: &str) -> Option<&'static str> {
+    match tag_name {
+        "-X-VERSION" => Some("-X-VERSION"),
+        "-X-INDEPENDENT-SEGMENTS" => Some("-X-INDEPENDENT-SEGMENTS"),
+        "-X-START" => Some("-X-START"),
+        "-X-TARGETDURATION" => Some("-X-TARGETDURATION"),
+        "-X-MEDIA-SEQUENCE" => Some("-X-MEDIA-SEQUENCE"),
+        "-X-DISCONTINUITY-SEQUENCE" => Some("-X-DISCONTINUITY-SEQUENCE"),
+        "-X-ENDLIST" => Some("-X-ENDLIST"),
+        "-X-PLAYLIST-TYPE" => Some("-X-PLAYLIST-TYPE"),
+        "-X-I-FRAMES-ONLY" => Some("-X-I-FRAMES-ONLY"),
+        "-X-PART-INF" => Some("-X-PART-INF"),
+        "-X-SERVER-CONTROL" => Some("-X-SERVER-CONTROL"),
+        _ => None,
+    }
+}
+
+pub(super) fn multivariant_playlist_singleton_tag_name(
+    tag_name: &str,
+) -> Option<&'static str> {
+    match tag_name {
+        "-X-VERSION" => Some("-X-VERSION"),
+        "-X-INDEPENDENT-SEGMENTS" => Some("-X-INDEPENDENT-SEGMENTS"),
+        "-X-START" => Some("-X-START"),
+        _ => None,
+    }
+}
+
 pub fn classify_playlist(data: &[u8]) -> PlaylistKind {
     let mut first_non_empty_line = true;
 
@@ -187,15 +265,14 @@ pub fn classify_playlist(data: &[u8]) -> PlaylistKind {
             continue;
         }
 
-        if line.starts_with("#EXT-X-STREAM-INF:") || line.starts_with("#EXT-X-MEDIA:") {
-            return PlaylistKind::Multivariant;
-        }
+        if let Some(tag_name) = tag_name(line) {
+            if is_multivariant_playlist_tag_name(tag_name) {
+                return PlaylistKind::Multivariant;
+            }
 
-        if line.starts_with("#EXT-X-TARGETDURATION")
-            || line.starts_with("#EXT-X-MEDIA-SEQUENCE")
-            || line.starts_with("#EXTINF:")
-        {
-            return PlaylistKind::Media;
+            if is_media_playlist_tag_name(tag_name) || is_media_segment_tag_name(tag_name) {
+                return PlaylistKind::Media;
+            }
         }
     }
 
@@ -210,7 +287,13 @@ pub fn classify_playlist(data: &[u8]) -> PlaylistKind {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify_playlist, PlaylistKind};
+    use super::{
+        classify_playlist, PlaylistKind, TopLevelPlaylist, TopLevelPlaylistParsingError,
+    };
+    use crate::{
+        parser::{MediaPlaylistParsingError, MultivariantPlaylistParsingError},
+        utils::url::Url,
+    };
 
     #[test]
     fn classifies_non_playlist_input() {
@@ -226,5 +309,43 @@ mod tests {
             classify_playlist(b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nseg.ts\n"),
             PlaylistKind::Media
         );
+    }
+
+    #[test]
+    fn classifies_multivariant_playlist_input_from_unparsed_tags() {
+        assert_eq!(
+            classify_playlist(b"#EXTM3U\n#EXT-X-SESSION-DATA:DATA-ID=\"x\",VALUE=\"y\"\n"),
+            PlaylistKind::Multivariant
+        );
+    }
+
+    #[test]
+    fn rejects_mixed_tags_when_classified_as_media() {
+        let err = TopLevelPlaylist::parse(
+            b"#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"aud\",NAME=\"a\",URI=\"a.m3u8\"\n#EXTINF:4,\nseg.ts\n",
+            Url::new("https://example.com/media.m3u8".to_owned()),
+        );
+
+        assert!(matches!(
+            err,
+            Err(TopLevelPlaylistParsingError::Media(
+                MediaPlaylistParsingError::ConflictingPlaylistTagTypes
+            ))
+        ));
+    }
+
+    #[test]
+    fn rejects_mixed_tags_when_classified_as_multivariant() {
+        let err = TopLevelPlaylist::parse(
+            b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nvideo.m3u8\n#EXT-X-TARGETDURATION:4\n",
+            Url::new("https://example.com/master.m3u8".to_owned()),
+        );
+
+        assert!(matches!(
+            err,
+            Err(TopLevelPlaylistParsingError::Multivariant(
+                MultivariantPlaylistParsingError::ConflictingPlaylistTagTypes
+            ))
+        ));
     }
 }

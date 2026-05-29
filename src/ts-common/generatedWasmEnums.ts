@@ -176,9 +176,17 @@ export const MultivariantPlaylistParsingErrorCode = Object.freeze({
    */
   UnableToReadLine: 8,
   /**
+   * A singleton tag was duplicated in the Multivariant Playlist.
+   */
+  DuplicateTag: 9,
+  /**
+   * The Multivariant Playlist contained Media Playlist or Media Segment tags.
+   */
+  ConflictingPlaylistTagTypes: 10,
+  /**
    * Another, uncategorized, error arised.
    */
-  Unknown: 9,
+  Unknown: 11,
 } as const);
 export type MultivariantPlaylistParsingErrorCode =
   (typeof MultivariantPlaylistParsingErrorCode)[keyof typeof MultivariantPlaylistParsingErrorCode];
@@ -220,6 +228,14 @@ export const MediaPlaylistParsingErrorCode = Object.freeze({
    * Another, uncategorized, error arised.
    */
   Unknown: 6,
+  /**
+   * A singleton tag was duplicated in the Media Playlist.
+   */
+  DuplicateTag: 7,
+  /**
+   * The Media Playlist contained Multivariant Playlist tags.
+   */
+  ConflictingPlaylistTagTypes: 8,
 } as const);
 export type MediaPlaylistParsingErrorCode =
   (typeof MediaPlaylistParsingErrorCode)[keyof typeof MediaPlaylistParsingErrorCode];

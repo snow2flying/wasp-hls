@@ -205,8 +205,20 @@
           "value": 8,
           "doc": ["A line could not be read."]
         },
-        "Unknown": {
+        "DuplicateTag": {
           "value": 9,
+          "doc": [
+            "A singleton tag was duplicated in the Multivariant Playlist."
+          ]
+        },
+        "ConflictingPlaylistTagTypes": {
+          "value": 10,
+          "doc": [
+            "The Multivariant Playlist contained Media Playlist or Media Segment tags."
+          ]
+        },
+        "Unknown": {
+          "value": 11,
           "doc": ["Another, uncategorized, error arised."]
         }
       }
@@ -259,6 +271,16 @@
         "Unknown": {
           "value": 6,
           "doc": ["Another, uncategorized, error arised."]
+        },
+        "DuplicateTag": {
+          "value": 7,
+          "doc": ["A singleton tag was duplicated in the Media Playlist."]
+        },
+        "ConflictingPlaylistTagTypes": {
+          "value": 8,
+          "doc": [
+            "The Media Playlist contained Multivariant Playlist tags."
+          ]
         }
       }
     },

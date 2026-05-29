@@ -228,8 +228,12 @@ pub enum MultivariantPlaylistParsingErrorCode {
     VariableDefinitionError = 7,
     /// A line could not be read.
     UnableToReadLine = 8,
+    /// A singleton tag was duplicated in the Multivariant Playlist.
+    DuplicateTag = 9,
+    /// The Multivariant Playlist contained Media Playlist or Media Segment tags.
+    ConflictingPlaylistTagTypes = 10,
     /// Another, uncategorized, error arised.
-    Unknown = 9,
+    Unknown = 11,
 }
 
 impl MultivariantPlaylistParsingErrorCode {
@@ -244,7 +248,9 @@ impl MultivariantPlaylistParsingErrorCode {
             6 => Self::MissingRequiredAttribute,
             7 => Self::VariableDefinitionError,
             8 => Self::UnableToReadLine,
-            9 => Self::Unknown,
+            9 => Self::DuplicateTag,
+            10 => Self::ConflictingPlaylistTagTypes,
+            11 => Self::Unknown,
             _ => Self::Unknown,
         }
     }
@@ -273,6 +279,10 @@ pub enum MediaPlaylistParsingErrorCode {
     VariableDefinitionError = 5,
     /// Another, uncategorized, error arised.
     Unknown = 6,
+    /// A singleton tag was duplicated in the Media Playlist.
+    DuplicateTag = 7,
+    /// The Media Playlist contained Multivariant Playlist tags.
+    ConflictingPlaylistTagTypes = 8,
 }
 
 impl MediaPlaylistParsingErrorCode {
@@ -285,6 +295,8 @@ impl MediaPlaylistParsingErrorCode {
             4 => Self::UnparsableByteRange,
             5 => Self::VariableDefinitionError,
             6 => Self::Unknown,
+            7 => Self::DuplicateTag,
+            8 => Self::ConflictingPlaylistTagTypes,
             _ => Self::Unknown,
         }
     }

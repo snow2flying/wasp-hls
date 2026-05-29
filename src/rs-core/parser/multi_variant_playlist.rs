@@ -3,6 +3,10 @@ use super::{
     media_playlist::{MediaPlaylist, MediaPlaylistParsingError},
     media_tag::{MediaTag, MediaTagParsingError},
     timeline_sync::TimelineReference,
+    top_level_playlist::{
+        is_media_playlist_tag_name, is_media_segment_tag_name,
+        is_multivariant_playlist_tag_name, multivariant_playlist_singleton_tag_name, tag_name,
+    },
     value_parsers::{parse_start_attribute, StartAttribute},
     variable_substitution::{
         parse_define_tag, VariableDefinition, VariableDefinitionError, VariableStore,
@@ -11,7 +15,7 @@ use super::{
     AudioTrack, MediaTagType,
 };
 use crate::{utils::url::Url, Logger};
-use std::{collections::HashMap, error, fmt, io};
+use std::{collections::{HashMap, HashSet}, error, fmt, io};
 
 /// Represents a parsed HLS Multivariant Playlist (a.k.a. Master Playlist).
 ///
@@ -55,6 +59,7 @@ impl MultivariantPlaylist {
         let mut start = None;
         let mut independent_segments = None;
         let mut variable_store = VariableStore::from_url(&url);
+        let mut seen_singleton_tags = HashSet::new();
 
         let mut lines = playlist.lines();
         match lines.next() {
@@ -72,11 +77,36 @@ impl MultivariantPlaylist {
             if str_line.is_empty() {
                 continue;
             } else if let Some(stripped) = str_line.strip_prefix("#EXT") {
+                if let Some(tag_name) = tag_name(&str_line) {
+                    if is_media_playlist_tag_name(tag_name) || is_media_segment_tag_name(tag_name)
+                    {
+                        return Err(MultivariantPlaylistParsingError::ConflictingPlaylistTagTypes);
+                    }
+
+                    if let Some(singleton_tag_name) =
+                        multivariant_playlist_singleton_tag_name(tag_name)
+                    {
+                        if !seen_singleton_tags.insert(singleton_tag_name) {
+                            return Err(MultivariantPlaylistParsingError::DuplicateTag);
+                        }
+                    }
+
+                    debug_assert!(
+                        is_multivariant_playlist_tag_name(tag_name)
+                            || matches!(
+                                tag_name,
+                                "M3U" | "-X-VERSION" | "-X-INDEPENDENT-SEGMENTS" | "-X-START"
+                                    | "-X-DEFINE"
+                            )
+                    );
+                }
+
                 let colon_idx = match &stripped.find(':') {
                     None => continue,
                     Some(idx) => idx + 4,
                 };
                 match &str_line[4..colon_idx] {
+                    "-X-VERSION" => {}
                     "-X-DEFINE" => match parse_define_tag(&str_line) {
                         Ok(VariableDefinition::Name { name, value }) => {
                             variable_store.define(name, value)?
@@ -101,6 +131,12 @@ impl MultivariantPlaylist {
                                     )
                                 }
                                 Some(Ok(l)) => {
+                                    let trimmed = l.trim();
+                                    if trimmed.is_empty() || trimmed.starts_with('#') {
+                                        return Err(
+                                            MultivariantPlaylistParsingError::MissingUriLineAfterVariant,
+                                        );
+                                    }
                                     let line = variable_store.substitute(&l)?;
                                     Url::new(line.into_owned())
                                 }
@@ -578,6 +614,8 @@ pub(crate) enum MultivariantPlaylistParsingError {
     MissingUriLineAfterVariant,
     UnableToReadVariantUri,
     VariantMissingBandwidth,
+    DuplicateTag,
+    ConflictingPlaylistTagTypes,
 
     // TODO information about which attribute we're talking about?
     InvalidDecimalInteger,
@@ -609,6 +647,13 @@ impl fmt::Display for MultivariantPlaylistParsingError {
             MultivariantPlaylistParsingError::VariantMissingBandwidth => {
                 write!(f, "A variant is missing its mandatory BANDWIDTH attribute")
             }
+            MultivariantPlaylistParsingError::DuplicateTag => {
+                write!(f, "A singleton tag was duplicated in the Multivariant Playlist")
+            }
+            MultivariantPlaylistParsingError::ConflictingPlaylistTagTypes => write!(
+                f,
+                "The Multivariant Playlist contains Media Playlist or Media Segment tags and must fail to parse"
+            ),
             MultivariantPlaylistParsingError::InvalidDecimalInteger => {
                 write!(f, "A decimal attribute was in the wrong format.")
             }
@@ -862,6 +907,63 @@ video.m3u8
             MediaPlaylistUpdateError::ParsingError(MediaPlaylistParsingError::VariableDefinition(
                 _
             ))
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_singleton_tags() {
+        let err = MultivariantPlaylist::parse(
+            Cursor::new(
+                r#"#EXTM3U
+#EXT-X-VERSION:6
+#EXT-X-VERSION:7
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+video.m3u8
+"#,
+            ),
+            Url::new("https://example.com/master.m3u8".to_owned()),
+        );
+
+        assert!(matches!(
+            err,
+            Err(MultivariantPlaylistParsingError::DuplicateTag)
+        ));
+    }
+
+    #[test]
+    fn rejects_media_tags_in_multivariant_playlists() {
+        let err = MultivariantPlaylist::parse(
+            Cursor::new(
+                r#"#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+video.m3u8
+#EXT-X-TARGETDURATION:4
+"#,
+            ),
+            Url::new("https://example.com/master.m3u8".to_owned()),
+        );
+
+        assert!(matches!(
+            err,
+            Err(MultivariantPlaylistParsingError::ConflictingPlaylistTagTypes)
+        ));
+    }
+
+    #[test]
+    fn rejects_missing_uri_lines_after_variant_when_followed_by_comment() {
+        let err = MultivariantPlaylist::parse(
+            Cursor::new(
+                r#"#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=1000
+#comment
+"#,
+            ),
+            Url::new("https://example.com/master.m3u8".to_owned()),
+        );
+
+        assert!(matches!(
+            err,
+            Err(MultivariantPlaylistParsingError::MissingUriLineAfterVariant)
         ));
     }
 }

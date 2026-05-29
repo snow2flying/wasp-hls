@@ -156,6 +156,13 @@ export const WaspErrorCode = {
    */
   MultivariantPlaylistVariableDefinitionError:
     "MultivariantPlaylistVariableDefinitionError",
+  /** A singleton tag was duplicated in the Multivariant Playlist. */
+  MultivariantPlaylistDuplicateTag: "MultivariantPlaylistDuplicateTag",
+  /**
+   * The Multivariant Playlist contained Media Playlist or Media Segment tags.
+   */
+  MultivariantPlaylistConflictingTagTypes:
+    "MultivariantPlaylistConflictingTagTypes",
   /**
    * An uncategorized error arised while parsing the Multivariant Playlist.
    */
@@ -191,6 +198,10 @@ export const WaspErrorCode = {
    * Media Playlist.
    */
   MediaPlaylistVariableDefinitionError: "MediaPlaylistVariableDefinitionError",
+  /** A singleton tag was duplicated in the Media Playlist. */
+  MediaPlaylistDuplicateTag: "MediaPlaylistDuplicateTag",
+  /** The Media Playlist contained Multivariant Playlist tags. */
+  MediaPlaylistConflictingTagTypes: "MediaPlaylistConflictingTagTypes",
   /** Another uncategorized error happened while parsing the Media Playlist. */
   MediaPlaylistOtherParsingError: "MediaPlaylistOtherParsingError",
 

@@ -17,6 +17,7 @@
 - Add optional `videoRange` property to `getVariantList`, `getLockedVariant`, `getCurrentVariant` as well as `variantUpdate`, `variantLockUpdate` and `variantListUpdate` events to reflect its video's dynamic range
 - Add `NotAPlaylist` error code: a new `WaspOtherError` for when the given resource URL does not seem to be a valid HLS playlist URL
 - Add `MultivariantPlaylistVariableDefinitionError` and `MediaPlaylistVariableDefinitionError` error codes for when an `#EXT-X-DEFINE` tag or usage is not compliant to the HLS specification respectively on the MultiVariant Playlist or the Media Playlist.
+- Add `MultivariantPlaylistDuplicateTag`, `MultivariantPlaylistConflictingTagTypes`, `MediaPlaylistDuplicateTag`, and `MediaPlaylistConflictingTagTypes` error codes for duplicate singleton tags and invalid mixes of playlist tag classes.
 - Add `SourceBufferEmptyMimeType`, `SourceBufferMediaSourceIsClosed`, `SourceBufferNoMediaSourceAttached` and `SourceBufferQuotaExceededError` error codes on a `WaspSourceBufferCreationError` error type.
 - Add `getSeekableMinimumPosition` and `getSeekableMaximumPosition` methods to expose the currently known seekable bounds in playlist time
 - Add `usesProgramDateTime` and `positionToDate` methods to let applications detect and convert `EXT-X-PROGRAM-DATE-TIME`-based playlist timelines

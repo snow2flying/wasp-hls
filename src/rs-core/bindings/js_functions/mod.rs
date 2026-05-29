@@ -775,6 +775,12 @@ impl From<MultivariantPlaylistParsingError> for MultivariantPlaylistParsingError
             MultivariantPlaylistParsingError::VariantMissingBandwidth => {
                 MultivariantPlaylistParsingErrorCode::VariantMissingBandwidth
             }
+            MultivariantPlaylistParsingError::DuplicateTag => {
+                MultivariantPlaylistParsingErrorCode::DuplicateTag
+            }
+            MultivariantPlaylistParsingError::ConflictingPlaylistTagTypes => {
+                MultivariantPlaylistParsingErrorCode::ConflictingPlaylistTagTypes
+            }
             MultivariantPlaylistParsingError::MissingUriLineAfterVariant => {
                 MultivariantPlaylistParsingErrorCode::MissingUriLineAfterVariant
             }
@@ -808,6 +814,12 @@ impl From<MediaPlaylistUpdateError> for MediaPlaylistParsingErrorCode {
             MediaPlaylistUpdateError::ParsingError(MediaPlaylistParsingError::UriWithoutExtInf) => {
                 MediaPlaylistParsingErrorCode::UriWithoutExtInf
             }
+            MediaPlaylistUpdateError::ParsingError(MediaPlaylistParsingError::DuplicateTag) => {
+                MediaPlaylistParsingErrorCode::DuplicateTag
+            }
+            MediaPlaylistUpdateError::ParsingError(
+                MediaPlaylistParsingError::ConflictingPlaylistTagTypes,
+            ) => MediaPlaylistParsingErrorCode::ConflictingPlaylistTagTypes,
             MediaPlaylistUpdateError::ParsingError(
                 MediaPlaylistParsingError::VariableDefinition(_),
             ) => MediaPlaylistParsingErrorCode::VariableDefinitionError,

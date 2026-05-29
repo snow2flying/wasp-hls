@@ -22,13 +22,19 @@ const SCENARIO_ENTRY_FILES = {
   "fmp4-error-uri-without-extinf": "playlist.m3u8",
   "fmp4-error-unparsable-byterange": "playlist.m3u8",
   "fmp4-error-media-variable-definition": "playlist.m3u8",
+  "fmp4-error-media-duplicate-singleton": "playlist.m3u8",
+  "fmp4-error-media-conflicting-tag-types": "playlist.m3u8",
   "fmp4-error-master-missing-uri-after-variant": "master.m3u8",
+  "fmp4-error-master-missing-uri-after-variant-comment": "master.m3u8",
   "fmp4-error-master-variant-missing-bandwidth": "master.m3u8",
+  "fmp4-error-master-duplicate-singleton": "master.m3u8",
+  "fmp4-error-master-conflicting-tag-types": "master.m3u8",
   "fmp4-error-master-invalid-value": "master.m3u8",
   "fmp4-error-master-missing-required-attribute": "master.m3u8",
   "fmp4-error-master-variable-definition": "master.m3u8",
   "fmp4-error-master-without-variant": "master.m3u8",
   "fmp4-error-master-other-parsing-error": "master.m3u8",
+  "fmp4-error-top-level-missing-extm3u": "master.m3u8",
 };
 
 export function getVodScenarioUrl(scenarioId) {

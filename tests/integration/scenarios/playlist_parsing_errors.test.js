@@ -57,7 +57,22 @@ describe("Playlist parsing errors", function () {
       "MediaPlaylistVariableDefinitionError",
     ],
     [
+      "fmp4-error-media-duplicate-singleton",
+      "WaspMediaPlaylistParsingError",
+      "MediaPlaylistDuplicateTag",
+    ],
+    [
+      "fmp4-error-media-conflicting-tag-types",
+      "WaspMediaPlaylistParsingError",
+      "MediaPlaylistConflictingTagTypes",
+    ],
+    [
       "fmp4-error-master-missing-uri-after-variant",
+      "WaspMultivariantPlaylistParsingError",
+      "MultivariantPlaylistMissingUriLineAfterVariant",
+    ],
+    [
+      "fmp4-error-master-missing-uri-after-variant-comment",
       "WaspMultivariantPlaylistParsingError",
       "MultivariantPlaylistMissingUriLineAfterVariant",
     ],
@@ -65,6 +80,16 @@ describe("Playlist parsing errors", function () {
       "fmp4-error-master-variant-missing-bandwidth",
       "WaspMultivariantPlaylistParsingError",
       "MultivariantPlaylistVariantMissingBandwidth",
+    ],
+    [
+      "fmp4-error-master-duplicate-singleton",
+      "WaspMultivariantPlaylistParsingError",
+      "MultivariantPlaylistDuplicateTag",
+    ],
+    [
+      "fmp4-error-master-conflicting-tag-types",
+      "WaspMultivariantPlaylistParsingError",
+      "MultivariantPlaylistConflictingTagTypes",
     ],
     [
       "fmp4-error-master-invalid-value",
@@ -90,6 +115,11 @@ describe("Playlist parsing errors", function () {
       "fmp4-error-master-other-parsing-error",
       "WaspMultivariantPlaylistParsingError",
       "MultivariantPlaylistOtherParsingError",
+    ],
+    [
+      "fmp4-error-top-level-missing-extm3u",
+      "WaspOtherError",
+      "NotAPlaylist",
     ],
   ])(
     "surfaces %s as %s/%s",

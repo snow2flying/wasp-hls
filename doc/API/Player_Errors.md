@@ -144,6 +144,10 @@ of the following values:
   The first line of the Multivariant Playlist is not #EXTM3U.
   Are you sure this is a Multivariant Playlist?
 
+  Note that when calling `player.load` on a top-level resource missing
+  `#EXTM3U`, Wasp HLS currently reports `"NotAPlaylist"` instead, because the
+  playlist kind cannot be determined first.
+
 - `"MultivariantPlaylistWithoutVariant"`:
   The Multivariant Playlist has no variant.
   Are you sure this is a Multivariant Playlist and not a Media Playlist?
@@ -157,6 +161,12 @@ of the following values:
   An `EXT-X-STREAM-INF` tag announced in the Multivariant Playlist,
   describing an HLS variant, had no `BANDWIDTH` attribute associated to it.
   It should be mandatory.
+
+- `"MultivariantPlaylistDuplicateTag"`:
+  A singleton tag was duplicated in the Multivariant Playlist.
+
+- `"MultivariantPlaylistConflictingTagTypes"`:
+  The Multivariant Playlist contained Media Playlist or Media Segment tags.
 
 - `"MultivariantPlaylistMissingRequiredAttribute"`:
   A mandatory attribute was missing from a tag in the Multivariant Playlist.
@@ -276,6 +286,12 @@ of the following values:
 - `"MediaPlaylistVariableDefinitionError"`:
   An `EXT-X-DEFINE` variable definition or substitution was invalid in the
   Media Playlist.
+
+- `"MediaPlaylistDuplicateTag"`:
+  A singleton tag was duplicated in the Media Playlist.
+
+- `"MediaPlaylistConflictingTagTypes"`:
+  The Media Playlist contained Multivariant Playlist tags.
 
 - `"MediaPlaylistOtherParsingError"`:
   Another uncategorized error happened while parsing the Media Playlist.

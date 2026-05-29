@@ -21,6 +21,8 @@ export default class WaspMediaPlaylistParsingError extends Error {
     | "MediaPlaylistUriWithoutExtInf"
     | "MediaPlaylistUnparsableByteRange"
     | "MediaPlaylistVariableDefinitionError"
+    | "MediaPlaylistDuplicateTag"
+    | "MediaPlaylistConflictingTagTypes"
     | "MediaPlaylistOtherParsingError";
 
   /**
@@ -73,6 +75,12 @@ export default class WaspMediaPlaylistParsingError extends Error {
         break;
       case MediaPlaylistParsingErrorCode.VariableDefinitionError:
         this.code = "MediaPlaylistVariableDefinitionError";
+        break;
+      case MediaPlaylistParsingErrorCode.DuplicateTag:
+        this.code = "MediaPlaylistDuplicateTag";
+        break;
+      case MediaPlaylistParsingErrorCode.ConflictingPlaylistTagTypes:
+        this.code = "MediaPlaylistConflictingTagTypes";
         break;
       case MediaPlaylistParsingErrorCode.Unknown:
         this.code = "MediaPlaylistOtherParsingError";
