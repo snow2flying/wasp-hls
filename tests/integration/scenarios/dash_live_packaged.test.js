@@ -264,6 +264,10 @@ describe("Live packaged content", function () {
         expectInitialSeek: testCase.expectInitialSeek,
         maxInitialSeekDelayMs: LIVE_MAX_INITIAL_SEEK_DELAY_MS,
         maxLoadedDelayMs: LIVE_MAX_LOADED_DELAY_MS,
+        loadedSnapshotContext: {
+          segmentDuration: ctx.liveInfo.segmentDuration,
+          timeShiftBufferDepth: ctx.liveInfo.timeShiftBufferDepth,
+        },
         assertLoadedSnapshot(snapshot, timings) {
           expect(snapshot.playerState).toEqual("Loaded");
           expect(snapshot.playerError).toBeNull();
@@ -333,7 +337,9 @@ describe("Live packaged content with EXT-X-PROGRAM-DATE-TIME", function () {
           currentPosition - (ctx.videoElement.currentTime - (mediaOffset ?? 0)),
         ),
       ).toBeLessThan(0.25);
-      expect(mediaOffset).toBeLessThan(-anchorProgramDateTime + 1);
+      expect(
+        Math.abs((mediaOffset ?? NaN) + anchorProgramDateTime),
+      ).toBeLessThan(LIVE_PROGRAM_DATE_TIME_TOLERANCE_S);
     },
   );
 
@@ -351,6 +357,9 @@ describe("Live packaged content with EXT-X-PROGRAM-DATE-TIME", function () {
         expectInitialSeek: true,
         maxInitialSeekDelayMs: LIVE_MAX_INITIAL_SEEK_DELAY_MS,
         maxLoadedDelayMs: LIVE_MAX_LOADED_DELAY_MS,
+        loadedSnapshotContext: {
+          segmentDuration: ctx.liveInfo.segmentDuration,
+        },
         assertLoadedSnapshot(snapshot, _timings, context) {
           const gap = snapshot.maximumPosition - snapshot.position;
 

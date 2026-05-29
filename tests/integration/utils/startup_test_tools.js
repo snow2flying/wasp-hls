@@ -42,6 +42,7 @@ export async function assertStartupBehavior({
   lastPlayerErrorRef,
   loadContent,
   assertLoadedSnapshot,
+  loadedSnapshotContext,
   expectInitialSeek = false,
   maxInitialSeekDelayMs = 5_000,
   maxLoadedDelayMs = 12_000,
@@ -88,7 +89,7 @@ export async function assertStartupBehavior({
     );
   }
 
-  assertLoadedSnapshot(snapshot, timings);
+  assertLoadedSnapshot(snapshot, timings, loadedSnapshotContext);
 
   const startPosition = player.getPosition();
   player.resume();

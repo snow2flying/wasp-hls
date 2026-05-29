@@ -292,6 +292,8 @@ jobs:
           EOF
           sudo apt-get update
           sudo apt-get install -y gpac
+          echo "WASP_HLS_CHROMEDRIVER_BINARY=${CHROMEWEBDRIVER}/chromedriver" >> "$GITHUB_ENV"
+          echo "WASP_HLS_CHROME_BINARY=/usr/bin/google-chrome" >> "$GITHUB_ENV"
 
       - name: Install ffmpeg and gpac on macOS
         if: runner.os == 'macOS'
