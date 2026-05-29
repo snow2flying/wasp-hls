@@ -311,6 +311,253 @@ const SCENARIOS = {
       return null;
     },
   },
+  "fmp4-error-missing-target-duration": {
+    entryPath: "playlist.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath !== "playlist.m3u8") {
+        return null;
+      }
+      return createMediaPlaylistResponse(
+        removeFirstLineMatching(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+          (line) => line.startsWith("#EXT-X-TARGETDURATION:"),
+        ),
+        context,
+      );
+    },
+  },
+  "fmp4-error-unparsable-extinf": {
+    entryPath: "playlist.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath !== "playlist.m3u8") {
+        return null;
+      }
+      return createMediaPlaylistResponse(
+        replaceFirstLineMatching(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+          (line) => line.startsWith("#EXTINF:"),
+          "#EXTINF:not-a-number,",
+        ),
+        context,
+      );
+    },
+  },
+  "fmp4-error-uri-missing-in-map": {
+    entryPath: "playlist.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath !== "playlist.m3u8") {
+        return null;
+      }
+      return createMediaPlaylistResponse(
+        replaceFirstLineMatching(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+          (line) => line.startsWith("#EXT-X-MAP:"),
+          '#EXT-X-MAP:BYTERANGE="720@0"',
+        ),
+        context,
+      );
+    },
+  },
+  "fmp4-error-uri-without-extinf": {
+    entryPath: "playlist.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath !== "playlist.m3u8") {
+        return null;
+      }
+      return createMediaPlaylistResponse(
+        removeFirstLineMatching(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+          (line) => line.startsWith("#EXTINF:"),
+        ),
+        context,
+      );
+    },
+  },
+  "fmp4-error-unparsable-byterange": {
+    entryPath: "playlist.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath !== "playlist.m3u8") {
+        return null;
+      }
+      return createMediaPlaylistResponse(
+        injectLineBeforeFirstMatching(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+          (line) => line.startsWith("#EXTINF:"),
+          "#EXT-X-BYTERANGE:not-a-range",
+        ),
+        context,
+      );
+    },
+  },
+  "fmp4-error-media-variable-definition": {
+    entryPath: "playlist.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath !== "playlist.m3u8") {
+        return null;
+      }
+      return createMediaPlaylistResponse(
+        injectLineAfterExtM3u(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+          '#EXT-X-DEFINE:IMPORT="cdn"',
+        ),
+        context,
+      );
+    },
+  },
+  "fmp4-error-master-missing-uri-after-variant": {
+    entryPath: "master.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath) {
+      if (relativePath !== "master.m3u8") {
+        return null;
+      }
+      return {
+        body:
+          "#EXTM3U\n" +
+          "#EXT-X-VERSION:7\n" +
+          "#EXT-X-STREAM-INF:BANDWIDTH=1900000,RESOLUTION=960x540\n",
+        contentType: CONTENT_TYPE_M3U8,
+      };
+    },
+  },
+  "fmp4-error-master-variant-missing-bandwidth": {
+    entryPath: "master.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath === "master.m3u8") {
+        return {
+          body:
+            "#EXTM3U\n" +
+            "#EXT-X-VERSION:7\n" +
+            "#EXT-X-STREAM-INF:RESOLUTION=960x540\n" +
+            "variant.m3u8\n",
+          contentType: CONTENT_TYPE_M3U8,
+        };
+      }
+      if (relativePath === "variant.m3u8") {
+        return createMediaPlaylistResponse(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+          context,
+        );
+      }
+      return null;
+    },
+  },
+  "fmp4-error-master-invalid-value": {
+    entryPath: "master.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath === "master.m3u8") {
+        return {
+          body:
+            "#EXTM3U\n" +
+            "#EXT-X-VERSION:7\n" +
+            "#EXT-X-STREAM-INF:BANDWIDTH=1900000,AUDIO=audio-main\n" +
+            "variant.m3u8\n",
+          contentType: CONTENT_TYPE_M3U8,
+        };
+      }
+      if (relativePath === "variant.m3u8") {
+        return createMediaPlaylistResponse(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+          context,
+        );
+      }
+      return null;
+    },
+  },
+  "fmp4-error-master-missing-required-attribute": {
+    entryPath: "master.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath === "master.m3u8") {
+        return {
+          body:
+            "#EXTM3U\n" +
+            "#EXT-X-VERSION:7\n" +
+            '#EXT-X-MEDIA:GROUP-ID="audio-main",NAME="English",URI="audio.m3u8"\n' +
+            "#EXT-X-STREAM-INF:BANDWIDTH=1900000\n" +
+            "variant.m3u8\n",
+          contentType: CONTENT_TYPE_M3U8,
+        };
+      }
+      if (relativePath === "variant.m3u8") {
+        return createMediaPlaylistResponse(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+          context,
+        );
+      }
+      if (relativePath === "audio.m3u8") {
+        return createMediaPlaylistResponse(
+          await readGeneratedMediaPlaylist("fmp4-audio-en"),
+          context.forRecipe("fmp4-audio-en"),
+        );
+      }
+      return null;
+    },
+  },
+  "fmp4-error-master-variable-definition": {
+    entryPath: "master.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath, context) {
+      if (relativePath === "master.m3u8") {
+        return {
+          body:
+            "#EXTM3U\n" +
+            '#EXT-X-DEFINE:QUERYPARAM="token"\n' +
+            "#EXT-X-STREAM-INF:BANDWIDTH=1900000\n" +
+            "variant.m3u8\n",
+          contentType: CONTENT_TYPE_M3U8,
+        };
+      }
+      if (relativePath === "variant.m3u8") {
+        return createMediaPlaylistResponse(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+          context,
+        );
+      }
+      return null;
+    },
+  },
+  "fmp4-error-master-without-variant": {
+    entryPath: "master.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath) {
+      if (relativePath !== "master.m3u8") {
+        return null;
+      }
+      return {
+        body:
+          "#EXTM3U\n" +
+          "#EXT-X-VERSION:7\n" +
+          '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-main",NAME="English",URI="audio.m3u8"\n',
+        contentType: CONTENT_TYPE_M3U8,
+      };
+    },
+  },
+  "fmp4-error-master-other-parsing-error": {
+    entryPath: "master.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath) {
+      if (relativePath !== "master.m3u8") {
+        return null;
+      }
+      return {
+        body:
+          "#EXTM3U\n" +
+          '#EXT-X-DEFINE:IMPORT="cdn"\n' +
+          "#EXT-X-STREAM-INF:BANDWIDTH=1900000\n" +
+          "variant.m3u8\n",
+        contentType: CONTENT_TYPE_M3U8,
+      };
+    },
+  },
 };
 
 export async function getVodScenarioResponse(
@@ -607,6 +854,45 @@ function injectProgramDateTime(playlistText, iso8601DateTime) {
     `#EXT-X-PROGRAM-DATE-TIME:${iso8601DateTime}`,
     ...lines.slice(extInfIndex),
   ].join("\n");
+}
+
+function injectLineAfterExtM3u(playlistText, insertedLine) {
+  const lines = playlistText.split("\n");
+  if (lines[0]?.trim() !== "#EXTM3U") {
+    throw new Error("Unexpected playlist format: missing #EXTM3U header");
+  }
+  return [lines[0], insertedLine, ...lines.slice(1)].join("\n");
+}
+
+function injectLineBeforeFirstMatching(playlistText, predicate, insertedLine) {
+  const lines = playlistText.split("\n");
+  const index = lines.findIndex((line) => predicate(line.trim()));
+  if (index < 0) {
+    throw new Error("Unexpected playlist format: target line not found");
+  }
+  return [...lines.slice(0, index), insertedLine, ...lines.slice(index)].join(
+    "\n",
+  );
+}
+
+function replaceFirstLineMatching(playlistText, predicate, replacementLine) {
+  const lines = playlistText.split("\n");
+  const index = lines.findIndex((line) => predicate(line.trim()));
+  if (index < 0) {
+    throw new Error("Unexpected playlist format: target line not found");
+  }
+  lines[index] = replacementLine;
+  return lines.join("\n");
+}
+
+function removeFirstLineMatching(playlistText, predicate) {
+  const lines = playlistText.split("\n");
+  const index = lines.findIndex((line) => predicate(line.trim()));
+  if (index < 0) {
+    throw new Error("Unexpected playlist format: target line not found");
+  }
+  lines.splice(index, 1);
+  return lines.join("\n");
 }
 
 function rewriteMediaPlaylistUrls(playlistText, baseUrl) {
