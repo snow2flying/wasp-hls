@@ -11,8 +11,8 @@ use crate::{
         jsSendOtherError, jsSendPushedSegmentError, jsSendRemoveBufferError,
         jsSendSegmentParsingError, jsSendSegmentRequestError, jsSendSourceBufferCreationError,
         jsSetMediaSourceDuration, jsStopObservingPlayback, jsUpdateContentInfo,
-        AddSourceBufferErrorCode, MediaType, OtherErrorCode, PlaylistNature,
-        PushedSegmentErrorCode, RequestId, SourceBufferId, TimerId,
+        AddSourceBufferErrorCode, MediaType, OtherErrorCode, PushedSegmentErrorCode, RequestId,
+        SourceBufferId, TimerId,
     },
     dispatcher::segment_request_contexts::PendingSegmentRequest,
     media_element::SegmentPushMetadata,
@@ -557,9 +557,11 @@ impl Dispatcher {
             playlist_store.current_estimated_minimum_position(),
             playlist_store.current_estimated_maximum_position(),
             playlist_store.playlist_type(),
+            playlist_store.is_finalized(),
             playlist_store.uses_program_date_time(),
         );
         sync_media_source_duration(playlist_store);
+        self.refresh_terminal_buffer_state();
 
         // Store segment for future playback
         self.ready_probe_segments.insert(ReadyProbeSegment {
@@ -703,10 +705,37 @@ impl Dispatcher {
             playlist_store.current_estimated_minimum_position(),
             playlist_store.current_estimated_maximum_position(),
             playlist_store.playlist_type(),
+            playlist_store.is_finalized(),
             playlist_store.uses_program_date_time(),
         );
         sync_media_source_duration(playlist_store);
+        self.refresh_terminal_buffer_state();
         self.recheck_player_state();
+    }
+
+    /// If a playlist only became terminal on a later refresh, its last segment
+    /// may already have been appended. Re-check buffered tails so the
+    /// corresponding SourceBuffer can still transition to end-of-stream.
+    fn refresh_terminal_buffer_state(&mut self) {
+        let Some(playlist_store) = self.playlist_store.as_ref() else {
+            return;
+        };
+        if !playlist_store.is_finalized() {
+            return;
+        }
+
+        for media_type in [MediaType::Audio, MediaType::Video] {
+            let Some(last_buffered_segment) = self.media_element_ref.inventory(media_type).last()
+            else {
+                continue;
+            };
+
+            if playlist_store
+                .is_last_media_segment(media_type, last_buffered_segment.playlist_start())
+            {
+                self.media_element_ref.end_buffer(media_type);
+            }
+        }
     }
 
     fn on_regular_tick(&mut self) {
@@ -1110,11 +1139,13 @@ impl Dispatcher {
 }
 
 fn sync_media_source_duration(playlist_store: &PlaylistStore) {
-    if playlist_store.playlist_type() != PlaylistNature::VoD {
-        let _ = jsSetMediaSourceDuration(u32::MAX as f64);
-    } else if let Some(duration) = playlist_store.current_estimated_duration() {
-        let _ = jsSetMediaSourceDuration(duration);
+    if playlist_store.is_finalized() {
+        if let Some(duration) = playlist_store.current_estimated_duration() {
+            let _ = jsSetMediaSourceDuration(duration);
+        } else {
+            Logger::warn("Core: Unknown finalized content duration");
+        }
     } else {
-        Logger::warn("Core: Unknown content duration");
+        let _ = jsSetMediaSourceDuration(u32::MAX as f64);
     }
 }

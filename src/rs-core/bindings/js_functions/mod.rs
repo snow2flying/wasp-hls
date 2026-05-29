@@ -519,6 +519,7 @@ pub fn jsUpdateContentInfo(
     minimum_position: Option<f64>,
     maximum_position: Option<f64>,
     playlist_nat: PlaylistNature,
+    is_finalized: bool,
     uses_program_date_time: bool,
 ) {
     unsafe {
@@ -528,6 +529,7 @@ pub fn jsUpdateContentInfo(
             bool_to_raw(maximum_position.is_some()),
             maximum_position.unwrap_or(0.),
             playlist_nat as u32,
+            bool_to_raw(is_finalized),
             bool_to_raw(uses_program_date_time),
         )
     }

@@ -124,6 +124,11 @@ export interface ContentMetadata {
   lastContentInfoUpdateTimestamp: number | undefined;
 
   /**
+   * `true` once the current playlist is known to be terminal.
+   */
+  isFinalized: boolean;
+
+  /**
    * Information on the currently loaded HLS variant.
    * `undefined` if unknown.
    */

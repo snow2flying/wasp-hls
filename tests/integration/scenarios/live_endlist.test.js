@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import sleep from "../../utils/sleep.js";
 import { checkAfterSleepWithBackoff } from "../../utils/checkAfterSleepWithBackoff.js";
 import setupPlayer from "../utils/player_setup";
-import { waitForLoadedState } from "../utils/player_test_tools.js";
+import {
+  eventListener,
+  waitForLoadedState,
+} from "../utils/player_test_tools.js";
 
 const LIVE_ENDLIST_TEST_TIMEOUT_MS = 90_000;
 const EVENT_ENDLIST_SCENARIO_PREFIX = "/live/scenario/event-endlist";
@@ -39,10 +42,7 @@ describe("Live content - EXT-X-ENDLIST", function () {
     async () => {
       const { playlistUrl } = await resetEventEndlistScenario();
 
-      let receivedEndedEvent = 0;
-      ctx.player.addEventListener("ended", () => {
-        receivedEndedEvent++;
-      });
+      const endedListener = eventListener(ctx.player, "ended");
 
       ctx.player.addEventListener("playerStateChange", (state) => {
         if (state === "Loaded") {
@@ -68,26 +68,39 @@ describe("Live content - EXT-X-ENDLIST", function () {
       // TODO: Once we have a supported worker-to-main test hook for network
       // requests, assert directly that playlist reloads stop after ENDLIST.
       await checkAfterSleepWithBackoff(
-        { minTimeMs: 2_000, maxTimeMs: 20_000, stepMs: 1_000 },
+        { minTimeMs: 2_000, maxTimeMs: 20_000, stepMs: 250 },
         () => {
-          expect(ctx.player.getPosition()).toBeGreaterThan(11.5);
+          expect(ctx.player.getPosition()).toBeGreaterThan(6);
           expect(ctx.lastPlayerError).toEqual(null);
+          expect(endedListener.getCurrentCount()).toEqual(0);
         },
       );
 
-      expect(receivedEndedEvent).toEqual(0);
-      await checkAfterSleepWithBackoff(
-        { minTimeMs: 2_000, maxTimeMs: 20_000, stepMs: 1_000 },
-        () => {
-          expect(ctx.player.isEnded()).toEqual(true);
-          expect(receivedEndedEvent).toEqual(1);
-          expect(ctx.player.getPosition()).toBeCloseTo(
-            ctx.player.getMaximumPosition(),
-            0.5,
-          );
-          expect(ctx.lastPlayerError).toEqual(null);
-        },
+      const now = performance.now();
+      await endedListener.awaitNext();
+      expect(performance.now() - now).toBeLessThan(20_000);
+      expect(endedListener.getCurrentCount()).toEqual(1);
+      expect(ctx.player.isEnded()).toEqual(true);
+      expect(ctx.player.getPosition()).toBeGreaterThan(11.5);
+      expect(ctx.player.getPosition()).toBeCloseTo(
+        ctx.player.getMaximumPosition(),
+        0.5,
       );
+      expect(ctx.lastPlayerError).toEqual(null);
+      const finalMaximumPosition = ctx.player.getMaximumPosition();
+      await sleep(2_500);
+      expect(ctx.player.getMaximumPosition()).toBeCloseTo(
+        finalMaximumPosition,
+        1,
+      );
+      expect(endedListener.getCurrentCount()).toEqual(1);
+      expect(ctx.player.isEnded()).toEqual(true);
+      expect(ctx.player.getPosition()).toBeGreaterThan(11.5);
+      expect(ctx.player.getPosition()).toBeCloseTo(
+        ctx.player.getMaximumPosition(),
+        0.5,
+      );
+      expect(ctx.lastPlayerError).toEqual(null);
     },
   );
 });

@@ -420,6 +420,7 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
       minimumPosition: undefined,
       maximumPosition: undefined,
       lastContentInfoUpdateTimestamp: undefined,
+      isFinalized: false,
       playlistType: undefined,
       topLevelPlaylistType: undefined,
       loadingAborter,
@@ -1499,6 +1500,9 @@ function shouldEstimatePosition(
   contentMetadata: ContentMetadata | null,
   primaryKey: "minimumPosition" | "maximumPosition",
 ): boolean {
+  if (contentMetadata?.isFinalized === true) {
+    return false;
+  }
   switch (contentMetadata?.playlistType) {
     case PlaylistNature.Live:
       return true;

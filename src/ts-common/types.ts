@@ -406,6 +406,11 @@ export interface ContentInfoUpdateWorkerMessage {
      */
     playlistType: PlaylistNature;
     /**
+     * If `true`, the playlist is now terminal and can no longer publish new
+     * segments.
+     */
+    isFinalized: boolean;
+    /**
      * If `true`, the current playlist timeline is based on
      * `EXT-X-PROGRAM-DATE-TIME`.
      */

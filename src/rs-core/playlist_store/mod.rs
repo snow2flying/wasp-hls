@@ -666,6 +666,19 @@ impl PlaylistStore {
             })
     }
 
+    /// Returns `true` once the currently selected content cannot publish new
+    /// segments anymore.
+    pub(crate) fn is_finalized(&self) -> bool {
+        match &self.playlist {
+            TopLevelPlaylist::DirectMedia(playlist) => !playlist.playlist().may_be_refreshed(),
+            TopLevelPlaylist::Multivariant(_) => {
+                let media_playlists = self.current_media_playlists();
+                !media_playlists.is_empty()
+                    && media_playlists.iter().all(|(_, p)| !p.may_be_refreshed())
+            }
+        }
+    }
+
     /// Returns currently estimated start time in seconds at which to begin playing the content.
     ///
     /// This value may change depending on the chosen MediaPlaylist that are also loaded.
@@ -1726,6 +1739,40 @@ seg-5.ts
         let store = PlaylistStore::try_new(playlist, 10_000.).unwrap();
 
         assert_eq!(store.expected_start_time(), 8.);
+    }
+
+    #[test]
+    fn direct_terminal_event_playlist_is_finalized_without_changing_nature() {
+        let media = r#"#EXTM3U
+#EXT-X-PLAYLIST-TYPE:EVENT
+#EXT-X-TARGETDURATION:4
+#EXTINF:4,
+seg-1.ts
+#EXTINF:4,
+seg-2.ts
+#EXT-X-ENDLIST
+"#;
+
+        let playlist = TopLevelPlaylist::parse(
+            media.as_bytes(),
+            parse_url("https://example.com/event.m3u8"),
+        )
+        .unwrap();
+        let mut store = PlaylistStore::try_new(playlist, 10_000.).unwrap();
+        store.set_external_media_info(
+            ExternalMediaInfo {
+                mime_type: "video/mp4".to_string(),
+                media_type: MediaType::Video,
+                codec: "avc1.4d401e,mp4a.40.2".to_string(),
+            },
+            MediaType::Video,
+        );
+
+        assert_eq!(
+            store.playlist_type(),
+            crate::bindings::PlaylistNature::Event
+        );
+        assert!(store.is_finalized());
     }
 
     #[test]

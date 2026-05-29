@@ -271,12 +271,14 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         hasMax: number,
         max: number,
         playlistNat: number,
+        isFinalized: number,
         usesProgramDateTime: number,
       ): void {
         bindings.updateContentInfo(
           hasMin !== 0 ? min : undefined,
           hasMax !== 0 ? max : undefined,
           playlistNat as PlaylistNature,
+          isFinalized !== 0,
           usesProgramDateTime !== 0,
         );
       },

@@ -1455,6 +1455,7 @@ export function updateContentInfo(
   minimumPosition: number | undefined,
   maximumPosition: number | undefined,
   playlistType: PlaylistNature,
+  isFinalized: boolean,
   usesProgramDateTime: boolean,
 ): void {
   const contentInfo = playerInstance.getContentInfo();
@@ -1468,6 +1469,7 @@ export function updateContentInfo(
       minimumPosition,
       maximumPosition,
       playlistType,
+      isFinalized,
       usesProgramDateTime,
     },
   });
