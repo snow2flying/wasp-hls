@@ -135,8 +135,20 @@ async function waitForStableLiveOutput(playlistUrl) {
 }
 
 export async function startLivePackager() {
+  await startLivePackagerWithOptions();
+}
+
+export async function startLivePackagerWithOptions({
+  emitProgramDateTime = false,
+} = {}) {
+  const query = new URLSearchParams({
+    enableTextTrack: "1",
+  });
+  if (emitProgramDateTime) {
+    query.set("emitProgramDateTime", "1");
+  }
   await consumeFetchResponse(
-    fetch(`${getStartPackagerUrl()}?enableTextTrack=1`, { method: "POST" }),
+    fetch(`${getStartPackagerUrl()}?${query.toString()}`, { method: "POST" }),
   );
 }
 
@@ -159,6 +171,7 @@ export async function waitForPackagerReady() {
     const playlistUrl = getBaseUrl() + status.info.playlistPath;
     const segmentDuration = status.info.segmentDuration;
     const timeShiftBufferDepth = status.info.timeShiftBufferDepth;
+    const emitProgramDateTime = status.info.emitProgramDateTime;
 
     const playlistResponse = await fetchText(playlistUrl);
     if (playlistResponse.status === 404) {
@@ -177,6 +190,7 @@ export async function waitForPackagerReady() {
       playlistUrl,
       segmentDuration,
       timeShiftBufferDepth,
+      emitProgramDateTime,
     };
   }
 

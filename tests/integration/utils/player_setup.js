@@ -4,6 +4,7 @@ import EmbeddedWorker from "../../../build/embedded/worker.js";
 import EmbeddedWasm from "../../../build/embedded/wasm.js";
 import {
   startLivePackager,
+  startLivePackagerWithOptions,
   stopLivePackager,
   waitForPackagerReady,
 } from "./live_packager.js";
@@ -31,7 +32,11 @@ export default function setupPlayer(
     async () => {
       document.body.appendChild(ctx.videoElement);
       if (packageLiveContent) {
-        await startLivePackager();
+        if (packageLiveContent === true) {
+          await startLivePackager();
+        } else {
+          await startLivePackagerWithOptions(packageLiveContent);
+        }
         const readyInfos = await waitForPackagerReady();
         ctx.liveInfo = { ...readyInfos };
       }

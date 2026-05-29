@@ -11,6 +11,7 @@ const LIVE_PLAYBACK_TEST_TIMEOUT_MS = 240_000;
 const LIVE_MAX_INITIAL_SEEK_DELAY_MS = 5_000;
 const LIVE_MAX_LOADED_DELAY_MS = 12_000;
 const LIVE_POSITION_TOLERANCE_S = 2.5;
+const LIVE_PROGRAM_DATE_TIME_TOLERANCE_S = 6;
 
 const LIVE_STARTING_POSITION_CASES = [
   {
@@ -110,6 +111,34 @@ function getPlayerStateSnapshot(player, videoElement, lastPlayerError) {
     paused: videoElement.paused,
     ended: videoElement.ended,
   };
+}
+
+function extractPlaylistReferences(playlistText) {
+  return playlistText
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"));
+}
+
+async function getLiveProgramDateTimeAnchor(playlistUrl) {
+  const masterResponse = await fetch(playlistUrl);
+  const masterText = await masterResponse.text();
+  const variantRef = extractPlaylistReferences(masterText).find((line) =>
+    line.endsWith(".m3u8"),
+  );
+  if (variantRef === undefined) {
+    throw new Error("Unable to find a media playlist in the live master");
+  }
+
+  const mediaPlaylistUrl = new URL(variantRef, playlistUrl).href;
+  const mediaResponse = await fetch(mediaPlaylistUrl);
+  const mediaText = await mediaResponse.text();
+  const match = mediaText.match(/^#EXT-X-PROGRAM-DATE-TIME:(.+)$/m);
+  if (match === null) {
+    throw new Error("Unable to find EXT-X-PROGRAM-DATE-TIME in live media");
+  }
+
+  return Date.parse(match[1]) / 1000;
 }
 
 async function waitForLoadedState(player, videoElement, lastPlayerErrorRef) {
@@ -249,4 +278,127 @@ describe("Live packaged content", function () {
       });
     });
   }
+});
+
+describe("Live packaged content with EXT-X-PROGRAM-DATE-TIME", function () {
+  const ctx = setupPlayer({
+    packageLiveContent: { emitProgramDateTime: true },
+  });
+
+  it(
+    "uses EXT-X-PROGRAM-DATE-TIME as playlist time in the public position API",
+    { timeout: LIVE_PLAYBACK_TEST_TIMEOUT_MS },
+    async () => {
+      const anchorProgramDateTime = await getLiveProgramDateTimeAnchor(
+        ctx.liveInfo.playlistUrl,
+      );
+
+      ctx.player.addEventListener("playerStateChange", (state) => {
+        if (state === "Loaded") {
+          ctx.player.resume();
+        }
+      });
+
+      ctx.player.load(ctx.liveInfo.playlistUrl);
+      await waitForLoadedState(
+        ctx.player,
+        ctx.videoElement,
+        () => ctx.lastPlayerError,
+      );
+
+      const minimumPosition = ctx.player.getMinimumPosition();
+      const seekableMinimumPosition = ctx.player.getSeekableMinimumPosition();
+      const currentPosition = ctx.player.getPosition();
+      const currentDate = ctx.player.positionToDate(currentPosition);
+      const mediaOffset = ctx.player.getMediaOffset();
+
+      expect(ctx.player.isLive()).toEqual(true);
+      expect(ctx.player.usesProgramDateTime()).toBe(true);
+      expect(minimumPosition).toBeGreaterThanOrEqual(anchorProgramDateTime);
+      expect(minimumPosition).toBeLessThanOrEqual(
+        anchorProgramDateTime + LIVE_PROGRAM_DATE_TIME_TOLERANCE_S,
+      );
+      expect(seekableMinimumPosition).toBeGreaterThanOrEqual(
+        anchorProgramDateTime,
+      );
+      expect(seekableMinimumPosition).toBeLessThanOrEqual(
+        anchorProgramDateTime + LIVE_PROGRAM_DATE_TIME_TOLERANCE_S,
+      );
+      expect(currentDate).toBeInstanceOf(Date);
+      expect(
+        Math.abs((currentDate?.getTime() ?? NaN) - currentPosition * 1000),
+      ).toBeLessThan(250);
+      expect(
+        Math.abs(
+          currentPosition - (ctx.videoElement.currentTime - (mediaOffset ?? 0)),
+        ),
+      ).toBeLessThan(0.25);
+      expect(mediaOffset).toBeLessThan(-anchorProgramDateTime + 1);
+    },
+  );
+
+  it(
+    "defaults to a safe distance from the live edge on a PDT timeline",
+    { timeout: LIVE_PLAYBACK_TEST_TIMEOUT_MS },
+    async () => {
+      await assertStartupBehavior({
+        player: ctx.player,
+        videoElement: ctx.videoElement,
+        lastPlayerErrorRef: () => ctx.lastPlayerError,
+        loadContent() {
+          ctx.player.load(ctx.liveInfo.playlistUrl);
+        },
+        expectInitialSeek: true,
+        maxInitialSeekDelayMs: LIVE_MAX_INITIAL_SEEK_DELAY_MS,
+        maxLoadedDelayMs: LIVE_MAX_LOADED_DELAY_MS,
+        assertLoadedSnapshot(snapshot, _timings, context) {
+          const gap = snapshot.maximumPosition - snapshot.position;
+
+          expect(snapshot.playerState).toEqual("Loaded");
+          expect(snapshot.playerError).toBeNull();
+          expect(snapshot.usesProgramDateTime).toBe(true);
+          expect(gap).toBeGreaterThanOrEqual(context.segmentDuration * 3 - 0.5);
+          expect(gap).toBeLessThanOrEqual(context.segmentDuration * 4 + 1);
+        },
+      });
+    },
+  );
+
+  it(
+    "interprets `startingPosition` against the live PDT timeline",
+    { timeout: LIVE_PLAYBACK_TEST_TIMEOUT_MS },
+    async () => {
+      const anchorProgramDateTime = await getLiveProgramDateTimeAnchor(
+        ctx.liveInfo.playlistUrl,
+      );
+
+      await assertStartupBehavior({
+        player: ctx.player,
+        videoElement: ctx.videoElement,
+        lastPlayerErrorRef: () => ctx.lastPlayerError,
+        loadContent() {
+          ctx.player.load(ctx.liveInfo.playlistUrl, {
+            startingPosition: {
+              startType: "FromBeginning",
+              position: 4,
+            },
+          });
+        },
+        expectInitialSeek: true,
+        maxInitialSeekDelayMs: LIVE_MAX_INITIAL_SEEK_DELAY_MS,
+        maxLoadedDelayMs: LIVE_MAX_LOADED_DELAY_MS,
+        assertLoadedSnapshot(snapshot) {
+          expect(snapshot.playerState).toEqual("Loaded");
+          expect(snapshot.playerError).toBeNull();
+          expect(snapshot.usesProgramDateTime).toBe(true);
+          expect(snapshot.position).toBeGreaterThanOrEqual(
+            anchorProgramDateTime + 4 - LIVE_POSITION_TOLERANCE_S,
+          );
+          expect(snapshot.position).toBeLessThanOrEqual(
+            anchorProgramDateTime + 4 + LIVE_PROGRAM_DATE_TIME_TOLERANCE_S,
+          );
+        },
+      });
+    },
+  );
 });

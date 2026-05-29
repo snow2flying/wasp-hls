@@ -225,6 +225,7 @@ export default function createContentServer({
                 playlistPath: packagingProcessInfo.playlistPath,
                 timeShiftBufferDepth: packagingProcessInfo.timeShiftBufferDepth,
                 segmentDuration: packagingProcessInfo.segmentDuration,
+                emitProgramDateTime: packagingProcessInfo.emitProgramDateTime,
               },
             };
       answerWithCORS(res, 200, JSON.stringify(jsonResponse));
@@ -547,6 +548,8 @@ async function handleStartPackager(res, requestUrl) {
       await stopPackagingProcess();
     }
 
+    const emitProgramDateTime =
+      requestUrl.searchParams.get("emitProgramDateTime") === "1";
     const scriptPath = path.join(
       __dirname,
       "..",
@@ -555,31 +558,32 @@ async function handleStartPackager(res, requestUrl) {
       "packager",
       "main.mjs",
     );
-    const proc = spawn(
-      process.execPath,
-      [
-        scriptPath,
-        "--no-confirmation",
-        "--segment-duration",
-        "2",
-        "--timeshift-buffer-depth",
-        "40",
-        "--base-port",
-        "35951",
-        "--output-dir",
-        DEFAULT_PACKAGED_LIVE_OS_PATH,
-      ],
-      {
-        stdio: ["ignore", "pipe", "pipe"], // Don't inherit stdio, capture output
-        cwd: __dirname,
-      },
-    );
+    const packagerArgs = [
+      scriptPath,
+      "--no-confirmation",
+      "--segment-duration",
+      "2",
+      "--timeshift-buffer-depth",
+      "40",
+      "--base-port",
+      "35951",
+      "--output-dir",
+      DEFAULT_PACKAGED_LIVE_OS_PATH,
+    ];
+    if (emitProgramDateTime) {
+      packagerArgs.push("--program-date-time");
+    }
+    const proc = spawn(process.execPath, packagerArgs, {
+      stdio: ["ignore", "pipe", "pipe"], // Don't inherit stdio, capture output
+      cwd: __dirname,
+    });
 
     packagingProcessInfo = {
       process: proc,
       timeShiftBufferDepth: 40,
       segmentDuration: 2,
       playlistPath: "/live/master.m3u8",
+      emitProgramDateTime,
     };
     attachPackagerLogDrain(packagingProcessInfo.process);
 
@@ -603,6 +607,7 @@ async function handleStartPackager(res, requestUrl) {
           playlistPath: packagingProcessInfo.playlistPath,
           timeShiftBufferDepth: packagingProcessInfo.timeShiftBufferDepth,
           segmentDuration: packagingProcessInfo.segmentDuration,
+          emitProgramDateTime,
         },
       }),
     );
