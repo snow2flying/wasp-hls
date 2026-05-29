@@ -262,6 +262,16 @@ pub(super) unsafe fn __js_func__send_other_error(
     non_wasm_binding_panic("__js_func__send_other_error")
 }
 
+/// Emit a content-compatibility error to the host.
+pub(super) unsafe fn __js_func__send_content_compatibility_error(
+    _fatal: u32,
+    _code: u32,
+    _message_ptr: *const u8,
+    _message_len: u32,
+) {
+    non_wasm_binding_panic("__js_func__send_content_compatibility_error")
+}
+
 /// Emit a pushed-segment processing error to the host.
 pub(super) unsafe fn __js_func__send_pushed_segment_error(
     _fatal: u32,

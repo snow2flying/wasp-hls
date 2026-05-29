@@ -1,4 +1,5 @@
 import type {
+  ContentCompatibilityErrorCode,
   LogLevel,
   MediaPlaylistParsingErrorCode,
   MediaType,
@@ -466,6 +467,18 @@ export function createWasmImports(bindings: HostBindings): WebAssembly.Imports {
         bindings.sendOtherError(
           fatal !== 0,
           code as OtherErrorCode,
+          readString(messagePtr, messageLen),
+        );
+      },
+      __js_func__send_content_compatibility_error(
+        fatal: number,
+        code: number,
+        messagePtr: number,
+        messageLen: number,
+      ): void {
+        bindings.sendContentCompatibilityError(
+          fatal !== 0,
+          code as ContentCompatibilityErrorCode,
           readString(messagePtr, messageLen),
         );
       },

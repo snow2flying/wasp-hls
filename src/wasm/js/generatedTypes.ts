@@ -3,6 +3,7 @@
 import type {
   AddSourceBufferErrorCode,
   AttachMediaSourceErrorCode,
+  ContentCompatibilityErrorCode,
   EndOfStreamErrorCode,
   LogLevel,
   MediaPlaylistParsingErrorCode,
@@ -189,6 +190,14 @@ export interface HostBindings {
    * Emit a generic error to the host.
    */
   sendOtherError(fatal: boolean, code: OtherErrorCode, message: string): void;
+  /**
+   * Emit a content-compatibility error to the host.
+   */
+  sendContentCompatibilityError(
+    fatal: boolean,
+    code: ContentCompatibilityErrorCode,
+    message: string,
+  ): void;
   /**
    * Emit a pushed-segment processing error to the host.
    */

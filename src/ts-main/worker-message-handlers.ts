@@ -41,6 +41,7 @@ import {
   OtherErrorCode,
 } from "../wasm/index.js";
 import {
+  WaspContentCompatibilityError,
   WaspMediaPlaylistParsingError,
   WaspMediaPlaylistRequestError,
   WaspMultivariantPlaylistParsingError,
@@ -808,6 +809,11 @@ function formatError(
       );
     case "other-error":
       return new WaspOtherError(
+        msg.value.errorInfo.value.code,
+        msg.value.message,
+      );
+    case "content-compatibility":
+      return new WaspContentCompatibilityError(
         msg.value.errorInfo.value.code,
         msg.value.message,
       );

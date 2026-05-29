@@ -1,11 +1,12 @@
 #![allow(non_snake_case)]
 
 use super::{
-    AddSourceBufferErrorCode, AttachMediaSourceErrorCode, EndOfStreamErrorCode, LogLevel,
-    MediaPlaylistParsingErrorCode, MediaSourceDurationUpdateErrorCode, MediaType,
-    MultivariantPlaylistParsingErrorCode, OtherErrorCode, PlaylistNature, PlaylistType,
-    PushedSegmentErrorCode, RemoveBufferErrorCode, RemoveMediaSourceErrorCode, RequestErrorReason,
-    SegmentParsingErrorCode, SourceBufferCreationErrorCode, TimerReason,
+    AddSourceBufferErrorCode, AttachMediaSourceErrorCode, ContentCompatibilityErrorCode,
+    EndOfStreamErrorCode, LogLevel, MediaPlaylistParsingErrorCode,
+    MediaSourceDurationUpdateErrorCode, MediaType, MultivariantPlaylistParsingErrorCode,
+    OtherErrorCode, PlaylistNature, PlaylistType, PushedSegmentErrorCode, RemoveBufferErrorCode,
+    RemoveMediaSourceErrorCode, RequestErrorReason, SegmentParsingErrorCode,
+    SourceBufferCreationErrorCode, TimerReason,
 };
 use crate::{
     media_element::{PushSegmentError, SegmentHints},
@@ -753,6 +754,22 @@ pub fn jsSendRemoveBufferError(fatal: bool, media_type: MediaType, message: &str
 pub fn jsSendOtherError(fatal: bool, code: OtherErrorCode, message: &str) {
     unsafe {
         __js_func__send_other_error(
+            bool_to_raw(fatal),
+            code as u32,
+            message.as_ptr(),
+            message.len() as u32,
+        )
+    }
+}
+
+/// Function to call to indicate that the content is incompatible with the current environment.
+pub fn jsSendContentCompatibilityError(
+    fatal: bool,
+    code: ContentCompatibilityErrorCode,
+    message: &str,
+) {
+    unsafe {
+        __js_func__send_content_compatibility_error(
             bool_to_raw(fatal),
             code as u32,
             message.as_ptr(),

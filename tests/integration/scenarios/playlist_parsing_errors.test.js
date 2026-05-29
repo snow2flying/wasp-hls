@@ -116,7 +116,11 @@ describe("Playlist parsing errors", function () {
       "WaspMultivariantPlaylistParsingError",
       "MultivariantPlaylistOtherParsingError",
     ],
-    ["fmp4-error-top-level-missing-extm3u", "WaspOtherError", "NotAPlaylist"],
+    [
+      "fmp4-error-top-level-missing-extm3u",
+      "WaspMultivariantPlaylistParsingError",
+      "NotAPlaylist",
+    ],
   ])(
     "surfaces %s as %s/%s",
     { timeout: TEST_TIMEOUT_MS },

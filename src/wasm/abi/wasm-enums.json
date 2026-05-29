@@ -10,11 +10,15 @@
     "OtherErrorCode": {
       "default": "Unknown",
       "members": {
-        "NoSupportedVariant": 0,
-        "UnfoundLockedVariant": 1,
-        "MediaSourceAttachmentError": 2,
-        "NotAPlaylist": 3,
-        "Unknown": 4
+        "UnfoundLockedVariant": 0,
+        "MediaSourceAttachmentError": 1,
+        "Unknown": 2
+      }
+    },
+    "ContentCompatibilityErrorCode": {
+      "default": "NoSupportedVariant",
+      "members": {
+        "NoSupportedVariant": 0
       }
     },
     "SourceBufferCreationErrorCode": {
@@ -209,8 +213,12 @@
             "The Multivariant Playlist contained Media Playlist or Media Segment tags."
           ]
         },
-        "Unknown": {
+        "NotAPlaylist": {
           "value": 10,
+          "doc": ["The loaded resource does not seem to be an HLS playlist."]
+        },
+        "Unknown": {
+          "value": 11,
           "doc": ["Another, uncategorized, error arised."]
         }
       }

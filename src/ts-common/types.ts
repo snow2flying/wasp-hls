@@ -1,4 +1,5 @@
 import type {
+  ContentCompatibilityErrorCode,
   SegmentParsingErrorCode,
   MediaPlaylistParsingErrorCode,
   MultivariantPlaylistParsingErrorCode,
@@ -217,6 +218,7 @@ export interface ErrorWorkerMessage {
       | SegmentRequestErrorWorkerInfo
       | MultivariantPlaylistRequestErrorWorkerInfo
       | MediaPlaylistRequestErrorWorkerInfo
+      | ContentCompatibilityErrorWorkerInfo
       | SourceBufferCreationErrorWorkerInfo
       | PushedSegmentErrorWorkerInfo
       | RemoveBufferErrorWorkerInfo
@@ -255,6 +257,7 @@ export interface WarningWorkerMessage {
       | SegmentRequestErrorWorkerInfo
       | MultivariantPlaylistRequestErrorWorkerInfo
       | MediaPlaylistRequestErrorWorkerInfo
+      | ContentCompatibilityErrorWorkerInfo
       | SourceBufferCreationErrorWorkerInfo
       | PushedSegmentErrorWorkerInfo
       | RemoveBufferErrorWorkerInfo
@@ -283,6 +286,14 @@ export interface MultivariantPlaylistParsingErrorWorkerInfo {
   type: "multi-var-playlist-parse";
   value: {
     code: MultivariantPlaylistParsingErrorCode;
+  };
+}
+
+/** Error linked to content incompatibility with the current environment. */
+export interface ContentCompatibilityErrorWorkerInfo {
+  type: "content-compatibility";
+  value: {
+    code: ContentCompatibilityErrorCode;
   };
 }
 

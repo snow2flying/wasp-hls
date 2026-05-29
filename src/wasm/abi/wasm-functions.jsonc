@@ -537,6 +537,28 @@
       },
     },
     {
+      "wasmSymbol": "__js_func__send_content_compatibility_error",
+      "doc": ["Emit a content-compatibility error to the host."],
+      "typescript": {
+        "methodName": "sendContentCompatibilityError",
+        "args": [
+          { "name": "fatal", "type": "boolean" },
+          { "name": "code", "type": "ContentCompatibilityErrorCode" },
+          { "name": "message", "type": "string" },
+        ],
+        "returnType": "void",
+      },
+      "rust": {
+        "args": [
+          { "name": "fatal", "type": "u32" },
+          { "name": "code", "type": "u32" },
+          { "name": "message_ptr", "type": "*const u8" },
+          { "name": "message_len", "type": "u32" },
+        ],
+        "returnType": "void",
+      },
+    },
+    {
       "wasmSymbol": "__js_func__send_pushed_segment_error",
       "doc": ["Emit a pushed-segment processing error to the host."],
       "typescript": {

@@ -22,6 +22,7 @@ export default class WaspMultivariantPlaylistParsingError extends Error {
     | "MultivariantPlaylistVariableDefinitionError"
     | "MultivariantPlaylistDuplicateTag"
     | "MultivariantPlaylistConflictingTagTypes"
+    | "NotAPlaylist"
     | "MultivariantPlaylistOtherParsingError";
 
   /**
@@ -70,6 +71,9 @@ export default class WaspMultivariantPlaylistParsingError extends Error {
         break;
       case MultivariantPlaylistParsingErrorCode.ConflictingPlaylistTagTypes:
         this.code = "MultivariantPlaylistConflictingTagTypes";
+        break;
+      case MultivariantPlaylistParsingErrorCode.NotAPlaylist:
+        this.code = "NotAPlaylist";
         break;
       case MultivariantPlaylistParsingErrorCode.Unknown:
         this.code = "MultivariantPlaylistOtherParsingError";

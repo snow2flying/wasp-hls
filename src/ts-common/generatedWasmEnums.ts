@@ -8,14 +8,18 @@ export const PlaylistType = Object.freeze({
 export type PlaylistType = (typeof PlaylistType)[keyof typeof PlaylistType];
 
 export const OtherErrorCode = Object.freeze({
-  NoSupportedVariant: 0,
-  UnfoundLockedVariant: 1,
-  MediaSourceAttachmentError: 2,
-  NotAPlaylist: 3,
-  Unknown: 4,
+  UnfoundLockedVariant: 0,
+  MediaSourceAttachmentError: 1,
+  Unknown: 2,
 } as const);
 export type OtherErrorCode =
   (typeof OtherErrorCode)[keyof typeof OtherErrorCode];
+
+export const ContentCompatibilityErrorCode = Object.freeze({
+  NoSupportedVariant: 0,
+} as const);
+export type ContentCompatibilityErrorCode =
+  (typeof ContentCompatibilityErrorCode)[keyof typeof ContentCompatibilityErrorCode];
 
 export const SourceBufferCreationErrorCode = Object.freeze({
   AlreadyCreatedWithSameType: 0,
@@ -178,9 +182,13 @@ export const MultivariantPlaylistParsingErrorCode = Object.freeze({
    */
   ConflictingPlaylistTagTypes: 9,
   /**
+   * The loaded resource does not seem to be an HLS playlist.
+   */
+  NotAPlaylist: 10,
+  /**
    * Another, uncategorized, error arised.
    */
-  Unknown: 10,
+  Unknown: 11,
 } as const);
 export type MultivariantPlaylistParsingErrorCode =
   (typeof MultivariantPlaylistParsingErrorCode)[keyof typeof MultivariantPlaylistParsingErrorCode];

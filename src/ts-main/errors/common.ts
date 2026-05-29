@@ -84,7 +84,7 @@ export const WaspErrorCode = {
    */
   MediaSourceAttachmentError: "MediaSourceAttachmentError",
   /**
-   * No supported startup stream was found for the current content.
+   * No supported variant was found for the current content.
    */
   NoSupportedVariant: "NoSupportedVariant",
   /**

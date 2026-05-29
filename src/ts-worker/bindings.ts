@@ -33,6 +33,7 @@ import {
   SegmentParsingErrorCode,
 } from "../wasm/index.js";
 import type {
+  ContentCompatibilityErrorCode,
   SegmentHints,
   HostBindings,
   InspectSegmentValue,
@@ -244,6 +245,33 @@ export function sendOtherError(
       message,
       errorInfo: {
         type: "other-error",
+        value: {
+          code,
+        },
+      },
+    },
+  });
+}
+
+export function sendContentCompatibilityError(
+  fatal: boolean,
+  code: ContentCompatibilityErrorCode,
+  message: string,
+): void {
+  const contentId = playerInstance.getContentInfo()?.contentId;
+  if (contentId === undefined) {
+    logger.error("Cannot send error, no contentId");
+    return;
+  }
+  postMessageToMain({
+    type: fatal
+      ? (WorkerMessageType.Error as const)
+      : (WorkerMessageType.Warning as const),
+    value: {
+      contentId,
+      message,
+      errorInfo: {
+        type: "content-compatibility",
         value: {
           code,
         },
@@ -1803,5 +1831,6 @@ export function getWaspHostCapabilities(): HostBindings {
     sendPushedSegmentError,
     sendRemoveBufferError,
     sendOtherError,
+    sendContentCompatibilityError,
   };
 }

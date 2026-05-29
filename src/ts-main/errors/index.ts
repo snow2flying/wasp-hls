@@ -1,3 +1,4 @@
+import WaspContentCompatibilityError from "./WaspContentCompatibilityError.ts";
 import WaspInitializationError from "./WaspInitializationError.ts";
 import WaspMediaPlaylistParsingError from "./WaspMediaPlaylistParsingError.ts";
 import WaspMediaPlaylistRequestError from "./WaspMediaPlaylistRequestError.ts";
@@ -13,6 +14,7 @@ import WaspSourceBufferError from "./WaspSourceBufferError.ts";
  * General type for all potential errors returned by the `WaspHlsPlayer`.
  */
 export type WaspError =
+  | WaspContentCompatibilityError
   | WaspMediaPlaylistParsingError
   | WaspMediaPlaylistRequestError
   | WaspMultivariantPlaylistParsingError
@@ -26,6 +28,7 @@ export type WaspError =
 export { WaspErrorCode } from "./common.ts";
 
 export {
+  WaspContentCompatibilityError,
   WaspInitializationError,
   WaspMediaPlaylistParsingError,
   WaspMediaPlaylistRequestError,

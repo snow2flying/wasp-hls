@@ -121,7 +121,8 @@ of the following values:
 ## Error type: `WaspMultivariantPlaylistParsingError`
 
 `WaspMultivariantPlaylistParsingError` are errors triggered when an error
-arised while parsing the Multivariant Playlist.
+arised while parsing the Multivariant Playlist (or an unknown top-level
+resource).
 
 Its `name` property is set to `"WaspMultivariantPlaylistParsingError"`. For
 example to catch when a fatal error was due to a failure to parse the
@@ -172,6 +173,9 @@ of the following values:
 - `"MultivariantPlaylistVariableDefinitionError"`:
   An `EXT-X-DEFINE` variable definition or substitution was invalid in the
   Multivariant Playlist.
+
+- `"NotAPlaylist"`:
+  The loaded resource does not seem to be an HLS playlist.
 
 ## Error type: `WaspMediaPlaylistRequestError`
 
@@ -471,6 +475,30 @@ of the following values:
 - `"SourceBufferOtherError"`:
   An uncategorized error arised when doing an operation on a `SourceBuffer`.
 
+## Error type: `WaspContentCompatibilityError`
+
+`WaspContentCompatibilityError` are errors triggered when the current content
+is not compatible with the current environment.
+
+Its `name` property is set to `"WaspContentCompatibilityError"`:
+
+```js
+player.addEventlistener("error", (error) => {
+  if (error.name === "WaspContentCompatibilityError") {
+    // The current content is not compatible with the current environment
+  }
+});
+```
+
+### Error codes
+
+A `WaspContentCompatibilityError`'s `code` property can be set to any of the
+following values:
+
+- `"NoSupportedVariant"`:
+  No supported variant was found for the current content.
+  This is generally due to insufficient codec support on the current platform.
+
 ## Error type: `WaspOtherError`
 
 `WaspOtherError` are errors that are other, uncategorized errors that didn't fit
@@ -495,15 +523,8 @@ values:
   An error arised when trying to either create the `MediaSource` or attempt
   to attach it to the `MediaSource` HTMLMediaElement.
 
-- `"NoSupportedVariant"`:
-  No supported startup stream was found for the current content.
-  This is generally due to insufficient codec support on the current platform.
-
 - `"UnfoundLockedVariant"`:
   The variant locked through the `lockVariant` API was not found.
-
-- `"NotAPlaylist"`:
-  The loaded resource does not seem to be an HLS playlist.
 
 - `"Unknown"`:
   An unknown error arised.

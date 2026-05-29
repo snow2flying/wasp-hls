@@ -21,22 +21,33 @@ impl PlaylistType {
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OtherErrorCode {
-    NoSupportedVariant = 0,
-    UnfoundLockedVariant = 1,
-    MediaSourceAttachmentError = 2,
-    NotAPlaylist = 3,
-    Unknown = 4,
+    UnfoundLockedVariant = 0,
+    MediaSourceAttachmentError = 1,
+    Unknown = 2,
 }
 
 impl OtherErrorCode {
     pub fn from_raw(value: u32) -> Self {
         match value {
-            0 => Self::NoSupportedVariant,
-            1 => Self::UnfoundLockedVariant,
-            2 => Self::MediaSourceAttachmentError,
-            3 => Self::NotAPlaylist,
-            4 => Self::Unknown,
+            0 => Self::UnfoundLockedVariant,
+            1 => Self::MediaSourceAttachmentError,
+            2 => Self::Unknown,
             _ => Self::Unknown,
+        }
+    }
+}
+
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContentCompatibilityErrorCode {
+    NoSupportedVariant = 0,
+}
+
+impl ContentCompatibilityErrorCode {
+    pub fn from_raw(value: u32) -> Self {
+        match value {
+            0 => Self::NoSupportedVariant,
+            _ => Self::NoSupportedVariant,
         }
     }
 }
@@ -228,8 +239,10 @@ pub enum MultivariantPlaylistParsingErrorCode {
     DuplicateTag = 8,
     /// The Multivariant Playlist contained Media Playlist or Media Segment tags.
     ConflictingPlaylistTagTypes = 9,
+    /// The loaded resource does not seem to be an HLS playlist.
+    NotAPlaylist = 10,
     /// Another, uncategorized, error arised.
-    Unknown = 10,
+    Unknown = 11,
 }
 
 impl MultivariantPlaylistParsingErrorCode {
@@ -245,7 +258,8 @@ impl MultivariantPlaylistParsingErrorCode {
             7 => Self::UnableToReadLine,
             8 => Self::DuplicateTag,
             9 => Self::ConflictingPlaylistTagTypes,
-            10 => Self::Unknown,
+            10 => Self::NotAPlaylist,
+            11 => Self::Unknown,
             _ => Self::Unknown,
         }
     }

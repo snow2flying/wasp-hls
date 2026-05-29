@@ -1,8 +1,9 @@
 use super::{segment_request_contexts::PendingSegmentRequest, StartingPosition};
 use crate::{
     bindings::{
-        jsSendMultivariantPlaylistParsingError, jsSendOtherError, jsSendSegmentParsingError,
-        MediaType, MultivariantPlaylistParsingErrorCode, OtherErrorCode, StartingPositionType,
+        jsSendContentCompatibilityError, jsSendMultivariantPlaylistParsingError,
+        jsSendSegmentParsingError, ContentCompatibilityErrorCode, MediaType,
+        MultivariantPlaylistParsingErrorCode, StartingPositionType,
     },
     playlist_store::{
         PlaylistStore, PlaylistStoreError, ProbeSegmentContext, ProbeSegmentMetadata,
@@ -91,9 +92,11 @@ pub(super) fn is_stale_segment_request_context(
 
 pub(super) fn handle_playlist_store_error(err: PlaylistStoreError) {
     match err {
-        PlaylistStoreError::NoSupportedVariant => {
-            jsSendOtherError(true, OtherErrorCode::NoSupportedVariant, &err.to_string())
-        }
+        PlaylistStoreError::NoSupportedVariant => jsSendContentCompatibilityError(
+            true,
+            ContentCompatibilityErrorCode::NoSupportedVariant,
+            &err.to_string(),
+        ),
         PlaylistStoreError::NoInitialVariant => jsSendMultivariantPlaylistParsingError(
             true,
             MultivariantPlaylistParsingErrorCode::MultivariantPlaylistWithoutVariant,
@@ -105,8 +108,10 @@ pub(super) fn handle_playlist_store_error(err: PlaylistStoreError) {
             None,
             &err.to_string(),
         ),
-        PlaylistStoreError::UnsupportedStartupStream => {
-            jsSendOtherError(true, OtherErrorCode::NoSupportedVariant, &err.to_string())
-        }
+        PlaylistStoreError::UnsupportedStartupStream => jsSendContentCompatibilityError(
+            true,
+            ContentCompatibilityErrorCode::NoSupportedVariant,
+            &err.to_string(),
+        ),
     }
 }

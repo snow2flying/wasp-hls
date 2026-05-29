@@ -5,7 +5,7 @@
 ### Changes
 
 - The too specific `MultivariantPlaylistMediaTagMissingType`, `MultivariantPlaylistMediaTagMissingName` and `MultivariantPlaylistMediaTagMissingGroupId` error codes have been collapsed into a new `MultivariantPlaylistMissingRequiredAttribute` error code
-- A top-level resource missing `#EXTM3U` now only surfaces as `NotAPlaylist`; the dead `MultivariantPlaylistMissingExtM3uHeader` public error code has been removed.
+- A top-level resource missing `#EXTM3U` now surfaces as a `WaspMultivariantPlaylistParsingError` with the `NotAPlaylist` error code; the dead `MultivariantPlaylistMissingExtM3uHeader` public error code has been removed.
 
 ### Features
 
@@ -16,7 +16,8 @@
 - Add optional `bitDephs` and `sampleRates` array properties to `getAudioTrackList`, `getCurrentAudioTrack`methods plus `audioTrackUpdate` and `audioTrackListUpdate` events listing respectively the known various bit depts and rates of audio samples in all renditions of that track.
 - Add `characteristics` property to `getAudioTrackList`, `getCurrentAudioTrack`methods plus `audioTrackUpdate` and `audioTrackListUpdate` events reflecting the `CHARACTERISTICS` of the original playlist, e.g. for audio-description audio tracks.
 - Add optional `videoRange` property to `getVariantList`, `getLockedVariant`, `getCurrentVariant` as well as `variantUpdate`, `variantLockUpdate` and `variantListUpdate` events to reflect its video's dynamic range
-- Add `NotAPlaylist` error code: a new `WaspOtherError` for when the given resource URL does not seem to be a valid HLS playlist URL
+- Add `NotAPlaylist` error code for when the given resource URL does not seem to be a valid HLS playlist URL
+- Add `WaspContentCompatibilityError` with the `NoSupportedVariant` error code for contents with no playable variant on the current platform
 - Add `MultivariantPlaylistVariableDefinitionError` and `MediaPlaylistVariableDefinitionError` error codes for when an `#EXT-X-DEFINE` tag or usage is not compliant to the HLS specification respectively on the MultiVariant Playlist or the Media Playlist.
 - Add `MultivariantPlaylistDuplicateTag`, `MultivariantPlaylistConflictingTagTypes`, `MediaPlaylistDuplicateTag`, and `MediaPlaylistConflictingTagTypes` error codes for duplicate singleton tags and invalid mixes of playlist tag classes.
 - Add `SourceBufferEmptyMimeType`, `SourceBufferMediaSourceIsClosed`, `SourceBufferNoMediaSourceAttached` and `SourceBufferQuotaExceededError` error codes on a `WaspSourceBufferCreationError` error type.

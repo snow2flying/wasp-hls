@@ -180,6 +180,13 @@ unsafe extern "C" {
         message_ptr: *const u8,
         message_len: u32,
     );
+    /// Emit a content-compatibility error to the host.
+    pub(super) fn __js_func__send_content_compatibility_error(
+        fatal: u32,
+        code: u32,
+        message_ptr: *const u8,
+        message_len: u32,
+    );
     /// Emit a pushed-segment processing error to the host.
     pub(super) fn __js_func__send_pushed_segment_error(
         fatal: u32,

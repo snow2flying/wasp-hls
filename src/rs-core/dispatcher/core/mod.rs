@@ -11,8 +11,8 @@ use crate::{
         jsSendOtherError, jsSendPushedSegmentError, jsSendRemoveBufferError,
         jsSendSegmentParsingError, jsSendSegmentRequestError, jsSendSourceBufferCreationError,
         jsSetMediaSourceDuration, jsStopObservingPlayback, jsUpdateContentInfo,
-        AddSourceBufferErrorCode, MediaType, OtherErrorCode, PushedSegmentErrorCode, RequestId,
-        SourceBufferId, TimerId,
+        AddSourceBufferErrorCode, MediaType, MultivariantPlaylistParsingErrorCode, OtherErrorCode,
+        PushedSegmentErrorCode, RequestId, SourceBufferId, TimerId,
     },
     dispatcher::segment_request_contexts::PendingSegmentRequest,
     media_element::SegmentPushMetadata,
@@ -634,7 +634,11 @@ impl Dispatcher {
                         jsSendMediaPlaylistParsingError(true, err.into(), None, &message);
                     }
                     TopLevelPlaylistParsingError::NotAPlaylist => {
-                        jsSendOtherError(true, OtherErrorCode::NotAPlaylist, &message);
+                        jsSendMultivariantPlaylistParsingError(
+                            true,
+                            MultivariantPlaylistParsingErrorCode::NotAPlaylist,
+                            &message,
+                        );
                     }
                 }
                 self.stop_current_content();

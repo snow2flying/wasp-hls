@@ -18,6 +18,7 @@ export type { AudioTrackInfo, VariantInfo } from "./types.ts";
 export type { WaspError } from "./errors/index.ts";
 export {
   WaspErrorCode,
+  WaspContentCompatibilityError,
   WaspInitializationError,
   WaspMediaPlaylistParsingError,
   WaspMediaPlaylistRequestError,

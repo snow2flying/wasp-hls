@@ -1,6 +1,7 @@
 export {
   AddSourceBufferErrorCode,
   AttachMediaSourceErrorCode,
+  ContentCompatibilityErrorCode,
   EndOfStreamErrorCode,
   LogLevel,
   MediaPlaylistParsingErrorCode,
