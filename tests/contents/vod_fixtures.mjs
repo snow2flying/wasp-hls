@@ -985,9 +985,11 @@ function injectLineAfterFirstMatching(playlistText, predicate, insertedLine) {
   if (index < 0) {
     throw new Error("Unexpected playlist format: target line not found");
   }
-  return [...lines.slice(0, index + 1), insertedLine, ...lines.slice(index + 1)].join(
-    "\n",
-  );
+  return [
+    ...lines.slice(0, index + 1),
+    insertedLine,
+    ...lines.slice(index + 1),
+  ].join("\n");
 }
 
 function injectLineBeforeFirstMatching(playlistText, predicate, insertedLine) {

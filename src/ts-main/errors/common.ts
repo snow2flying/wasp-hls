@@ -117,13 +117,6 @@ export const WaspErrorCode = {
   SourceBufferCreationOtherError: "SourceBufferCreationOtherError",
 
   /**
-   * The first line of the Multivariant Playlist is not #EXTM3U.
-   *
-   * Are you sure this is a Multivariant Playlist?
-   */
-  MultivariantPlaylistMissingExtM3uHeader:
-    "MultivariantPlaylistMissingExtM3uHeader",
-  /**
    * The Multivariant Playlist has no variant.
    *
    * Are you sure this is a Multivariant Playlist and not a Media Playlist?

@@ -140,14 +140,6 @@ player.addEventlistener("error", (error) => {
 A `WaspMultivariantPlaylistParsingError`'s `code` property can be set to any
 of the following values:
 
-- `"MultivariantPlaylistMissingExtM3uHeader"`:
-  The first line of the Multivariant Playlist is not #EXTM3U.
-  Are you sure this is a Multivariant Playlist?
-
-  Note that when calling `player.load` on a top-level resource missing
-  `#EXTM3U`, Wasp HLS currently reports `"NotAPlaylist"` instead, because the
-  playlist kind cannot be determined first.
-
 - `"MultivariantPlaylistWithoutVariant"`:
   The Multivariant Playlist has no variant.
   Are you sure this is a Multivariant Playlist and not a Media Playlist?

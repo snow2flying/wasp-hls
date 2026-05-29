@@ -233,9 +233,7 @@ pub(super) fn media_playlist_singleton_tag_name(tag_name: &str) -> Option<&'stat
     }
 }
 
-pub(super) fn multivariant_playlist_singleton_tag_name(
-    tag_name: &str,
-) -> Option<&'static str> {
+pub(super) fn multivariant_playlist_singleton_tag_name(tag_name: &str) -> Option<&'static str> {
     match tag_name {
         "-X-VERSION" => Some("-X-VERSION"),
         "-X-INDEPENDENT-SEGMENTS" => Some("-X-INDEPENDENT-SEGMENTS"),
@@ -287,9 +285,7 @@ pub fn classify_playlist(data: &[u8]) -> PlaylistKind {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        classify_playlist, PlaylistKind, TopLevelPlaylist, TopLevelPlaylistParsingError,
-    };
+    use super::{classify_playlist, PlaylistKind, TopLevelPlaylist, TopLevelPlaylistParsingError};
     use crate::{
         parser::{MediaPlaylistParsingError, MultivariantPlaylistParsingError},
         utils::url::Url,

@@ -130,63 +130,57 @@ export type EndOfStreamErrorCode =
  */
 export const MultivariantPlaylistParsingErrorCode = Object.freeze({
   /**
-   * The first line of the MultivariantPlaylist is not #EXTM3U.
-   *
-   * Are you sure this is a Multivariant Playlist?
-   */
-  MissingExtM3uHeader: 0,
-  /**
    * The Multivariant Playlist has no variant.
    *
    * Are you sure this is a Multivariant Playlist and not a Media Playlist?
    */
-  MultivariantPlaylistWithoutVariant: 1,
+  MultivariantPlaylistWithoutVariant: 0,
   /**
    * An `EXT-X-STREAM-INF` tag announced in the Multivariant Playlist,
    * describing an HLS variant, had no URI associated to it. It should be
    * mandatory.
    */
-  MissingUriLineAfterVariant: 2,
+  MissingUriLineAfterVariant: 1,
   /**
    * An `EXT-X-STREAM-INF` tag announced in the Multivariant Playlist,
    * describing an HLS variant, had an unreadable URI associated to it.
    */
-  UnableToReadVariantUri: 3,
+  UnableToReadVariantUri: 2,
   /**
    * An `EXT-X-STREAM-INF` tag announced in the Multivariant Playlist,
    * describing an HLS variant, had no `BANDWIDTH` attribute associated to it.
    * It should be mandatory.
    */
-  VariantMissingBandwidth: 4,
+  VariantMissingBandwidth: 3,
   /**
    * A value in the Multivariant Playlist was in an invalid format.
    */
-  InvalidValue: 5,
+  InvalidValue: 4,
   /**
    * A mandatory attribute was missing from a tag in the Multivariant Playlist.
    */
-  MissingRequiredAttribute: 6,
+  MissingRequiredAttribute: 5,
   /**
    * An `EXT-X-DEFINE` variable definition or substitution was invalid in the
    * Multivariant Playlist.
    */
-  VariableDefinitionError: 7,
+  VariableDefinitionError: 6,
   /**
    * A line could not be read.
    */
-  UnableToReadLine: 8,
+  UnableToReadLine: 7,
   /**
    * A singleton tag was duplicated in the Multivariant Playlist.
    */
-  DuplicateTag: 9,
+  DuplicateTag: 8,
   /**
    * The Multivariant Playlist contained Media Playlist or Media Segment tags.
    */
-  ConflictingPlaylistTagTypes: 10,
+  ConflictingPlaylistTagTypes: 9,
   /**
    * Another, uncategorized, error arised.
    */
-  Unknown: 11,
+  Unknown: 10,
 } as const);
 export type MultivariantPlaylistParsingErrorCode =
   (typeof MultivariantPlaylistParsingErrorCode)[keyof typeof MultivariantPlaylistParsingErrorCode];

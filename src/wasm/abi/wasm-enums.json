@@ -143,16 +143,8 @@
       "default": "Unknown",
       "doc": ["Error that might arise when parsing the Multivariant Playlist."],
       "members": {
-        "MissingExtM3uHeader": {
-          "value": 0,
-          "doc": [
-            "The first line of the MultivariantPlaylist is not #EXTM3U.",
-            "",
-            "Are you sure this is a Multivariant Playlist?"
-          ]
-        },
         "MultivariantPlaylistWithoutVariant": {
-          "value": 1,
+          "value": 0,
           "doc": [
             "The Multivariant Playlist has no variant.",
             "",
@@ -160,7 +152,7 @@
           ]
         },
         "MissingUriLineAfterVariant": {
-          "value": 2,
+          "value": 1,
           "doc": [
             "An `EXT-X-STREAM-INF` tag announced in the Multivariant Playlist,",
             "describing an HLS variant, had no URI associated to it. It should be",
@@ -168,14 +160,14 @@
           ]
         },
         "UnableToReadVariantUri": {
-          "value": 3,
+          "value": 2,
           "doc": [
             "An `EXT-X-STREAM-INF` tag announced in the Multivariant Playlist,",
             "describing an HLS variant, had an unreadable URI associated to it."
           ]
         },
         "VariantMissingBandwidth": {
-          "value": 4,
+          "value": 3,
           "doc": [
             "An `EXT-X-STREAM-INF` tag announced in the Multivariant Playlist,",
             "describing an HLS variant, had no `BANDWIDTH` attribute associated to it.",
@@ -183,42 +175,42 @@
           ]
         },
         "InvalidValue": {
-          "value": 5,
+          "value": 4,
           "doc": [
             "A value in the Multivariant Playlist was in an invalid format."
           ]
         },
         "MissingRequiredAttribute": {
-          "value": 6,
+          "value": 5,
           "doc": [
             "A mandatory attribute was missing from a tag in the Multivariant Playlist."
           ]
         },
         "VariableDefinitionError": {
-          "value": 7,
+          "value": 6,
           "doc": [
             "An `EXT-X-DEFINE` variable definition or substitution was invalid in the",
             "Multivariant Playlist."
           ]
         },
         "UnableToReadLine": {
-          "value": 8,
+          "value": 7,
           "doc": ["A line could not be read."]
         },
         "DuplicateTag": {
-          "value": 9,
+          "value": 8,
           "doc": [
             "A singleton tag was duplicated in the Multivariant Playlist."
           ]
         },
         "ConflictingPlaylistTagTypes": {
-          "value": 10,
+          "value": 9,
           "doc": [
             "The Multivariant Playlist contained Media Playlist or Media Segment tags."
           ]
         },
         "Unknown": {
-          "value": 11,
+          "value": 10,
           "doc": ["Another, uncategorized, error arised."]
         }
       }
@@ -278,9 +270,7 @@
         },
         "ConflictingPlaylistTagTypes": {
           "value": 8,
-          "doc": [
-            "The Media Playlist contained Multivariant Playlist tags."
-          ]
+          "doc": ["The Media Playlist contained Multivariant Playlist tags."]
         }
       }
     },

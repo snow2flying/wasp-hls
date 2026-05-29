@@ -4,8 +4,8 @@ use super::{
     media_tag::{MediaTag, MediaTagParsingError},
     timeline_sync::TimelineReference,
     top_level_playlist::{
-        is_media_playlist_tag_name, is_media_segment_tag_name,
-        is_multivariant_playlist_tag_name, multivariant_playlist_singleton_tag_name, tag_name,
+        is_media_playlist_tag_name, is_media_segment_tag_name, is_multivariant_playlist_tag_name,
+        multivariant_playlist_singleton_tag_name, tag_name,
     },
     value_parsers::{parse_start_attribute, StartAttribute},
     variable_substitution::{
@@ -15,7 +15,10 @@ use super::{
     AudioTrack, MediaTagType,
 };
 use crate::{utils::url::Url, Logger};
-use std::{collections::{HashMap, HashSet}, error, fmt, io};
+use std::{
+    collections::{HashMap, HashSet},
+    error, fmt, io,
+};
 
 /// Represents a parsed HLS Multivariant Playlist (a.k.a. Master Playlist).
 ///
@@ -67,7 +70,7 @@ impl MultivariantPlaylist {
                 // Fine
             }
             _ => {
-                return Err(MultivariantPlaylistParsingError::MissingExtM3uHeader);
+                return Err(MultivariantPlaylistParsingError::Unknown);
             }
         }
         while let Some(line) = lines.next() {
@@ -78,8 +81,7 @@ impl MultivariantPlaylist {
                 continue;
             } else if let Some(stripped) = str_line.strip_prefix("#EXT") {
                 if let Some(tag_name) = tag_name(&str_line) {
-                    if is_media_playlist_tag_name(tag_name) || is_media_segment_tag_name(tag_name)
-                    {
+                    if is_media_playlist_tag_name(tag_name) || is_media_segment_tag_name(tag_name) {
                         return Err(MultivariantPlaylistParsingError::ConflictingPlaylistTagTypes);
                     }
 
@@ -95,7 +97,10 @@ impl MultivariantPlaylist {
                         is_multivariant_playlist_tag_name(tag_name)
                             || matches!(
                                 tag_name,
-                                "M3U" | "-X-VERSION" | "-X-INDEPENDENT-SEGMENTS" | "-X-START"
+                                "M3U"
+                                    | "-X-VERSION"
+                                    | "-X-INDEPENDENT-SEGMENTS"
+                                    | "-X-START"
                                     | "-X-DEFINE"
                             )
                     );
@@ -120,27 +125,28 @@ impl MultivariantPlaylist {
                         Err(err) => return Err(err.into()),
                     },
                     "-X-STREAM-INF" => {
-                        let variant_url =
-                            match lines.next() {
-                                None => return Err(
+                        let variant_url = match lines.next() {
+                            None => {
+                                return Err(
                                     MultivariantPlaylistParsingError::MissingUriLineAfterVariant,
-                                ),
-                                Some(Err(_)) => {
+                                )
+                            }
+                            Some(Err(_)) => {
+                                return Err(
+                                    MultivariantPlaylistParsingError::UnableToReadVariantUri,
+                                )
+                            }
+                            Some(Ok(l)) => {
+                                let trimmed = l.trim();
+                                if trimmed.is_empty() || trimmed.starts_with('#') {
                                     return Err(
-                                        MultivariantPlaylistParsingError::UnableToReadVariantUri,
-                                    )
-                                }
-                                Some(Ok(l)) => {
-                                    let trimmed = l.trim();
-                                    if trimmed.is_empty() || trimmed.starts_with('#') {
-                                        return Err(
                                             MultivariantPlaylistParsingError::MissingUriLineAfterVariant,
                                         );
-                                    }
-                                    let line = variable_store.substitute(&l)?;
-                                    Url::new(line.into_owned())
                                 }
-                            };
+                                let line = variable_store.substitute(&l)?;
+                                Url::new(line.into_owned())
+                            }
+                        };
 
                         let variant = VariantStream::create_from_stream_inf(
                             &str_line,
@@ -610,7 +616,6 @@ impl MediaPlaylistContext {
 // It may not be always trivial relatively to the cost of development though.
 #[derive(Debug)]
 pub(crate) enum MultivariantPlaylistParsingError {
-    MissingExtM3uHeader,
     MissingUriLineAfterVariant,
     UnableToReadVariantUri,
     VariantMissingBandwidth,
@@ -669,10 +674,6 @@ impl fmt::Display for MultivariantPlaylistParsingError {
             MultivariantPlaylistParsingError::UnableToReadLine => write!(
                 f,
                 "A line of the MultivariantPlaylist was impossible to parse"
-            ),
-            MultivariantPlaylistParsingError::MissingExtM3uHeader => write!(
-                f,
-                "The first line of the Multivariant Playlist isn't `#EXTM3U`. Are you sure this is a Multivariant Playlist?"
             ),
             MultivariantPlaylistParsingError::VariableDefinition(err) => {
                 write!(f, "Invalid EXT-X-DEFINE usage in the Multivariant Playlist: {:?}", err)

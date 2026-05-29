@@ -3,10 +3,10 @@ use super::{
     multi_variant_playlist::MediaPlaylistContext,
     segment_list::{InitSegmentInfo, MediaSegmentInfo, SegmentList, SegmentTimeInfo},
     timeline_sync::TimelineReference,
+    top_level_playlist::ExternalMediaInfo,
     top_level_playlist::{
         is_multivariant_playlist_tag_name, media_playlist_singleton_tag_name, tag_name,
     },
-    top_level_playlist::ExternalMediaInfo,
     value_parsers::{
         parse_byte_range, parse_decimal_floating_point, parse_decimal_integer,
         parse_start_attribute, ByteRange,

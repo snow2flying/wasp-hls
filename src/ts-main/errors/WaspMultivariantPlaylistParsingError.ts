@@ -20,7 +20,6 @@ export default class WaspMultivariantPlaylistParsingError extends Error {
     | "MultivariantPlaylistInvalidValue"
     | "MultivariantPlaylistMissingRequiredAttribute"
     | "MultivariantPlaylistVariableDefinitionError"
-    | "MultivariantPlaylistMissingExtM3uHeader"
     | "MultivariantPlaylistDuplicateTag"
     | "MultivariantPlaylistConflictingTagTypes"
     | "MultivariantPlaylistOtherParsingError";
@@ -48,9 +47,6 @@ export default class WaspMultivariantPlaylistParsingError extends Error {
     Object.setPrototypeOf(this, WaspMultivariantPlaylistParsingError.prototype);
 
     switch (code) {
-      case MultivariantPlaylistParsingErrorCode.MissingExtM3uHeader:
-        this.code = "MultivariantPlaylistMissingExtM3uHeader";
-        break;
       case MultivariantPlaylistParsingErrorCode.MultivariantPlaylistWithoutVariant:
         this.code = "MultivariantPlaylistWithoutVariant";
         break;

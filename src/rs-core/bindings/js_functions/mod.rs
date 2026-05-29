@@ -761,9 +761,6 @@ pub fn jsSendOtherError(fatal: bool, code: OtherErrorCode, message: &str) {
 impl From<MultivariantPlaylistParsingError> for MultivariantPlaylistParsingErrorCode {
     fn from(value: MultivariantPlaylistParsingError) -> Self {
         match value {
-            MultivariantPlaylistParsingError::MissingExtM3uHeader => {
-                MultivariantPlaylistParsingErrorCode::MissingExtM3uHeader
-            }
             MultivariantPlaylistParsingError::InvalidDecimalInteger => {
                 MultivariantPlaylistParsingErrorCode::InvalidValue
             }

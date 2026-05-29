@@ -5,6 +5,7 @@
 ### Changes
 
 - The too specific `MultivariantPlaylistMediaTagMissingType`, `MultivariantPlaylistMediaTagMissingName` and `MultivariantPlaylistMediaTagMissingGroupId` error codes have been collapsed into a new `MultivariantPlaylistMissingRequiredAttribute` error code
+- A top-level resource missing `#EXTM3U` now only surfaces as `NotAPlaylist`; the dead `MultivariantPlaylistMissingExtM3uHeader` public error code has been removed.
 
 ### Features
 
