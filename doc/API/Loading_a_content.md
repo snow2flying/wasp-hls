@@ -63,8 +63,8 @@ player.addEventlistener("playerStateChange", (playerState) => {
 `load` also can take an optional second argument, an object representing its
 options.
 
-For now there's only one optional property that can be set inside it,
-`startingPosition`.
+It can currently contain two optional properties: `startingPosition` and
+`initialAudioTrack`.
 
 ### `startingPosition`
 
@@ -153,6 +153,39 @@ player.load(playlistUrl, {
   startingPosition: {
     startType: "Absolute",
     position: 30,
+  },
+});
+```
+
+### `initialAudioTrack`
+
+_type: `object | undefined`_
+
+The `initialAudioTrack` option allows to indicate a preferred audio track
+before the player starts requesting the initial audio playlist and media
+segments.
+
+This is useful when you want the first announced and loaded audio track to
+already match a preferred language or accessibility role.
+
+When set, the object can contain the following optional properties:
+
+- `language` (`string | undefined`)
+- `assocLanguage` (`string | undefined`)
+- `name` (`string | undefined`)
+- `characteristics` (`Array.<string> | undefined`)
+- `channels` (`number | undefined`)
+
+Every set property must match for a track to be selected. If multiple tracks
+match, the first one in playlist order is chosen. If no track matches, the
+player falls back to its default startup selection.
+
+For example, to start with the French audio track:
+
+```js
+player.load(playlistUrl, {
+  initialAudioTrack: {
+    language: "fr",
   },
 });
 ```

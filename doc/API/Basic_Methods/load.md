@@ -14,6 +14,7 @@ player.load(url);
 // With options
 player.load(url, {
   startingPosition: initialWantedPosition,
+  initialAudioTrack: { language: "fr" },
 });
 ```
 
@@ -29,3 +30,8 @@ player.load(url, {
      - `startType` (`number`|`object`|`undefined`): indicate a preferred
        starting position. See [the documentation page on loading a
        content](../Loading_a_content.md) for more information
+     - `initialAudioTrack` (`object`|`undefined`): indicate preferred
+       characteristics for the initially selected audio track. See [the
+       documentation page on loading a
+       content](../Loading_a_content.md#initialaudiotrack) for more
+       information.

@@ -9,6 +9,7 @@
 import { Finalizer } from "./finalization_registry.js";
 import { getWasmExports, withFloat64Array, withString } from "./memory.js";
 import { optionalIdToRaw } from "./helpers.js";
+import type { InitialAudioTrackSelection } from "../../ts-common/types.ts";
 import type {
   AddSourceBufferErrorCode,
   MediaSourceReadyState,
@@ -16,6 +17,8 @@ import type {
   TimerReason,
 } from "./enums.js";
 import { JsTimeRanges, MediaObservation, StartingPosition } from "./results.js";
+
+const INITIAL_AUDIO_TRACK_CHARACTERISTICS_SEPARATOR = "\u001f";
 
 /**
  * JS wrapper around `rs-core`'s Dispatcher instance, which is its meain export.
@@ -53,16 +56,46 @@ export class Dispatcher {
   public load_content(
     content_url: string,
     starting_pos?: StartingPosition | null,
+    initial_audio_track?: InitialAudioTrackSelection | null,
   ): void {
     withString(content_url, (ptr, len) => {
-      getWasmExports().wasp_dispatcher_load_content(
-        this.__ptr,
-        ptr,
-        len,
-        starting_pos == null ? 0 : 1,
-        starting_pos?.start_type ?? 0,
-        starting_pos?.position ?? 0,
-      );
+      const selector = initial_audio_track ?? null;
+      const characteristics =
+        selector?.characteristics?.join(
+          INITIAL_AUDIO_TRACK_CHARACTERISTICS_SEPARATOR,
+        ) ?? null;
+      withOptionalString(selector?.language, (languagePtr, languageLen) => {
+        withOptionalString(
+          selector?.assocLanguage,
+          (assocLanguagePtr, assocLanguageLen) => {
+            withOptionalString(selector?.name, (namePtr, nameLen) => {
+              withOptionalString(
+                characteristics,
+                (characteristicsPtr, characteristicsLen) => {
+                  getWasmExports().wasp_dispatcher_load_content(
+                    this.__ptr,
+                    ptr,
+                    len,
+                    starting_pos == null ? 0 : 1,
+                    starting_pos?.start_type ?? 0,
+                    starting_pos?.position ?? 0,
+                    languagePtr,
+                    languageLen,
+                    assocLanguagePtr,
+                    assocLanguageLen,
+                    namePtr,
+                    nameLen,
+                    characteristicsPtr,
+                    characteristicsLen,
+                    selector?.channels === undefined ? 0 : 1,
+                    selector?.channels ?? 0,
+                  );
+                },
+              );
+            });
+          },
+        );
+      });
     });
   }
 
@@ -363,6 +396,17 @@ export class Dispatcher {
   public on_codecs_support_update(): void {
     getWasmExports().__web_event__codecs_support_update(this.__ptr);
   }
+}
+
+function withOptionalString(
+  value: string | null | undefined,
+  fn: (ptr: number, len: number) => void,
+): void {
+  if (value == null) {
+    fn(0, 0);
+    return;
+  }
+  withString(value, fn);
 }
 
 /** Shared fallback cleanup for dispatcher instances dropped by JS without `free()`. */

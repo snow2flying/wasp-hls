@@ -1,7 +1,10 @@
 use crate::{
     adaptive::AdaptiveQualitySelector,
     bindings::{jsSendOtherError, OtherErrorCode},
-    dispatcher::{segment_request_contexts::SegmentRequestContexts, PlaylistRefreshTimers},
+    dispatcher::{
+        segment_request_contexts::SegmentRequestContexts, InitialAudioTrackSelection,
+        PlaylistRefreshTimers,
+    },
     media_element::MediaElementReference,
     requester::{PlaylistFileType, Requester},
     segment_selector::NextSegmentSelectors,
@@ -33,13 +36,21 @@ impl Dispatcher {
             segment_request_contexts: SegmentRequestContexts::new(),
             playlist_refresh_timers: PlaylistRefreshTimers::new(),
             ready_probe_segments: Default::default(),
+            initial_audio_track_selection: None,
         }
     }
 
     /// Start loading a new content by communicating its MultivariantPlaylist's URL
-    pub fn load_content(&mut self, content_url: String, starting_pos: Option<StartingPosition>) {
+    pub fn load_content(
+        &mut self,
+        content_url: String,
+        starting_pos: Option<StartingPosition>,
+        initial_audio_track_selection: Option<InitialAudioTrackSelection>,
+    ) {
         Logger::info("load_content called");
         self.stop();
+        self.initial_audio_track_selection =
+            initial_audio_track_selection.filter(|selection| !selection.is_empty());
         self.ready_state = PlayerReadyState::AwaitingPlaylistInfo {
             starting_position: starting_pos,
             lifecycle_announced: false,
@@ -178,6 +189,14 @@ fn string_from_abi(ptr: *const u8, len: u32) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
+fn opt_string_from_abi(ptr: *const u8, len: u32) -> Option<String> {
+    if ptr.is_null() || len == 0 {
+        None
+    } else {
+        Some(string_from_abi(ptr, len))
+    }
+}
+
 fn dispatcher_mut<'a>(ptr: u32) -> &'a mut Dispatcher {
     unsafe { &mut *(ptr as *mut Dispatcher) }
 }
@@ -208,6 +227,16 @@ pub extern "C" fn wasp_dispatcher_load_content(
     has_starting_pos: u32,
     start_type: u32,
     start_position: f64,
+    language_ptr: *const u8,
+    language_len: u32,
+    assoc_language_ptr: *const u8,
+    assoc_language_len: u32,
+    name_ptr: *const u8,
+    name_len: u32,
+    characteristics_ptr: *const u8,
+    characteristics_len: u32,
+    has_channels: u32,
+    channels: u32,
 ) {
     let content_url = string_from_abi(content_url_ptr, content_url_len);
     let starting_pos = if has_starting_pos != 0 {
@@ -218,7 +247,39 @@ pub extern "C" fn wasp_dispatcher_load_content(
     } else {
         None
     };
-    dispatcher_mut(ptr).load_content(content_url, starting_pos);
+    let initial_audio_track_selection = {
+        let language = opt_string_from_abi(language_ptr, language_len);
+        let assoc_language = opt_string_from_abi(assoc_language_ptr, assoc_language_len);
+        let name = opt_string_from_abi(name_ptr, name_len);
+        let characteristics = opt_string_from_abi(characteristics_ptr, characteristics_len)
+            .map(|serialized| {
+                serialized
+                    .split('\u{001f}')
+                    .filter(|part| !part.is_empty())
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let channels = if has_channels == 0 {
+            None
+        } else {
+            Some(channels)
+        };
+
+        let selection = InitialAudioTrackSelection {
+            language,
+            assoc_language,
+            name,
+            characteristics,
+            channels,
+        };
+        if selection.is_empty() {
+            None
+        } else {
+            Some(selection)
+        }
+    };
+    dispatcher_mut(ptr).load_content(content_url, starting_pos, initial_audio_track_selection);
 }
 
 #[unsafe(no_mangle)]

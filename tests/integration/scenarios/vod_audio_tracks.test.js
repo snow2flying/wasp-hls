@@ -29,6 +29,7 @@ describe("Generated VoD content - audio tracks", function () {
 
       ctx.player.load(getVodScenarioUrl("fmp4-alt-audio"));
       const announcedTracks = await audioTrackListListener.awaitNext();
+      expect(audioTrackListener.getCurrentCount()).toEqual(0);
       const announcedAudioTrack = await audioTrackListener.awaitNext();
       expect(ctx.player.getPlayerState()).toEqual("Loading");
       await waitForLoadedState(
@@ -77,6 +78,7 @@ describe("Generated VoD content - audio tracks", function () {
 
       ctx.player.load(getVodScenarioUrl("fmp4-direct-media"));
       const announcedTracks = await audioTrackListListener.awaitNext();
+      expect(audioTrackListener.getCurrentCount()).toEqual(0);
       const announcedAudioTrack = await audioTrackListener.awaitNext();
       expect(ctx.player.getPlayerState()).toEqual("Loading");
       await waitForLoadedState(
@@ -112,6 +114,7 @@ describe("Generated VoD content - audio tracks", function () {
 
       ctx.player.load(getVodScenarioUrl("fmp4-shared-audio-muxed"));
       const announcedTracks = await audioTrackListListener.awaitNext();
+      expect(audioTrackListener.getCurrentCount()).toEqual(0);
       const announcedAudioTrack = await audioTrackListener.awaitNext();
       expect(ctx.player.getPlayerState()).toEqual("Loading");
       await waitForLoadedState(
@@ -164,6 +167,92 @@ describe("Generated VoD content - audio tracks", function () {
       expect(ctx.player.getCurrentAudioTrack()?.id).toEqual(frenchTrack.id);
       expect(audioTrackListListener.getCurrentCount()).toEqual(1);
       expect(audioTrackListener.getCurrentCount()).toEqual(2);
+    },
+  );
+
+  it(
+    "lets user change the track on audioTrackUpdate",
+    { timeout: VOD_TEST_TIMEOUT_MS },
+    async () => {
+      const audioTrackListListener = eventListener(
+        ctx.player,
+        "audioTrackListUpdate",
+      );
+      const audioTrackListener = eventListener(ctx.player, "audioTrackUpdate");
+
+      ctx.player.addEventListener("playerStateChange", (state) => {
+        if (state === "Loaded") {
+          ctx.player.resume();
+        }
+      });
+
+      let selectedTrack;
+
+      // Re-register event listener just to do it synchronously
+      ctx.player.addEventListener("audioTrackListUpdate", (list) => {
+        selectedTrack = list.find((t) => t.language === "fr");
+        ctx.player.setAudioTrack(selectedTrack.id);
+      });
+
+      ctx.player.load(getVodScenarioUrl("fmp4-alt-audio"));
+
+      // Due to worker considerations, the initial track is chosen before we set the
+      // actual one.
+      const switchedTrack1 = await audioTrackListener.awaitNext();
+      const switchedTrack2 = await audioTrackListener.awaitNext();
+
+      await waitForLoadedState(
+        ctx.player,
+        ctx.videoElement,
+        () => ctx.lastPlayerError,
+      );
+
+      expect(selectedTrack).not.toBe(undefined);
+      expect(ctx.player.getCurrentAudioTrack()?.id).toEqual(selectedTrack.id);
+      expect(switchedTrack1.id).not.toEqual(selectedTrack.id);
+      expect(switchedTrack2.id).toEqual(selectedTrack.id);
+      expect(audioTrackListListener.getCurrentCount()).toEqual(1);
+      expect(audioTrackListener.getCurrentCount()).toEqual(2);
+      expect(audioTrackListener.getPayloadFor(1).id).toEqual(selectedTrack.id);
+    },
+  );
+
+  it(
+    "allows setting the initial audio track through load options",
+    { timeout: VOD_TEST_TIMEOUT_MS },
+    async () => {
+      const audioTrackListListener = eventListener(
+        ctx.player,
+        "audioTrackListUpdate",
+      );
+      const audioTrackListener = eventListener(ctx.player, "audioTrackUpdate");
+
+      ctx.player.addEventListener("playerStateChange", (state) => {
+        if (state === "Loaded") {
+          ctx.player.resume();
+        }
+      });
+
+      ctx.player.load(getVodScenarioUrl("fmp4-alt-audio"), {
+        initialAudioTrack: { language: "fr" },
+      });
+      const announcedTracks = await audioTrackListListener.awaitNext();
+      const initialTrack = await audioTrackListener.awaitNext();
+
+      await waitForLoadedState(
+        ctx.player,
+        ctx.videoElement,
+        () => ctx.lastPlayerError,
+      );
+
+      expect(announcedTracks.map((track) => track.language).sort()).toEqual([
+        "en",
+        "fr",
+      ]);
+      expect(initialTrack.language).toEqual("fr");
+      expect(ctx.player.getCurrentAudioTrack()?.language).toEqual("fr");
+      expect(audioTrackListListener.getCurrentCount()).toEqual(1);
+      expect(audioTrackListener.getCurrentCount()).toEqual(1);
     },
   );
 });

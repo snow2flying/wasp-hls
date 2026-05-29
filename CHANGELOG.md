@@ -8,6 +8,7 @@
 
 ### Features
 
+- Add `initialAudioTrack` option to `loadContent`
 - It is now possible to play media playlists directly instead of always going through a multivariant playlist URL
 - It is now possible to play Multivariant Playlists that do not announce their variants' `CODECS` attributes
 - Add optional `bitDepth` and `sampleRate` properties to `getAudioTrackList`, `getCurrentAudioTrack`methods plus `audioTrackUpdate` and `audioTrackListUpdate` events reflecting respectively the bit depth of audio samples and the audio audio sample rate for the corresponding audio tracks if they're invariant for all renditions of that track.

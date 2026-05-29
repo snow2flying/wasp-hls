@@ -112,7 +112,11 @@ export default function MessageReceiver() {
             data.value.startingPosition.position,
           );
         }
-        dispatcher.load_content(data.value.url, startingPosition);
+        dispatcher.load_content(
+          data.value.url,
+          startingPosition,
+          data.value.initialAudioTrack,
+        );
         break;
       }
 

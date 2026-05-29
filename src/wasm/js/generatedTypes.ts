@@ -312,6 +312,16 @@ export interface WaspWasmExports {
     hasStartingPosition: number,
     startType: StartingPositionType,
     position: number,
+    languagePtr: number,
+    languageLen: number,
+    assocLanguagePtr: number,
+    assocLanguageLen: number,
+    namePtr: number,
+    nameLen: number,
+    characteristicsPtr: number,
+    characteristicsLen: number,
+    hasChannels: number,
+    channels: number,
   ): void;
   /**
    * Return the minimum known content position.

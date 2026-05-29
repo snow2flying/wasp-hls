@@ -54,6 +54,7 @@ impl Dispatcher {
         self.segment_selectors.reset_selectors(0.);
         self.playlist_store = None;
         self.ready_probe_segments.clear();
+        self.initial_audio_track_selection = None;
         self.last_position = 0.;
         self.clean_up_playlist_refresh_timers();
         self.ready_state = PlayerReadyState::Stopped;
@@ -640,7 +641,8 @@ impl Dispatcher {
                 Logger::info("Core: top-level playlist parsed successfully");
                 let estimate = self.adaptive_selector.get_estimate();
                 match PlaylistStore::try_new(pl, estimate) {
-                    Ok(pl_store) => {
+                    Ok(mut pl_store) => {
+                        self.apply_initial_audio_track_selection(&mut pl_store);
                         let direct_media_refresh = pl_store
                             .direct_media_playlist()
                             .map(|(id, playlist)| (*id, playlist.refresh_interval()));
@@ -658,6 +660,21 @@ impl Dispatcher {
                 }
             }
         }
+    }
+
+    fn apply_initial_audio_track_selection(&mut self, pl_store: &mut PlaylistStore) {
+        let Some(selection) = self.initial_audio_track_selection.take() else {
+            return;
+        };
+        let Some(track_id) = pl_store
+            .audio_tracks()
+            .iter()
+            .find(|track| selection.matches(track))
+            .map(|track| track.id())
+        else {
+            return;
+        };
+        pl_store.set_audio_track(Some(track_id));
     }
 
     /// Method called once a Media Playlist was parsed with success

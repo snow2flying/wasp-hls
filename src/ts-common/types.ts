@@ -483,6 +483,18 @@ export interface AudioTrackInfo {
 }
 
 /**
+ * Preferred characteristics to use when choosing the initial audio track for a
+ * newly loaded content.
+ */
+export interface InitialAudioTrackSelection {
+  language?: string | undefined;
+  assocLanguage?: string | undefined;
+  name?: string | undefined;
+  characteristics?: string[] | undefined;
+  channels?: number | undefined;
+}
+
+/**
  * Message sent when the Worker has succesfully stopped a content.
  */
 export interface ContentStoppedWorkerMessage {
@@ -942,6 +954,8 @@ export interface LoadContentMainMessage {
           position: number;
         }
       | undefined;
+    /** Preferred characteristics for the initially selected audio track. */
+    initialAudioTrack?: InitialAudioTrackSelection | undefined;
   };
 }
 

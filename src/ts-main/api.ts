@@ -7,6 +7,7 @@ import monotonicNow from "../ts-common/monotonicNow.ts";
 import noop from "../ts-common/noop.ts";
 import type {
   AudioTrackInfo,
+  InitialAudioTrackSelection,
   VariantInfo,
   WaspHlsPlayerConfig,
   WorkerMessage,
@@ -460,7 +461,12 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
     }
     postMessageToWorker(this.__worker__, {
       type: MainMessageType.LoadContent,
-      value: { contentId, url, startingPosition },
+      value: {
+        contentId,
+        url,
+        startingPosition,
+        initialAudioTrack: opts?.initialAudioTrack,
+      },
     });
   }
 
@@ -1406,6 +1412,11 @@ export interface LoadOptions {
    * allowing to give relative position to a given base.
    */
   startingPosition?: StartingPosition | number | undefined;
+  /**
+   * Preferred characteristics to use when selecting the initial audio track,
+   * before the player starts requesting media playlists and segments.
+   */
+  initialAudioTrack?: InitialAudioTrackSelection | undefined;
 }
 
 /**

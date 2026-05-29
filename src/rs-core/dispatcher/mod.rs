@@ -3,6 +3,7 @@ use crate::{
     bindings::MediaType,
     dispatcher::playlist_refresh_timers::PlaylistRefreshTimers,
     media_element::MediaElementReference,
+    parser::AudioTrack,
     playlist_store::{PlaylistStore, ProbeSegmentMetadata},
     requester::Requester,
     segment_selector::NextSegmentSelectors,
@@ -70,6 +71,56 @@ pub struct Dispatcher {
     /// Startup probe segments that have already been fetched and inspected and now only wait for
     /// the regular buffering pipeline to be ready before being pushed.
     ready_probe_segments: ReadyProbeSegments,
+
+    /// Preferred criteria to resolve the initial audio track selection for the
+    /// next content being loaded.
+    initial_audio_track_selection: Option<InitialAudioTrackSelection>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct InitialAudioTrackSelection {
+    pub language: Option<String>,
+    pub assoc_language: Option<String>,
+    pub name: Option<String>,
+    pub characteristics: Vec<String>,
+    pub channels: Option<u32>,
+}
+
+impl InitialAudioTrackSelection {
+    fn is_empty(&self) -> bool {
+        self.language.is_none()
+            && self.assoc_language.is_none()
+            && self.name.is_none()
+            && self.characteristics.is_empty()
+            && self.channels.is_none()
+    }
+
+    fn matches(&self, track: &AudioTrack) -> bool {
+        self.language
+            .as_deref()
+            .map(|language| track.language() == Some(language))
+            .unwrap_or(true)
+            && self
+                .assoc_language
+                .as_deref()
+                .map(|assoc_language| track.assoc_language() == Some(assoc_language))
+                .unwrap_or(true)
+            && self
+                .name
+                .as_deref()
+                .map(|name| track.name() == name)
+                .unwrap_or(true)
+            && self
+                .channels
+                .map(|channels| track.channels() == Some(channels))
+                .unwrap_or(true)
+            && self.characteristics.iter().all(|characteristic| {
+                track
+                    .characteristics()
+                    .iter()
+                    .any(|track_characteristic| track_characteristic == characteristic)
+            })
+    }
 }
 
 /// Identify the playback-related state the `Dispatcher` is in.
@@ -168,5 +219,74 @@ impl ReadyProbeSegments {
     fn clear(&mut self) {
         self.audio = None;
         self.video = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::InitialAudioTrackSelection;
+    use crate::{parser::TopLevelPlaylist, utils::url::Url};
+
+    #[test]
+    fn initial_audio_track_selection_matches_language() {
+        let playlist = TopLevelPlaylist::parse(
+            r#"#EXTM3U
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="English",LANGUAGE="en",DEFAULT=YES,AUTOSELECT=YES,URI="audio-en.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="French",LANGUAGE="fr",AUTOSELECT=YES,URI="audio-fr.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=1000,AUDIO="aud"
+video.m3u8
+"#
+            .as_bytes(),
+            Url::new("https://example.com/master.m3u8".to_string()),
+        )
+        .unwrap();
+        let TopLevelPlaylist::Multivariant(playlist) = playlist else {
+            unreachable!();
+        };
+
+        let selection = InitialAudioTrackSelection {
+            language: Some("fr".to_string()),
+            ..Default::default()
+        };
+
+        let matched = playlist
+            .audio_tracks()
+            .iter()
+            .find(|track| selection.matches(track))
+            .unwrap();
+        assert_eq!(matched.language(), Some("fr"));
+    }
+
+    #[test]
+    fn initial_audio_track_selection_matches_characteristics_and_channels() {
+        let playlist = TopLevelPlaylist::parse(
+            r#"#EXTM3U
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="English",LANGUAGE="en",DEFAULT=YES,AUTOSELECT=YES,CHANNELS="2",URI="audio-en.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="French AD",LANGUAGE="fr",ASSOC-LANGUAGE="fr",AUTOSELECT=YES,CHANNELS="6",CHARACTERISTICS="public.accessibility.describes-video",URI="audio-fr-ad.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=1000,AUDIO="aud"
+video.m3u8
+"#
+            .as_bytes(),
+            Url::new("https://example.com/master.m3u8".to_string()),
+        )
+        .unwrap();
+        let TopLevelPlaylist::Multivariant(playlist) = playlist else {
+            unreachable!();
+        };
+
+        let selection = InitialAudioTrackSelection {
+            language: Some("fr".to_string()),
+            assoc_language: Some("fr".to_string()),
+            characteristics: vec!["public.accessibility.describes-video".to_string()],
+            channels: Some(6),
+            ..Default::default()
+        };
+
+        let matched = playlist
+            .audio_tracks()
+            .iter()
+            .find(|track| selection.matches(track))
+            .unwrap();
+        assert_eq!(matched.name(), "French AD");
     }
 }
