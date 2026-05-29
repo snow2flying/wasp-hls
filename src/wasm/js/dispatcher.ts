@@ -7,9 +7,17 @@
  */
 
 import { Finalizer } from "./finalization_registry.js";
-import { getWasmExports, withFloat64Array, withString } from "./memory.js";
+import {
+  getWasmExports,
+  withFloat64Array,
+  withString,
+  withUint8Array,
+} from "./memory.js";
 import { optionalIdToRaw } from "./helpers.js";
-import type { InitialAudioTrackSelection } from "../../ts-common/types.ts";
+import type {
+  InitialAudioTrackPreference,
+  InitialAudioTrackSelection,
+} from "../../ts-common/types.ts";
 import type {
   AddSourceBufferErrorCode,
   MediaSourceReadyState,
@@ -18,7 +26,7 @@ import type {
 } from "./enums.js";
 import { JsTimeRanges, MediaObservation, StartingPosition } from "./results.js";
 
-const INITIAL_AUDIO_TRACK_CHARACTERISTICS_SEPARATOR = "\u001f";
+const textEncoder = new TextEncoder();
 
 /**
  * JS wrapper around `rs-core`'s Dispatcher instance, which is its meain export.
@@ -56,44 +64,22 @@ export class Dispatcher {
   public load_content(
     content_url: string,
     starting_pos?: StartingPosition | null,
-    initial_audio_track?: InitialAudioTrackSelection | null,
+    initial_audio_track?: InitialAudioTrackPreference | null,
   ): void {
     withString(content_url, (ptr, len) => {
-      const selector = initial_audio_track ?? null;
-      const characteristics =
-        selector?.characteristics?.join(
-          INITIAL_AUDIO_TRACK_CHARACTERISTICS_SEPARATOR,
-        ) ?? null;
-      withOptionalString(selector?.language, (languagePtr, languageLen) => {
-        withOptionalString(
-          selector?.assocLanguage,
-          (assocLanguagePtr, assocLanguageLen) => {
-            withOptionalString(selector?.name, (namePtr, nameLen) => {
-              withOptionalString(
-                characteristics,
-                (characteristicsPtr, characteristicsLen) => {
-                  getWasmExports().wasp_dispatcher_load_content(
-                    this.__ptr,
-                    ptr,
-                    len,
-                    starting_pos == null ? 0 : 1,
-                    starting_pos?.start_type ?? 0,
-                    starting_pos?.position ?? 0,
-                    languagePtr,
-                    languageLen,
-                    assocLanguagePtr,
-                    assocLanguageLen,
-                    namePtr,
-                    nameLen,
-                    characteristicsPtr,
-                    characteristicsLen,
-                    selector?.channels === undefined ? 0 : 1,
-                    selector?.channels ?? 0,
-                  );
-                },
-              );
-            });
-          },
+      const selectors =
+        normalizeInitialAudioTrackPreference(initial_audio_track);
+      const serialized = serializeInitialAudioTrackPreference(selectors);
+      withUint8Array(serialized, (initialAudioPtr, initialAudioLen) => {
+        getWasmExports().wasp_dispatcher_load_content(
+          this.__ptr,
+          ptr,
+          len,
+          starting_pos == null ? 0 : 1,
+          starting_pos?.start_type ?? 0,
+          starting_pos?.position ?? 0,
+          initialAudioPtr,
+          initialAudioLen,
         );
       });
     });
@@ -398,15 +384,114 @@ export class Dispatcher {
   }
 }
 
-function withOptionalString(
-  value: string | null | undefined,
-  fn: (ptr: number, len: number) => void,
-): void {
-  if (value == null) {
-    fn(0, 0);
-    return;
+function normalizeInitialAudioTrackPreference(
+  preference: InitialAudioTrackPreference | null | undefined,
+): InitialAudioTrackSelection[] {
+  const selections = Array.isArray(preference)
+    ? preference
+    : preference == null
+      ? []
+      : [preference];
+  return selections.filter(
+    (selection) => !isEmptyInitialAudioTrackSelection(selection),
+  );
+}
+
+function isEmptyInitialAudioTrackSelection(
+  selection: InitialAudioTrackSelection,
+): boolean {
+  return (
+    selection.language === undefined &&
+    selection.assocLanguage === undefined &&
+    selection.name === undefined &&
+    selection.channels === undefined &&
+    (selection.characteristics === undefined ||
+      selection.characteristics.length === 0)
+  );
+}
+
+function serializeInitialAudioTrackPreference(
+  selections: InitialAudioTrackSelection[],
+): Uint8Array {
+  const entries = selections.map(serializeInitialAudioTrackSelectionEntry);
+  const totalLength =
+    4 + entries.reduce((sum, entry) => sum + entry.byteLength, 0);
+  const bytes = new Uint8Array(totalLength);
+  const view = new DataView(bytes.buffer);
+  let offset = 0;
+  view.setUint32(offset, selections.length, true);
+  offset += 4;
+  for (const entry of entries) {
+    bytes.set(entry, offset);
+    offset += entry.byteLength;
   }
-  withString(value, fn);
+  return bytes;
+}
+
+function serializeInitialAudioTrackSelectionEntry(
+  selection: InitialAudioTrackSelection,
+): Uint8Array {
+  const language = encodeOptionalString(selection.language);
+  const assocLanguage = encodeOptionalString(selection.assocLanguage);
+  const name = encodeOptionalString(selection.name);
+  const characteristics = selection.characteristics?.map(encodeString) ?? [];
+  const totalLength =
+    language.byteLength +
+    assocLanguage.byteLength +
+    name.byteLength +
+    4 +
+    characteristics.reduce((sum, value) => sum + value.byteLength, 0) +
+    (selection.channels === undefined ? 1 : 5);
+  const bytes = new Uint8Array(totalLength);
+  const view = new DataView(bytes.buffer);
+  let offset = 0;
+
+  offset = writeBytes(bytes, offset, language);
+  offset = writeBytes(bytes, offset, assocLanguage);
+  offset = writeBytes(bytes, offset, name);
+
+  view.setUint32(offset, characteristics.length, true);
+  offset += 4;
+  for (const characteristic of characteristics) {
+    offset = writeBytes(bytes, offset, characteristic);
+  }
+
+  if (selection.channels === undefined) {
+    view.setUint8(offset, 0);
+  } else {
+    view.setUint8(offset, 1);
+    offset += 1;
+    view.setUint32(offset, selection.channels, true);
+  }
+
+  return bytes;
+}
+
+function encodeOptionalString(value: string | undefined): Uint8Array {
+  if (value === undefined) {
+    const bytes = new Uint8Array(4);
+    new DataView(bytes.buffer).setUint32(0, 0xffffffff, true);
+    return bytes;
+  }
+  return encodeString(value);
+}
+
+function encodeString(value: string): Uint8Array {
+  const payload = textEncoder.encode(value);
+  const bytes = new Uint8Array(4 + payload.byteLength);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(0, payload.byteLength, true);
+  bytes.set(payload, 4);
+  return bytes;
+}
+
+function writeBytes(
+  destination: Uint8Array,
+  offset: number,
+  value: Uint8Array,
+): number {
+  destination.set(value, offset);
+  return offset + value.byteLength;
 }
 
 /** Shared fallback cleanup for dispatcher instances dropped by JS without `free()`. */

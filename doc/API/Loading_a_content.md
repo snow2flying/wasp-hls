@@ -159,7 +159,7 @@ player.load(playlistUrl, {
 
 ### `initialAudioTrack`
 
-_type: `object | undefined`_
+_type: `object | Array.<object> | undefined`_
 
 The `initialAudioTrack` option allows to indicate a preferred audio track
 before the player starts requesting the initial audio playlist and media
@@ -168,7 +168,7 @@ segments.
 This is useful when you want the first announced and loaded audio track to
 already match a preferred language or accessibility role.
 
-When set, the object can contain the following optional properties:
+When set as an object, it can contain the following optional properties:
 
 - `language` (`string | undefined`)
 - `assocLanguage` (`string | undefined`)
@@ -177,8 +177,12 @@ When set, the object can contain the following optional properties:
 - `channels` (`number | undefined`)
 
 Every set property must match for a track to be selected. If multiple tracks
-match, the first one in playlist order is chosen. If no track matches, the
-player falls back to its default startup selection.
+match, the first one in playlist order is chosen.
+
+You can also provide an ordered array of such objects. In that case, the player
+tries each selector in order and uses the first one that matches at least one
+track. If no selector matches, the player falls back to its default startup
+selection.
 
 For example, to start with the French audio track:
 
@@ -187,5 +191,13 @@ player.load(playlistUrl, {
   initialAudioTrack: {
     language: "fr",
   },
+});
+```
+
+Or to try German first and then French:
+
+```js
+player.load(playlistUrl, {
+  initialAudioTrack: [{ language: "de" }, { language: "fr" }],
 });
 ```

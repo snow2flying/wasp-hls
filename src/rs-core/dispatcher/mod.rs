@@ -74,7 +74,7 @@ pub struct Dispatcher {
 
     /// Preferred criteria to resolve the initial audio track selection for the
     /// next content being loaded.
-    initial_audio_track_selection: Option<InitialAudioTrackSelection>,
+    initial_audio_track_selection: Vec<InitialAudioTrackSelection>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -288,5 +288,48 @@ video.m3u8
             .find(|track| selection.matches(track))
             .unwrap();
         assert_eq!(matched.name(), "French AD");
+    }
+
+    #[test]
+    fn initial_audio_track_selection_prefers_first_matching_entry() {
+        let playlist = TopLevelPlaylist::parse(
+            r#"#EXTM3U
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="English",LANGUAGE="en",DEFAULT=YES,AUTOSELECT=YES,URI="audio-en.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="French stereo",LANGUAGE="fr",CHANNELS="2",AUTOSELECT=YES,URI="audio-fr.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="French surround",LANGUAGE="fr",CHANNELS="6",AUTOSELECT=YES,URI="audio-fr-6.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=1000,AUDIO="aud"
+video.m3u8
+"#
+            .as_bytes(),
+            Url::new("https://example.com/master.m3u8".to_string()),
+        )
+        .unwrap();
+        let TopLevelPlaylist::Multivariant(playlist) = playlist else {
+            unreachable!();
+        };
+
+        let selections = [
+            InitialAudioTrackSelection {
+                language: Some("fr".to_string()),
+                channels: Some(8),
+                ..Default::default()
+            },
+            InitialAudioTrackSelection {
+                language: Some("fr".to_string()),
+                channels: Some(6),
+                ..Default::default()
+            },
+        ];
+
+        let matched = selections
+            .iter()
+            .find_map(|selection| {
+                playlist
+                    .audio_tracks()
+                    .iter()
+                    .find(|track| selection.matches(track))
+            })
+            .unwrap();
+        assert_eq!(matched.name(), "French surround");
     }
 }

@@ -54,7 +54,7 @@ impl Dispatcher {
         self.segment_selectors.reset_selectors(0.);
         self.playlist_store = None;
         self.ready_probe_segments.clear();
-        self.initial_audio_track_selection = None;
+        self.initial_audio_track_selection.clear();
         self.last_position = 0.;
         self.clean_up_playlist_refresh_timers();
         self.ready_state = PlayerReadyState::Stopped;
@@ -663,15 +663,14 @@ impl Dispatcher {
     }
 
     fn apply_initial_audio_track_selection(&mut self, pl_store: &mut PlaylistStore) {
-        let Some(selection) = self.initial_audio_track_selection.take() else {
-            return;
-        };
-        let Some(track_id) = pl_store
-            .audio_tracks()
-            .iter()
-            .find(|track| selection.matches(track))
-            .map(|track| track.id())
-        else {
+        let initial_audio_track_selection = std::mem::take(&mut self.initial_audio_track_selection);
+        let Some(track_id) = initial_audio_track_selection.iter().find_map(|selection| {
+            pl_store
+                .audio_tracks()
+                .iter()
+                .find(|track| selection.matches(track))
+                .map(|track| track.id())
+        }) else {
             return;
         };
         pl_store.set_audio_track(Some(track_id));

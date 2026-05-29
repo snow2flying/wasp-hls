@@ -97,6 +97,21 @@ export function writeFloat64Array(values: Float64Array): [number, number] {
   return [ptr, values.length];
 }
 
+export function writeUint32Array(values: Uint32Array): [number, number] {
+  const ptr = allocBytes(values.byteLength);
+  getUint8Memory().set(
+    new Uint8Array(values.buffer, values.byteOffset, values.byteLength),
+    ptr,
+  );
+  return [ptr, values.length];
+}
+
+export function writeUint8Array(values: Uint8Array): [number, number] {
+  const ptr = allocBytes(values.byteLength);
+  getUint8Memory().set(values, ptr);
+  return [ptr, values.length];
+}
+
 export function readString(ptr: number, len: number): string {
   return textDecoder.decode(getUint8Memory().subarray(ptr, ptr + len));
 }
@@ -125,6 +140,30 @@ export function withFloat64Array<T>(
   cb: (ptr: number, len: number) => T,
 ): T {
   const [ptr, len] = writeFloat64Array(values);
+  try {
+    return cb(ptr, len);
+  } finally {
+    freeBytes(ptr, values.byteLength);
+  }
+}
+
+export function withUint32Array<T>(
+  values: Uint32Array,
+  cb: (ptr: number, len: number) => T,
+): T {
+  const [ptr, len] = writeUint32Array(values);
+  try {
+    return cb(ptr, len);
+  } finally {
+    freeBytes(ptr, values.byteLength);
+  }
+}
+
+export function withUint8Array<T>(
+  values: Uint8Array,
+  cb: (ptr: number, len: number) => T,
+): T {
+  const [ptr, len] = writeUint8Array(values);
   try {
     return cb(ptr, len);
   } finally {

@@ -255,4 +255,43 @@ describe("Generated VoD content - audio tracks", function () {
       expect(audioTrackListener.getCurrentCount()).toEqual(1);
     },
   );
+
+  it(
+    "allows setting ordered initial audio track preferences through load options",
+    { timeout: VOD_TEST_TIMEOUT_MS },
+    async () => {
+      const audioTrackListListener = eventListener(
+        ctx.player,
+        "audioTrackListUpdate",
+      );
+      const audioTrackListener = eventListener(ctx.player, "audioTrackUpdate");
+
+      ctx.player.addEventListener("playerStateChange", (state) => {
+        if (state === "Loaded") {
+          ctx.player.resume();
+        }
+      });
+
+      ctx.player.load(getVodScenarioUrl("fmp4-alt-audio"), {
+        initialAudioTrack: [{ language: "de" }, { language: "fr" }],
+      });
+      const announcedTracks = await audioTrackListListener.awaitNext();
+      const initialTrack = await audioTrackListener.awaitNext();
+
+      await waitForLoadedState(
+        ctx.player,
+        ctx.videoElement,
+        () => ctx.lastPlayerError,
+      );
+
+      expect(announcedTracks.map((track) => track.language).sort()).toEqual([
+        "en",
+        "fr",
+      ]);
+      expect(initialTrack.language).toEqual("fr");
+      expect(ctx.player.getCurrentAudioTrack()?.language).toEqual("fr");
+      expect(audioTrackListListener.getCurrentCount()).toEqual(1);
+      expect(audioTrackListener.getCurrentCount()).toEqual(1);
+    },
+  );
 });

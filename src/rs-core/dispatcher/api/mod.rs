@@ -11,9 +11,12 @@ use crate::{
     utils::url::Url,
     Logger,
 };
+use std::convert::TryInto;
 use std::slice;
 
 use super::{Dispatcher, PlayerReadyState, StartingPosition, StartingPositionType};
+
+const UNSET_STRING_LENGTH: u32 = u32::MAX;
 
 /// Methods exposed to the JavaScript-side.
 ///
@@ -36,7 +39,7 @@ impl Dispatcher {
             segment_request_contexts: SegmentRequestContexts::new(),
             playlist_refresh_timers: PlaylistRefreshTimers::new(),
             ready_probe_segments: Default::default(),
-            initial_audio_track_selection: None,
+            initial_audio_track_selection: Vec::new(),
         }
     }
 
@@ -45,12 +48,14 @@ impl Dispatcher {
         &mut self,
         content_url: String,
         starting_pos: Option<StartingPosition>,
-        initial_audio_track_selection: Option<InitialAudioTrackSelection>,
+        initial_audio_track_selection: Vec<InitialAudioTrackSelection>,
     ) {
         Logger::info("load_content called");
         self.stop();
-        self.initial_audio_track_selection =
-            initial_audio_track_selection.filter(|selection| !selection.is_empty());
+        self.initial_audio_track_selection = initial_audio_track_selection
+            .into_iter()
+            .filter(|selection| !selection.is_empty())
+            .collect();
         self.ready_state = PlayerReadyState::AwaitingPlaylistInfo {
             starting_position: starting_pos,
             lifecycle_announced: false,
@@ -197,6 +202,98 @@ fn opt_string_from_abi(ptr: *const u8, len: u32) -> Option<String> {
     }
 }
 
+fn opt_u8_slice_from_abi<'a>(ptr: *const u8, len: u32) -> Option<&'a [u8]> {
+    if ptr.is_null() || len == 0 {
+        None
+    } else {
+        Some(unsafe { slice::from_raw_parts(ptr, len as usize) })
+    }
+}
+
+fn read_u32_le(bytes: &[u8], offset: &mut usize) -> Option<u32> {
+    let end = offset.checked_add(4)?;
+    let raw: [u8; 4] = bytes.get(*offset..end)?.try_into().ok()?;
+    *offset = end;
+    Some(u32::from_le_bytes(raw))
+}
+
+fn read_string(bytes: &[u8], offset: &mut usize) -> Option<String> {
+    let length = read_u32_le(bytes, offset)? as usize;
+    let end = offset.checked_add(length)?;
+    let value = String::from_utf8_lossy(bytes.get(*offset..end)?).into_owned();
+    *offset = end;
+    Some(value)
+}
+
+fn read_optional_string(bytes: &[u8], offset: &mut usize) -> Option<Option<String>> {
+    let length = read_u32_le(bytes, offset)?;
+    if length == UNSET_STRING_LENGTH {
+        return Some(None);
+    }
+    let length = length as usize;
+    let end = offset.checked_add(length)?;
+    let value = String::from_utf8_lossy(bytes.get(*offset..end)?).into_owned();
+    *offset = end;
+    Some(Some(value))
+}
+
+fn deserialize_initial_audio_track_selection(
+    initial_audio_ptr: *const u8,
+    initial_audio_len: u32,
+) -> Vec<InitialAudioTrackSelection> {
+    let Some(bytes) = opt_u8_slice_from_abi(initial_audio_ptr, initial_audio_len) else {
+        return Vec::new();
+    };
+    let mut offset = 0;
+    let Some(selection_count) = read_u32_le(bytes, &mut offset) else {
+        return Vec::new();
+    };
+
+    let mut selections = Vec::with_capacity(selection_count as usize);
+    for _ in 0..selection_count {
+        let Some(language) = read_optional_string(bytes, &mut offset) else {
+            return Vec::new();
+        };
+        let Some(assoc_language) = read_optional_string(bytes, &mut offset) else {
+            return Vec::new();
+        };
+        let Some(name) = read_optional_string(bytes, &mut offset) else {
+            return Vec::new();
+        };
+        let Some(characteristics_count) = read_u32_le(bytes, &mut offset) else {
+            return Vec::new();
+        };
+        let mut characteristics = Vec::with_capacity(characteristics_count as usize);
+        for _ in 0..characteristics_count {
+            let Some(characteristic) = read_string(bytes, &mut offset) else {
+                return Vec::new();
+            };
+            characteristics.push(characteristic);
+        }
+        let Some(has_channels) = bytes.get(offset) else {
+            return Vec::new();
+        };
+        offset += 1;
+        let channels = if *has_channels == 0 {
+            None
+        } else {
+            let Some(value) = read_u32_le(bytes, &mut offset) else {
+                return Vec::new();
+            };
+            Some(value)
+        };
+
+        selections.push(InitialAudioTrackSelection {
+            language,
+            assoc_language,
+            name,
+            characteristics,
+            channels,
+        });
+    }
+    selections
+}
+
 fn dispatcher_mut<'a>(ptr: u32) -> &'a mut Dispatcher {
     unsafe { &mut *(ptr as *mut Dispatcher) }
 }
@@ -227,16 +324,8 @@ pub extern "C" fn wasp_dispatcher_load_content(
     has_starting_pos: u32,
     start_type: u32,
     start_position: f64,
-    language_ptr: *const u8,
-    language_len: u32,
-    assoc_language_ptr: *const u8,
-    assoc_language_len: u32,
-    name_ptr: *const u8,
-    name_len: u32,
-    characteristics_ptr: *const u8,
-    characteristics_len: u32,
-    has_channels: u32,
-    channels: u32,
+    initial_audio_ptr: *const u8,
+    initial_audio_len: u32,
 ) {
     let content_url = string_from_abi(content_url_ptr, content_url_len);
     let starting_pos = if has_starting_pos != 0 {
@@ -247,38 +336,8 @@ pub extern "C" fn wasp_dispatcher_load_content(
     } else {
         None
     };
-    let initial_audio_track_selection = {
-        let language = opt_string_from_abi(language_ptr, language_len);
-        let assoc_language = opt_string_from_abi(assoc_language_ptr, assoc_language_len);
-        let name = opt_string_from_abi(name_ptr, name_len);
-        let characteristics = opt_string_from_abi(characteristics_ptr, characteristics_len)
-            .map(|serialized| {
-                serialized
-                    .split('\u{001f}')
-                    .filter(|part| !part.is_empty())
-                    .map(ToOwned::to_owned)
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        let channels = if has_channels == 0 {
-            None
-        } else {
-            Some(channels)
-        };
-
-        let selection = InitialAudioTrackSelection {
-            language,
-            assoc_language,
-            name,
-            characteristics,
-            channels,
-        };
-        if selection.is_empty() {
-            None
-        } else {
-            Some(selection)
-        }
-    };
+    let initial_audio_track_selection =
+        deserialize_initial_audio_track_selection(initial_audio_ptr, initial_audio_len);
     dispatcher_mut(ptr).load_content(content_url, starting_pos, initial_audio_track_selection);
 }
 

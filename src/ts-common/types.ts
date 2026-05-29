@@ -495,6 +495,14 @@ export interface InitialAudioTrackSelection {
 }
 
 /**
+ * Preferred startup audio-track selection criteria, expressed either as a
+ * single selector or as an ordered list of selectors.
+ */
+export type InitialAudioTrackPreference =
+  | InitialAudioTrackSelection
+  | InitialAudioTrackSelection[];
+
+/**
  * Message sent when the Worker has succesfully stopped a content.
  */
 export interface ContentStoppedWorkerMessage {
@@ -955,7 +963,7 @@ export interface LoadContentMainMessage {
         }
       | undefined;
     /** Preferred characteristics for the initially selected audio track. */
-    initialAudioTrack?: InitialAudioTrackSelection | undefined;
+    initialAudioTrack?: InitialAudioTrackPreference | undefined;
   };
 }
 

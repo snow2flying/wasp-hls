@@ -7,7 +7,7 @@ import monotonicNow from "../ts-common/monotonicNow.ts";
 import noop from "../ts-common/noop.ts";
 import type {
   AudioTrackInfo,
-  InitialAudioTrackSelection,
+  InitialAudioTrackPreference,
   VariantInfo,
   WaspHlsPlayerConfig,
   WorkerMessage,
@@ -1416,7 +1416,7 @@ export interface LoadOptions {
    * Preferred characteristics to use when selecting the initial audio track,
    * before the player starts requesting media playlists and segments.
    */
-  initialAudioTrack?: InitialAudioTrackSelection | undefined;
+  initialAudioTrack?: InitialAudioTrackPreference | undefined;
 }
 
 /**
