@@ -81,6 +81,8 @@ const SYSTEM_GECKODRIVER_BINARY =
   process.env.GECKODRIVER_PATH ??
   undefined;
 
+const IS_LINUX = process.platform === "linux";
+
 /**
  * @param {RunVitestConfig} config - The test configuration object.
  * @param {string[]} testFilters - The filters you can pass to vitest ot
@@ -262,6 +264,7 @@ function buildBrowserCapabilities(browser) {
             "--autoplay-policy=no-user-gesture-required",
             "--enable-precise-memory-info",
             "--js-flags=--expose-gc",
+            ...(IS_LINUX ? ["--no-sandbox", "--disable-dev-shm-usage"] : []),
           ],
         },
       };

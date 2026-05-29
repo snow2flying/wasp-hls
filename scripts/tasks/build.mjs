@@ -145,8 +145,10 @@ export async function buildAll(root, { release }) {
   await exec(NODE, ["./scripts/generate_embedded_wasm.js"], { cwd: root });
   reportStep("BUILD", "generating Embedded Worker JS file...");
   await exec(NODE, ["./scripts/generate_embedded_worker.js"], { cwd: root });
-  reportStep("BUILD", "checking all exports...");
-  await checkPackageExports(root);
+  if (release) {
+    reportStep("BUILD", "checking all exports...");
+    await checkPackageExports(root);
+  }
 }
 
 /**
