@@ -42,6 +42,7 @@ impl Dispatcher {
         self.stop();
         self.ready_state = PlayerReadyState::AwaitingPlaylistInfo {
             starting_position: starting_pos,
+            lifecycle_announced: false,
         };
         let content_url = Url::new(content_url);
         self.requester

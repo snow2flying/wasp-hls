@@ -92,85 +92,122 @@ fn ensure_ready_playlists(dispatcher: &mut Dispatcher, wanted_position: f64) -> 
 
 /// Try to progress `ready_state` when in the `AwaitingPlaylistInfo` state
 fn advance_awaiting_playlist_info_state(dispatcher: &mut Dispatcher) {
-    let starting_position = match &dispatcher.ready_state {
-        PlayerReadyState::AwaitingPlaylistInfo { starting_position } => *starting_position,
+    let (starting_position, lifecycle_announced) = match &dispatcher.ready_state {
+        PlayerReadyState::AwaitingPlaylistInfo {
+            starting_position,
+            lifecycle_announced,
+        } => (*starting_position, *lifecycle_announced),
         _ => return,
     };
 
-    let Some(playlist_store) = dispatcher.playlist_store.as_mut() else {
-        return;
+    let wanted_position = {
+        let Some(playlist_store) = dispatcher.playlist_store.as_mut() else {
+            return;
+        };
+        utils::get_initial_position(playlist_store, starting_position)
     };
 
-    let wanted_position = utils::get_initial_position(playlist_store, starting_position);
-
     // Start fetching initial media playlists if needed
-    for mt in [MediaType::Video, MediaType::Audio] {
-        if playlist_store.has_loaded_media_playlist(mt) {
-            continue; // Already fetched
-        }
-        if let Some(id) = playlist_store.media_playlist_id_for(mt) {
-            if let Some(url) = playlist_store.media_playlist_url(id) {
-                let url = url.clone();
-                let playlist_type = PlaylistFileType::MediaPlaylist {
-                    id: *id,
-                    media_type: mt,
-                };
-                if !dispatcher
-                    .requester
-                    .is_requesting_playlist(&url, &playlist_type)
-                {
-                    dispatcher.requester.fetch_playlist(url, playlist_type);
+    {
+        let Some(playlist_store) = dispatcher.playlist_store.as_mut() else {
+            return;
+        };
+        for mt in [MediaType::Video, MediaType::Audio] {
+            if playlist_store.has_loaded_media_playlist(mt) {
+                continue; // Already fetched
+            }
+            if let Some(id) = playlist_store.media_playlist_id_for(mt) {
+                if let Some(url) = playlist_store.media_playlist_url(id) {
+                    let url = url.clone();
+                    let playlist_type = PlaylistFileType::MediaPlaylist {
+                        id: *id,
+                        media_type: mt,
+                    };
+                    if !dispatcher
+                        .requester
+                        .is_requesting_playlist(&url, &playlist_type)
+                    {
+                        dispatcher.requester.fetch_playlist(url, playlist_type);
+                    }
                 }
             }
         }
     }
 
-    // Now "Announce" lifecycle events if needed
+    if !lifecycle_announced {
+        let (
+            playlist_kind,
+            variants_info,
+            audio_tracks_info,
+            curr_variant,
+            curr_audio_track,
+            is_fixed,
+        ) = {
+            let Some(playlist_store) = dispatcher.playlist_store.as_mut() else {
+                return;
+            };
 
-    // SAFETY: The following lines are unsafe because they may actually define raw pointers
-    // to point to Rust's heap memory and put it in the returned values.
-    //
-    // However, we're calling the JS binding function it is communicated to directly
-    // after and thus before the corresponding underlying data had a chance to be
-    // dropped.
-    //
-    // Because one of the rules of those bindings is to copy all pointed data
-    // synchronously on call, we should not encounter any issue.
-    let (variants_info, audio_tracks_info) = if playlist_store.playlist_kind()
-        == PlaylistType::MediaPlaylist
-    {
-        let has_audio_track = playlist_store.has_distinct_media_type(MediaType::Audio);
-        (
-            unsafe { format_direct_media_variants_info_for_js() },
-            unsafe { format_direct_media_audio_tracks_for_js(has_audio_track) },
-        )
-    } else {
-        (
-            unsafe { format_variants_info_for_js(playlist_store.available_variants().as_slice()) },
-            unsafe { format_audio_tracks_for_js(playlist_store.audio_tracks()) },
-        )
-    };
-    let fixed_audio_track = playlist_store.fixed_audio_track_id();
-    let is_fixed = fixed_audio_track.is_some();
-    let curr_audio_track = if let Some(fixed) = fixed_audio_track {
-        Some(fixed)
-    } else if playlist_store.playlist_kind() == PlaylistType::MediaPlaylist
-        && playlist_store.has_distinct_media_type(MediaType::Audio)
-    {
-        Some(DIRECT_MEDIA_AUDIO_TRACK_ID)
-    } else {
-        playlist_store.current_audio_track_id()
-    };
-    let curr_variant = if playlist_store.playlist_kind() == PlaylistType::MediaPlaylist {
-        Some(DIRECT_MEDIA_VARIANT_ID)
-    } else {
-        playlist_store.current_variant_id()
-    };
-    let playlist_kind = playlist_store.playlist_kind();
+            // SAFETY: The following lines are unsafe because they may actually define raw pointers
+            // to point to Rust's heap memory and put it in the returned values.
+            //
+            // However, we're calling the JS binding function it is communicated to directly
+            // after and thus before the corresponding underlying data had a chance to be
+            // dropped.
+            //
+            // Because one of the rules of those bindings is to copy all pointed data
+            // synchronously on call, we should not encounter any issue.
+            let (variants_info, audio_tracks_info) = if playlist_store.playlist_kind()
+                == PlaylistType::MediaPlaylist
+            {
+                let has_audio_track = playlist_store.has_distinct_media_type(MediaType::Audio);
+                (
+                    unsafe { format_direct_media_variants_info_for_js() },
+                    unsafe { format_direct_media_audio_tracks_for_js(has_audio_track) },
+                )
+            } else {
+                (
+                    unsafe {
+                        format_variants_info_for_js(playlist_store.available_variants().as_slice())
+                    },
+                    unsafe { format_audio_tracks_for_js(playlist_store.audio_tracks()) },
+                )
+            };
+            let fixed_audio_track = playlist_store.fixed_audio_track_id();
+            let is_fixed = fixed_audio_track.is_some();
+            let curr_audio_track = if let Some(fixed) = fixed_audio_track {
+                Some(fixed)
+            } else if playlist_store.playlist_kind() == PlaylistType::MediaPlaylist
+                && playlist_store.has_distinct_media_type(MediaType::Audio)
+            {
+                Some(DIRECT_MEDIA_AUDIO_TRACK_ID)
+            } else {
+                playlist_store.current_audio_track_id()
+            };
+            let curr_variant = if playlist_store.playlist_kind() == PlaylistType::MediaPlaylist {
+                Some(DIRECT_MEDIA_VARIANT_ID)
+            } else {
+                playlist_store.current_variant_id()
+            };
 
-    jsAnnounceFetchedContent(playlist_kind, variants_info, audio_tracks_info);
-    jsAnnounceVariantUpdate(curr_variant);
-    jsAnnounceTrackUpdate(MediaType::Audio, curr_audio_track, is_fixed);
+            (
+                playlist_store.playlist_kind(),
+                variants_info,
+                audio_tracks_info,
+                curr_variant,
+                curr_audio_track,
+                is_fixed,
+            )
+        };
+
+        jsAnnounceFetchedContent(playlist_kind, variants_info, audio_tracks_info);
+        jsAnnounceVariantUpdate(curr_variant);
+        jsAnnounceTrackUpdate(MediaType::Audio, curr_audio_track, is_fixed);
+
+        dispatcher.ready_state = PlayerReadyState::AwaitingPlaylistInfo {
+            starting_position,
+            lifecycle_announced: true,
+        };
+    }
 
     if !ensure_ready_playlists(dispatcher, wanted_position) {
         return;

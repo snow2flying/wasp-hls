@@ -81,12 +81,18 @@ enum PlayerReadyState {
     /// We're preparing a content's playlist base information
     /// Appears after `Stopped` and before `AwaitingMediaSource`.
     AwaitingPlaylistInfo {
+        /// The position we should start at once playback begins.
         starting_position: Option<StartingPosition>,
+        /// Set to `true` once the callback linked to transmiting the current playlist
+        /// information (audio tracks, playlist metadata) has been called. Prevent sending
+        /// it more than once.
+        lifecycle_announced: bool,
     },
 
     /// We're creating a `MediaSource` and the corresponding buffers.
     /// Appears after `AwaitingPlaylistInfo` and before `AwaitingSegments`.
     AwaitingMediaSource {
+        /// The position we should start at once playback begins.
         starting_position: Option<StartingPosition>,
     },
 

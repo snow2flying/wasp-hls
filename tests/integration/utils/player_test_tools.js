@@ -90,3 +90,21 @@ export function waitForPlayerEvent(
     player.addEventListener(eventName, onEvent);
   });
 }
+
+export function eventListener(player, eventName) {
+  let payloads = [];
+  player.addEventListener(eventName, (payload) => {
+    payloads.push(payload);
+  });
+  return {
+    getCurrentCount() {
+      return payloads.length;
+    },
+    getPayloadFor(idx) {
+      return payloads[idx];
+    },
+    awaitNext(predicate, timeoutMs) {
+      return waitForPlayerEvent(player, eventName, predicate, timeoutMs);
+    },
+  };
+}
