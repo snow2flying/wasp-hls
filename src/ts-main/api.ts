@@ -701,11 +701,14 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
       throw new Error("The Player is not initialized or is disposed.");
     }
     if (this.__contentMetadata__ !== null) {
+      const contentMetadata = this.__contentMetadata__;
       requestStopForContent(
-        this.__contentMetadata__,
+        contentMetadata,
         this.videoElement,
         this.__worker__,
       );
+      this.__contentMetadata__ = null;
+      this.trigger("playerStateChange", PlayerState.Stopped);
     }
   }
 
@@ -1224,21 +1227,42 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
           }
           break;
         case WorkerMessageType.TopLevelPlaylistParsed:
-          if (onTopLevelPlaylistParsedMessage(data, this.__contentMetadata__)) {
-            this.trigger("variantListUpdate", this.getVariantList());
-            this.trigger("audioTrackListUpdate", this.getAudioTrackList());
+          if (
+            this.__contentMetadata__ !== null &&
+            onTopLevelPlaylistParsedMessage(data, this.__contentMetadata__)
+          ) {
+            const contentMetadata = this.__contentMetadata__;
+            this.trigger("variantListUpdate", contentMetadata.variants);
+            if (contentMetadata !== this.__contentMetadata__) {
+              break;
+            }
+            this.trigger("audioTrackListUpdate", contentMetadata.audioTracks);
           }
           break;
         case WorkerMessageType.TrackUpdate:
-          if (onTrackUpdateMessage(data, this.__contentMetadata__)) {
+          if (
+            this.__contentMetadata__ !== null &&
+            onTrackUpdateMessage(data, this.__contentMetadata__)
+          ) {
             if (data.value.mediaType === MediaType.Audio) {
-              this.trigger("audioTrackUpdate", this.getCurrentAudioTrack());
+              const { currentAudioTrack, audioTracks } =
+                this.__contentMetadata__;
+              const announcedAudioTrack =
+                currentAudioTrack === undefined
+                  ? undefined
+                  : audioTracks.find(
+                      (track) => track.id === currentAudioTrack.id,
+                    );
+              this.trigger("audioTrackUpdate", announcedAudioTrack);
             }
           }
           break;
         case WorkerMessageType.VariantUpdate:
-          if (onVariantUpdateMessage(data, this.__contentMetadata__)) {
-            this.trigger("variantUpdate", this.getCurrentVariant());
+          if (
+            this.__contentMetadata__ !== null &&
+            onVariantUpdateMessage(data, this.__contentMetadata__)
+          ) {
+            this.trigger("variantUpdate", this.__contentMetadata__.currVariant);
           }
           break;
 
@@ -1253,8 +1277,12 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
         case WorkerMessageType.Error: {
           const error = onErrorMessage(data, this.__contentMetadata__);
           if (error !== null) {
+            const contentMetadata = this.__contentMetadata__;
             logger.error("API: sending fatal error", error);
             this.trigger("error", error);
+            if (contentMetadata !== this.__contentMetadata__) {
+              break;
+            }
             this.trigger("playerStateChange", PlayerState.Error);
           }
           break;
@@ -1286,8 +1314,12 @@ export default class WaspHlsPlayer extends EventEmitter<WaspHlsPlayerEvents> {
               this.videoElement,
             )
           ) {
+            const wasStoppedBefore =
+              this.getPlayerState() === PlayerState.Stopped;
             this.__contentMetadata__ = null;
-            this.trigger("playerStateChange", PlayerState.Stopped);
+            if (!wasStoppedBefore) {
+              this.trigger("playerStateChange", PlayerState.Stopped);
+            }
           }
           break;
         case WorkerMessageType.RebufferingStarted:

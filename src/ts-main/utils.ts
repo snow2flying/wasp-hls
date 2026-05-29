@@ -40,6 +40,8 @@ export function requestStopForContent(
   mediaElement: HTMLMediaElement,
   worker: Worker | null,
 ): void {
+  const oldContentId = metadata.contentId;
+
   // Preventively free some resource that should not impact the Worker much.
   if (metadata.playbackObserver !== null) {
     metadata.playbackObserver.stop();
@@ -49,12 +51,37 @@ export function requestStopForContent(
     metadata.loadingAborter.abort();
     metadata.loadingAborter = undefined;
   }
+  metadata.disposeMediaSource?.();
+  metadata.disposeMediaSource = null;
+  if (metadata.sourceBuffers.length > 0) {
+    for (const sourceBuffer of metadata.sourceBuffers) {
+      sourceBuffer.queuedSourceBuffer.dispose();
+    }
+    metadata.sourceBuffers = [];
+  }
+  metadata.mediaSource = null;
+  metadata.mediaSourceId = null;
+  metadata.currentAudioTrack = undefined;
+  metadata.audioTracks = [];
+  metadata.currVariant = undefined;
+  metadata.variants = [];
+  metadata.lockedVariant = null;
+  metadata.isRebuffering = false;
+  metadata.error = null;
+  clearElementSrc(mediaElement);
+  try {
+    mediaElement.srcObject = null;
+  } catch (err) {
+    const error = err instanceof Error ? err : "Unknown Error";
+    logger.warn("Could not clear media element srcObject", error);
+  }
   mediaElement.playbackRate = 1;
+  metadata.contentId = "";
 
   if (worker !== null) {
     postMessageToWorker(worker, {
       type: MainMessageType.StopContent,
-      value: { contentId: metadata.contentId },
+      value: { contentId: oldContentId },
     });
   }
 }
