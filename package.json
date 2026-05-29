@@ -40,10 +40,7 @@
     "scripts": "node scripts/list-npm-scripts.mjs",
     "serve": "node scripts/tasks/index.mjs serve",
     "start": "node scripts/tasks/index.mjs start",
-    "test": "node scripts/tasks/index.mjs test",
-    "test:integration": "node scripts/tasks/index.mjs test integration",
-    "test:rust": "node scripts/tasks/index.mjs test rust",
-    "test:transmux": "node scripts/tasks/index.mjs test transmux"
+    "test": "node scripts/tasks/index.mjs test"
   },
   "scripts-list": {
     "Build": {
