@@ -8,7 +8,7 @@ use crate::{
     media_element::MediaElementReference,
     requester::{PlaylistFileType, Requester},
     segment_selector::NextSegmentSelectors,
-    utils::url::Url,
+    utils::{logger, url::Url},
     Logger,
 };
 use std::convert::TryInto;
@@ -314,6 +314,11 @@ pub extern "C" fn wasp_dispatcher_free(ptr: u32) {
             drop(Box::from_raw(ptr as *mut Dispatcher));
         }
     }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn wasp_set_logger_level(level: u32) {
+    Logger::set_logger_level(logger::LoggerLevel::from_u32(level));
 }
 
 #[unsafe(no_mangle)]

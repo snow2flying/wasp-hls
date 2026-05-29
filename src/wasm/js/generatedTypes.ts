@@ -296,6 +296,10 @@ export interface WaspWasmExports {
    */
   wasp_free(ptr: number, len: number): void;
   /**
+   * Update the Rust core logger level.
+   */
+  wasp_set_logger_level(level: number): void;
+  /**
    * Construct a new dispatcher instance.
    */
   wasp_dispatcher_new(initialBandwidth: number): number;

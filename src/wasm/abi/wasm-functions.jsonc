@@ -820,6 +820,15 @@
       },
     },
     {
+      "wasmSymbol": "wasp_set_logger_level",
+      "doc": ["Update the Rust core logger level."],
+      "wasm": {
+        "kind": "method",
+        "args": [{ "name": "level", "type": "number" }],
+        "returnType": "void",
+      },
+    },
+    {
       "wasmSymbol": "wasp_dispatcher_new",
       "doc": ["Construct a new dispatcher instance."],
       "wasm": {

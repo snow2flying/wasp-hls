@@ -319,10 +319,12 @@ impl NextSegmentSelector {
                 {
                     // Either not contiguous to the previous segment, or garbage collected.
                     // Start loading from there.
-                    Logger::debug(&format!(
-                        "Selector: Segment non-contiguous or GCed starting from {}",
-                        prev_end
-                    ));
+                    Logger::lazy_debug(|| {
+                        format!(
+                            "Selector: Segment non-contiguous or GCed starting from {}",
+                            prev_end
+                        )
+                    });
                     return prev_end;
                 }
                 if seg_i.is_worse_than(context) {
@@ -334,22 +336,24 @@ impl NextSegmentSelector {
                         .map(|s| s.playlist_end() - s.playlist_start())
                         .unwrap_or(5.);
                     if seg_i.last_buffered_end() - self.base_pos > next_seg_duration {
-                        Logger::debug(&format!("Selector: Fast switching from {prev_end}"));
+                        Logger::lazy_debug(|| format!("Selector: Fast switching from {prev_end}"));
                         return prev_end;
                     }
                 }
                 prev_end = seg_i.playlist_end();
                 curr_idx += 1;
             }
-            Logger::debug(&format!(
-                "Selector: Starting position after inventory: {prev_end}"
-            ));
+            Logger::lazy_debug(|| {
+                format!("Selector: Starting position after inventory: {prev_end}")
+            });
             prev_end
         } else {
-            Logger::debug(&format!(
-                "Selector: Starting position at base position: {}",
-                self.base_pos
-            ));
+            Logger::lazy_debug(|| {
+                format!(
+                    "Selector: Starting position at base position: {}",
+                    self.base_pos
+                )
+            });
             self.base_pos
         }
     }
@@ -367,10 +371,12 @@ impl NextSegmentSelector {
         for (seg_index, seg) in self.skipped_segments.iter().enumerate() {
             let seg_start = seg.start();
             if !self.can_be_skipped(seg_start, seg.end(), context, inventory) {
-                Logger::debug(&format!(
-                    "Selector: Skipped segment can no longer be skipped (s:{})",
-                    seg_start
-                ));
+                Logger::lazy_debug(|| {
+                    format!(
+                        "Selector: Skipped segment can no longer be skipped (s:{})",
+                        seg_start
+                    )
+                });
                 self.skipped_segments.remove(seg_index);
                 return Some(seg_start);
             }
@@ -397,11 +403,13 @@ impl NextSegmentSelector {
         // Check for "smart-switching", which is to avoid returning segments who have
         // already an equal or even better quality in the buffer.
         if self.can_be_skipped(si.start(), segment_end, context, inventory) {
-            Logger::debug(&format!(
-                "Selector: Segment can be skipped (s:{}, d: {})",
-                si.start(),
-                si.duration()
-            ));
+            Logger::lazy_debug(|| {
+                format!(
+                    "Selector: Segment can be skipped (s:{}, d: {})",
+                    si.start(),
+                    si.duration()
+                )
+            });
             let skipped = SegmentTimeInfo::new(si.start(), si.duration());
             match self
                 .skipped_segments

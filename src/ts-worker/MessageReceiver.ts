@@ -74,10 +74,15 @@ export default function MessageReceiver() {
         logger.setLevel(data.value.logLevel);
         wasInitializedCalled = true;
         const { wasmUrl, hasMseInWorker, initialBandwidth } = data.value;
-        initializationProm = initialize(wasmUrl, data.value.initialConfig, {
-          hasMseInWorker,
-          initialBandwidth,
-        })
+        initializationProm = initialize(
+          wasmUrl,
+          data.value.initialConfig,
+          {
+            hasMseInWorker,
+            initialBandwidth,
+          },
+          data.value.logLevel,
+        )
           .then(() => {
             initializationProm = undefined;
           })
@@ -317,6 +322,7 @@ export default function MessageReceiver() {
 
       case MainMessageType.UpdateLoggerLevel:
         logger.setLevel(data.value);
+        playerInstance.setLogLevel(data.value);
         break;
 
       case MainMessageType.UpdateConfig: {
@@ -461,10 +467,11 @@ function initialize(
   wasmUrl: string,
   config: WaspHlsPlayerConfig,
   opts: WorkerInitializationOptions,
+  logLevel: number,
 ): Promise<void> {
   return initializeWasm(fetch(wasmUrl), getWaspHostCapabilities())
     .then((wasm) => {
-      playerInstance.start(wasm, config, opts);
+      playerInstance.start(wasm, config, opts, logLevel);
       postMessageToMain({ type: WorkerMessageType.Initialized, value: null });
     })
     .catch((err) => {

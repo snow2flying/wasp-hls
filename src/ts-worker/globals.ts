@@ -31,7 +31,9 @@ class PlayerInstance {
     wasm: InitOutput,
     config: WaspHlsPlayerConfig,
     opts: WorkerInitializationOptions,
+    logLevel: number,
   ) {
+    wasm.wasp_set_logger_level(logLevel);
     const dispatcher = new Dispatcher(opts.initialBandwidth);
     updateDispatcherConfig(dispatcher, config);
     this._instanceInfo = {
@@ -66,6 +68,10 @@ class PlayerInstance {
 
   public getCurrentWasmMemory(): WebAssembly.Memory | null {
     return this._instanceInfo?.wasm.memory ?? null;
+  }
+
+  public setLogLevel(level: number): void {
+    this._instanceInfo?.wasm.wasp_set_logger_level(level);
   }
 
   public getContentInfo(): ContentInfo | null {

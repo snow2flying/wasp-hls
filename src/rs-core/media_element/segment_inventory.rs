@@ -446,10 +446,12 @@ impl SegmentInventory {
         seg.end += end_correction;
 
         if f64::abs(start_correction) >= 0.05 || f64::abs(end_correction) >= 0.05 {
-            Logger::debug(&format!(
-                "SI: corrected {} segment (s:{}, e:{}, cs:{}, ce:{})",
-                self.media_type, seg.start, seg.end, start_correction, end_correction
-            ));
+            Logger::lazy_debug(|| {
+                format!(
+                    "SI: corrected {} segment (s:{}, e:{}, cs:{}, ce:{})",
+                    self.media_type, seg.start, seg.end, start_correction, end_correction
+                )
+            });
         }
 
         seg.validated = true;
@@ -485,10 +487,12 @@ impl SegmentInventory {
         let start = metadata.start;
         let end = metadata.end;
         if start >= end {
-            Logger::warn(&format!(
-                "SI: Invalid {} chunked inserted: start ({}) inferior or equal to ({})",
-                self.media_type, start, end
-            ));
+            Logger::lazy_warn(|| {
+                format!(
+                    "SI: Invalid {} chunked inserted: start ({}) inferior or equal to ({})",
+                    self.media_type, start, end
+                )
+            });
             return segment_id;
         }
 
@@ -525,10 +529,12 @@ impl SegmentInventory {
                 //   base_seg      : |------|
                 //   new_segment   :          |======|
                 //   ===>          : |------| |======|
-                Logger::debug(&format!(
-                    "SI: Pushing {} segment strictly after previous one (s:{}, e:{}, pe: {}).",
-                    self.media_type, start, end, base_seg.end
-                ));
+                Logger::lazy_debug(|| {
+                    format!(
+                        "SI: Pushing {} segment strictly after previous one (s:{}, e:{}, pe: {}).",
+                        self.media_type, start, end, base_seg.end
+                    )
+                });
                 insertion_task = Some(PendingBufferChunkInsertionTask::Insert(base_idx + 1));
                 updates.extend(check_next_overlapping_segments(
                     start,
@@ -551,10 +557,12 @@ impl SegmentInventory {
                     //  base_seg      : |-------|
                     //  new_segment   : |==========|
                     //  ===>          : |==========|
-                    Logger::debug(&format!(
-                        "SI: {} segment pushed replace another one (s:{}, e:{}, pe:{})",
-                        self.media_type, start, end, base_seg.end
-                    ));
+                    Logger::lazy_debug(|| {
+                        format!(
+                            "SI: {} segment pushed replace another one (s:{}, e:{}, pe:{})",
+                            self.media_type, start, end, base_seg.end
+                        )
+                    });
                     insertion_task = Some(PendingBufferChunkInsertionTask::Replace(base_idx));
                     updates.extend(check_next_overlapping_segments(
                         start,
@@ -573,9 +581,12 @@ impl SegmentInventory {
                     //  base_seg      : |------------|
                     //  new_segment   : |==========|
                     //  ===>          : |==========|-|
-                    Logger::debug(
-                        &format!("SI: {} segment pushed ends before another with the same start (s:{}, e:{}, pe:{})",
-                        self.media_type, start, end, base_seg.end));
+                    Logger::lazy_debug(|| {
+                        format!(
+                            "SI: {} segment pushed ends before another with the same start (s:{}, e:{}, pe:{})",
+                            self.media_type, start, end, base_seg.end
+                        )
+                    });
                     insertion_task = Some(PendingBufferChunkInsertionTask::Insert(base_idx));
                     updates.push(PendingBufferedChunkModificationTask::UpdateStart {
                         index: base_idx,
@@ -595,10 +606,12 @@ impl SegmentInventory {
                 //  base_seg      : |-------|
                 //  new_segment   :    |====|
                 //  ===>          : |--|====|
-                Logger::debug(&format!(
+                Logger::lazy_debug(|| {
+                    format!(
                     "SI: {} segment pushed updates end of previous one (s:{}, e:{}, ps: {}, pe:{})",
                     self.media_type, start, end, base_seg.start, base_seg.end
-                ));
+                )
+                });
 
                 updates.push(PendingBufferedChunkModificationTask::UpdateEnd {
                     index: base_idx,
@@ -621,9 +634,12 @@ impl SegmentInventory {
                 //  base_seg      : |---------|
                 //  new_segment   :    |====|
                 //  ===>          : |--|====|-|
-                Logger::warn(
-                    &format!("SI: {} segment pushed is contained in a previous one  (s:{}, e:{}, ns:{}, ne: {})",
-                    self.media_type, start, end, base_seg.start, base_seg.end));
+                Logger::lazy_warn(|| {
+                    format!(
+                        "SI: {} segment pushed is contained in a previous one  (s:{}, e:{}, ns:{}, ne: {})",
+                        self.media_type, start, end, base_seg.start, base_seg.end
+                    )
+                });
                 // Note: this sadly means we're doing as if
                 // that chunk is present two times.
                 // Thankfully, this scenario should be
@@ -652,10 +668,12 @@ impl SegmentInventory {
                     //  first_seg     :        |----|
                     //  new_segment   : |====|
                     //  ===>          : |====| |----|
-                    Logger::debug(&format!(
+                    Logger::lazy_debug(|| {
+                        format!(
                         "SI: {} segment pushed comes before all previous ones (s:{}, e:{}, fs:{})",
                         self.media_type, start, end, first_seg.start
-                    ));
+                    )
+                    });
                     insertion_task = Some(PendingBufferChunkInsertionTask::Insert(0));
                 } else if first_seg.end <= end {
                     // Our segment is bigger, replace the first
@@ -669,9 +687,12 @@ impl SegmentInventory {
                     //  first_seg     :   |-----|
                     //  new_segment   : |=======|
                     //  ===>          : |=======|
-                    Logger::debug(
-                        &format!("SI: {} Segment pushed starts before and completely recovers the previous first one (s:{}, e:{}, fs:{}, fe:{})",
-                        self.media_type, start, end , first_seg.start, first_seg.end));
+                    Logger::lazy_debug(|| {
+                        format!(
+                            "SI: {} Segment pushed starts before and completely recovers the previous first one (s:{}, e:{}, fs:{}, fe:{})",
+                            self.media_type, start, end, first_seg.start, first_seg.end
+                        )
+                    });
                     insertion_task = Some(PendingBufferChunkInsertionTask::Replace(0));
                     updates.extend(check_next_overlapping_segments(
                         start,
@@ -688,10 +709,12 @@ impl SegmentInventory {
                     //  first_seg     :    |------|
                     //  new_segment   : |======|
                     //  ===>          : |======|--|
-                    Logger::debug(&format!(
+                    Logger::lazy_debug(|| {
+                        format!(
                         "SI: {} segment pushed start of the next one (s:{}, e:{}, ns:{}, ne: {})",
                         self.media_type, start, end, first_seg.start, first_seg.end
-                    ));
+                    )
+                    });
                     updates.push(PendingBufferedChunkModificationTask::UpdateStart {
                         index: 0,
                         start: end,
@@ -699,10 +722,12 @@ impl SegmentInventory {
                     insertion_task = Some(PendingBufferChunkInsertionTask::Insert(0));
                 }
             } else {
-                Logger::debug(&format!(
-                    "SI: first {} segment pushed (s:{}, e:{})",
-                    self.media_type, start, end
-                ));
+                Logger::lazy_debug(|| {
+                    format!(
+                        "SI: first {} segment pushed (s:{}, e:{})",
+                        self.media_type, start, end
+                    )
+                });
                 insertion_task = Some(PendingBufferChunkInsertionTask::Insert(0));
             }
         }

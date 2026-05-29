@@ -978,9 +978,7 @@ impl Requester {
             range_end,
             self.config.segment_request_timeout,
         );
-        Logger::debug(&format!(
-            "Req: Performing segment request. u:{url_ref} id:{host_id}"
-        ));
+        Logger::lazy_debug(|| format!("Req: Performing segment request. u:{url_ref} id:{host_id}"));
         self.pending_segment_requests.push(SegmentRequestInfo {
             host_id,
             lane_tag,
@@ -1009,7 +1007,7 @@ impl Requester {
 }
 
 fn log_segment_abort(seg: &impl RequesterSegmentInfo) {
-    Logger::lazy_info(&|| {
+    Logger::lazy_info(|| {
         let lane_label = seg.lane_tag().label();
         if let (Some(start), Some(duration)) = (seg.start_time(), seg.duration()) {
             format!("Req: Aborting {lane_label} segment: t: {start}, d: {duration}")

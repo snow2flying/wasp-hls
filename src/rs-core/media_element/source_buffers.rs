@@ -140,10 +140,12 @@ impl SourceBuffer {
         self.reset_transmuxer_on_next_segment = true;
         self.queue
             .push_back(SourceBufferQueueElement::PushInit(segment_data.id()));
-        Logger::debug(&format!(
-            "Buffer {} ({}): Pushing initialization segment",
-            self.id, self.typ
-        ));
+        Logger::lazy_debug(|| {
+            format!(
+                "Buffer {} ({}): Pushing initialization segment",
+                self.id, self.typ
+            )
+        });
         match jsAppendBuffer(self.id, segment_data.id(), &SegmentHints::new(0, 1, true)) {
             Err(err) => Err(PushSegmentError::from_js_append_buffer_error(
                 self.media_type,
@@ -200,10 +202,12 @@ impl SourceBuffer {
         self.reset_transmuxer_on_next_segment = false;
 
         let id = data.id;
-        Logger::debug(&format!(
-            "Buffer {} ({}): Pushing seq {}",
-            self.id, self.typ, data.sequence_number
-        ));
+        Logger::lazy_debug(|| {
+            format!(
+                "Buffer {} ({}): Pushing seq {}",
+                self.id, self.typ, data.sequence_number
+            )
+        });
         self.queue
             .push_back(SourceBufferQueueElement::PushMedia { data, id });
         let parsed = match jsAppendBuffer(self.id, segment_data, &segment_hints) {
@@ -241,10 +245,12 @@ impl SourceBuffer {
         self.was_used = true;
         self.queue
             .push_back(SourceBufferQueueElement::Remove { start, end });
-        Logger::debug(&format!(
-            "Buffer {} ({}): Removing {} {}",
-            self.id, self.typ, start, end
-        ));
+        Logger::lazy_debug(|| {
+            format!(
+                "Buffer {} ({}): Removing {} {}",
+                self.id, self.typ, start, end
+            )
+        });
         let _ = jsRemoveBuffer(self.id, start, end);
     }
 
@@ -257,7 +263,7 @@ impl SourceBuffer {
         self.last_pushed_segment_info = None;
         self.reset_transmuxer_on_next_segment = true;
         self.queue.push_back(SourceBufferQueueElement::Emptying);
-        Logger::debug(&format!("Buffer {} ({}): emptying", self.id, self.typ));
+        Logger::lazy_debug(|| format!("Buffer {} ({}): emptying", self.id, self.typ));
         let _ = jsRemoveBuffer(self.id, 0., f64::INFINITY);
     }
 
@@ -268,10 +274,7 @@ impl SourceBuffer {
     /// operations are cancelled, such as when one of them fails.
     /// This method allows to empty that SourceBuffer's queue in such situations.
     pub(super) fn clear_queue(&mut self) {
-        Logger::info(&format!(
-            "Buffer {} ({}): clearing queue.",
-            self.id, self.typ
-        ));
+        Logger::lazy_info(|| format!("Buffer {} ({}): clearing queue.", self.id, self.typ));
         self.queue.clear();
     }
 

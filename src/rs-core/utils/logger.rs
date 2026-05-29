@@ -12,7 +12,7 @@ fn emit_log(level: LogLevel, text: &str) {
 #[cfg(not(target_arch = "wasm32"))]
 fn emit_log<T>(_level: T, _text: &str) {}
 
-pub static MAX_LOG_LEVEL: AtomicU8 = AtomicU8::new(4);
+pub static MAX_LOG_LEVEL: AtomicU8 = AtomicU8::new(LoggerLevel::None as u8);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LoggerLevel {
@@ -21,6 +21,18 @@ pub enum LoggerLevel {
     Warn = 2,
     Info = 3,
     Debug = 4,
+}
+
+impl LoggerLevel {
+    pub(crate) fn from_u32(level: u32) -> Self {
+        match level {
+            1 => LoggerLevel::Error,
+            2 => LoggerLevel::Warn,
+            3 => LoggerLevel::Info,
+            4 => LoggerLevel::Debug,
+            _ => LoggerLevel::None,
+        }
+    }
 }
 
 // TODO Explore other logging functions implementations.
@@ -56,25 +68,25 @@ impl Logger {
         }
     }
 
-    pub fn lazy_info(func: &dyn Fn() -> String) {
+    pub fn lazy_info<F: FnOnce() -> String>(func: F) {
         if MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed) >= LoggerLevel::Info as u8 {
             emit_log(LogLevel::Info, &func());
         }
     }
 
-    pub fn lazy_error(func: &dyn Fn() -> String) {
+    pub fn lazy_error<F: FnOnce() -> String>(func: F) {
         if MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed) >= LoggerLevel::Error as u8 {
             emit_log(LogLevel::Error, &func());
         }
     }
 
-    pub fn lazy_warn(func: &dyn Fn() -> String) {
+    pub fn lazy_warn<F: FnOnce() -> String>(func: F) {
         if MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed) >= LoggerLevel::Warn as u8 {
             emit_log(LogLevel::Warn, &func());
         }
     }
 
-    pub fn lazy_debug(func: &dyn Fn() -> String) {
+    pub fn lazy_debug<F: FnOnce() -> String>(func: F) {
         if MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed) >= LoggerLevel::Debug as u8 {
             emit_log(LogLevel::Debug, &func());
         }
