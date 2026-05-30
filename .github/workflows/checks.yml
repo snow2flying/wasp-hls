@@ -297,7 +297,10 @@ jobs:
 
       - name: Install ffmpeg and gpac on macOS
         if: runner.os == 'macOS'
-        run: brew install ffmpeg gpac
+        run: |
+          brew install ffmpeg gpac
+          echo "WASP_HLS_CHROMEDRIVER_BINARY=${CHROMEWEBDRIVER}/chromedriver" >> "$GITHUB_ENV"
+          echo "WASP_HLS_CHROME_BINARY=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" >> "$GITHUB_ENV"
 
       - name: Install ffmpeg and gpac on Windows
         if: runner.os == 'Windows'
