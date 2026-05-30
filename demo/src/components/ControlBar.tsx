@@ -360,8 +360,12 @@ export default React.memo(function ControlBar({
             seek={onProgressBarSeek}
             position={position}
             bufferGap={bufferGap}
+            duration={duration}
             minimumPosition={minimumPosition}
             maximumPosition={maximumPosition}
+            positionToDate={(nextPosition) =>
+              player.positionToDate(nextPosition)
+            }
           />
         )}
         <div className="video-controls">
