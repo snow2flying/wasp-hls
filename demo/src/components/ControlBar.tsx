@@ -191,7 +191,23 @@ export default React.memo(function ControlBar({
       setMinimumPosition(windowMinPos ?? minPos ?? 0);
       const windowMaxPos = player.getMaximumPosition();
       setMaximumPosition(windowMaxPos ?? maxPos ?? Infinity);
-      setDuration(player.getMediaDuration());
+      const nextDuration = player.getMediaDuration();
+      setDuration((prevDuration) => {
+        if (
+          player.isVod() &&
+          !player.isEnded() &&
+          Number.isFinite(prevDuration) &&
+          Number.isFinite(nextDuration) &&
+          Math.abs(nextDuration - prevDuration) < 1
+        ) {
+          // Playlist duration may change after variant switches when renditions
+          // expose slightly different timelines.
+          // That's valid, but a person looking at it might think it's a bug. So ignore
+          // light changes.
+          return prevDuration;
+        }
+        return nextDuration;
+      });
       setBufferGap(player.getCurrentBufferGap());
       if (!player.isPaused()) {
         if (minPos !== undefined && minPos > pos + 2) {
