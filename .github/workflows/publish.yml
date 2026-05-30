@@ -1,0 +1,318 @@
+name: npm publishing
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+" # Official releases: v1.0.0, v2.3.4
+      - "v[0-9]+.[0-9]+.[0-9]+-dev.[0-9]+" # Dev releases: v1.0.0-dev....
+  workflow_dispatch: # Manual triggering for failed tag commits
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  WASM_BINDGEN_CLI_VERSION: 0.2.120
+
+jobs:
+  determine_release_type:
+    runs-on: ubuntu-latest
+    outputs:
+      release_type: ${{ steps.release_type.outputs.type }}
+
+    steps:
+      - name: Set release type
+        id: release_type
+        run: |
+          echo "Analyzing tag: ${{ github.ref }}"
+
+          if [[ ${{ github.ref }} =~ refs/tags/v[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]+ ]]; then
+            echo "type=dev" >> $GITHUB_OUTPUT
+            echo "This is a dev release"
+          else
+            echo "type=official" >> $GITHUB_OUTPUT
+            echo "This is an official release"
+          fi
+
+  check_official_version:
+    if: needs.determine_release_type.outputs.release_type == 'official'
+    runs-on: ubuntu-latest
+    needs:
+      - determine_release_type
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-tags: true
+          fetch-depth: 0
+      - name: Check last commit contains right version tag
+        id: getversion
+        run: |
+          TAG=$(git describe --tags --exact-match HEAD)
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "No compatible semver tag on HEAD; exiting."
+            exit 1
+          fi
+
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [[ "$PKG_VERSION" != "${TAG#v}" ]]; then
+            echo "package.json version ($PKG_VERSION) does not match tag ($TAG)"
+            exit 1
+          fi
+
+  general_release_checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      matrix:
+        node-version: [24.x]
+        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+
+    steps:
+      - uses: actions/checkout@v5
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Set up Rust
+        run: |
+          rustup target add wasm32-unknown-unknown
+          rustup component add rustfmt
+          rustup component add clippy
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_CLI_VERSION }} --locked --force
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run fmt -- --check
+
+      - name: Build artifacts
+        run: npm run build -- --release
+
+      - name: Run checks
+        run: npm run check
+
+  core_tests:
+    name: Core tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Rust
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_CLI_VERSION }} --locked --force
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Build artifacts for tests
+        run: npm run build
+
+      - name: Run Rust unit tests
+        run: npm test -- rust
+
+      - name: Run transmux tests
+        run: npm test -- transmux
+
+  ubuntu_integration_tests:
+    name: Integration tests (${{ matrix.browser }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, firefox]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Rust
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_CLI_VERSION }} --locked --force
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install ffmpeg and gpac on Ubuntu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl ffmpeg
+          sudo install -m 0755 -d /etc/apt/keyrings
+          sudo curl -fsSL https://dist.gpac.io/gpac/linux/gpg.asc -o /etc/apt/keyrings/gpac.asc
+          sudo chmod a+r /etc/apt/keyrings/gpac.asc
+          sudo tee /etc/apt/sources.list.d/gpac.sources >/dev/null <<EOF
+          Types: deb
+          URIs: https://dist.gpac.io/gpac/linux/ubuntu
+          Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+          Components: main
+          Signed-By: /etc/apt/keyrings/gpac.asc
+          EOF
+          sudo apt-get update
+          sudo apt-get install -y gpac
+          echo "WASP_HLS_CHROMEDRIVER_BINARY=${CHROMEWEBDRIVER}/chromedriver" >> "$GITHUB_ENV"
+          echo "WASP_HLS_CHROME_BINARY=/usr/bin/google-chrome" >> "$GITHUB_ENV"
+
+      - name: Print media tool versions
+        shell: bash
+        run: |
+          ffmpeg -version
+          gpac -h
+
+      - name: Build artifacts for integration tests
+        run: npm run build
+
+      - name: Run integration tests
+        run: npm test -- integration --browser ${{ matrix.browser }}
+
+  publish_dev:
+    if: needs.determine_release_type.outputs.release_type == 'dev'
+    runs-on: ubuntu-latest
+    needs:
+      - determine_release_type
+      - general_release_checks
+      - core_tests
+      - ubuntu_integration_tests
+
+    permissions:
+      id-token: write # required for npm provenance
+
+    strategy:
+      matrix:
+        node-version: [24.x]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v6
+        with:
+          # Use the latest available patch in the current major line instead of
+          # mutating the bundled npm in-place during publishing.
+          node-version: 24
+          check-latest: true
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Set up Rust
+        run: |
+          rustup target add wasm32-unknown-unknown
+          rustup component add rustfmt
+          rustup component add clippy
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_CLI_VERSION }} --locked --force
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and publish dev version
+        run: |
+          npm run build -- --release
+          npm publish --tag dev --provenance
+
+  publish_official:
+    if: needs.determine_release_type.outputs.release_type == 'official'
+    runs-on: ubuntu-latest
+    needs:
+      - determine_release_type
+      - check_official_version
+      - general_release_checks
+      - core_tests
+      - ubuntu_integration_tests
+
+    permissions:
+      contents: write
+      id-token: write # required for npm provenance
+
+    strategy:
+      matrix:
+        node-version: [24.x]
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0 # fetch all branches and history
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v6
+        with:
+          # Avoid relying on a cached lts/* alias and let setup-node resolve the
+          # newest available Node 24 patch for the release.
+          node-version: 24
+          check-latest: true
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Set up Rust
+        run: |
+          rustup target add wasm32-unknown-unknown
+          rustup component add rustfmt
+          rustup component add clippy
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_CLI_VERSION }} --locked --force
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and publish official release
+        run: |
+          npm run build -- main --release
+          npm run build -- --release
+          npm publish --provenance
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          version="$GITHUB_REF_NAME"
+
+          awk -v version="$version" '
+            $0 ~ "^## " version {found=1; next}
+            found && /^## / {exit}
+            found
+          ' CHANGELOG.md > CHANGELOG_LATEST.md
+
+      - name: Create GitHub Release
+        id: create_release
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file CHANGELOG_LATEST.md
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Upload all artifacts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          for file in "build/wasp_hls_bg.wasm" "build/worker.js" "build/main.js"; do
+            name=$(basename "$file")
+            echo "Uploading $name ..."
+            gh release upload "$GITHUB_REF_NAME" "$file" \
+              --clobber \
+              --repo "$GITHUB_REPOSITORY"
+          done
