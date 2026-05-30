@@ -25,6 +25,7 @@ import getHumanReadableHours from "./utils/get_human_readable_hours.mjs";
  *   httpsPort?: number;
  *   verbose?: boolean;
  *   noCache?: boolean;
+ *   allowCors?: boolean;
  *   certificatePath?: string;
  *   keyPath?: string;
  * }} LaunchStaticServerConfig
@@ -38,6 +39,8 @@ import getHumanReadableHours from "./utils/get_human_readable_hours.mjs";
  * starts listening and when startup fails.
  * @property {boolean} [noCache] - If set to `true`, disable browser caching
  * for served assets through response headers.
+ * @property {boolean} [allowCors] - If set to `true`, add permissive CORS
+ * response headers.
  * @property {string} [certificatePath] - Path to the TLS certificate used for
  * HTTPS connections. If not defined, the server won't listen for HTTPS traffic.
  * @property {string} [keyPath] - Path to the private key used for HTTPS
@@ -435,6 +438,11 @@ export default function launchStaticServer(path, config) {
       headers["Cache-Control"] = "no-store";
       headers.Pragma = "no-cache";
       headers.Expires = "0";
+    }
+    if (config.allowCors) {
+      headers["Access-Control-Allow-Origin"] = "*";
+      headers["Access-Control-Allow-Headers"] = "*";
+      headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS";
     }
     response.writeHead(200, headers);
     file.stream.pipe(response);

@@ -84,6 +84,7 @@ export async function packageLiveContent(config) {
         httpPort: config.serveHttpPort,
         noCache: true,
         verbose: true,
+        allowCors: true,
       })
     : null;
   if (staticServer !== null) {
