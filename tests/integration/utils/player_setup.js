@@ -19,13 +19,18 @@ import {
  *   it("my test", () => { ctx.player.load(...) });
  */
 export default function setupPlayer(
-  { packageLiveContent } = { packageLiveContent: false },
+  { packageLiveContent, playerConfig, createWorker } = {
+    packageLiveContent: false,
+    playerConfig: undefined,
+    createWorker: undefined,
+  },
 ) {
   const ctx = {
     player: /** @type {WaspHlsPlayer} */ (null),
     videoElement: document.createElement("video"),
     lastPlayerError: null,
     liveInfo: null,
+    workerHandle: null,
   };
 
   beforeAll(
@@ -53,9 +58,10 @@ export default function setupPlayer(
 
   beforeEach(() => {
     ctx.lastPlayerError = null;
-    ctx.player = new WaspHlsPlayer(ctx.videoElement);
+    ctx.player = new WaspHlsPlayer(ctx.videoElement, playerConfig);
+    ctx.workerHandle = createWorker?.() ?? { url: EmbeddedWorker };
     ctx.player.initialize({
-      workerUrl: EmbeddedWorker,
+      workerUrl: ctx.workerHandle.url,
       wasmUrl: EmbeddedWasm,
     });
     ctx.player.addEventListener("error", (error) => {
@@ -66,6 +72,8 @@ export default function setupPlayer(
   afterEach(() => {
     ctx.player.dispose();
     ctx.videoElement.removeAttribute("src");
+    ctx.workerHandle?.dispose?.();
+    ctx.workerHandle = null;
   });
 
   return ctx;

@@ -1,0 +1,158 @@
+import { runTestWorkerBootstrap } from "./test_worker_bootstrap.js";
+import EmbeddedWorker from "../../../build/embedded/worker.js";
+
+/**
+ * @typedef {Object} TestWorkerFetchRule
+ * @property {string} [id]
+ * @property {{
+ *   urlIncludes?: string;
+ *   urlEndsWith?: string;
+ *   urlMatches?: string;
+ *   hasRange?: boolean;
+ * }} [match]
+ * @property {Array<TestWorkerFetchAction>} [actions]
+ */
+
+/**
+ * @typedef {Object} TestWorkerFetchAction
+ * @property {"passthrough"|"error"|"timeout"|"response"} type
+ * @property {number} [delayMs]
+ * @property {number} [status]
+ * @property {string} [body]
+ * @property {Record<string, string>} [headers]
+ * @property {string} [message]
+ */
+
+/**
+ * @typedef {Object} TestWorkerHandle
+ * @property {string} url
+ * @property {() => void} dispose
+ * @property {WorkerTelemetryCollector|null} telemetry
+ */
+
+/**
+ * @typedef {Object} WorkerTelemetryCollector
+ * @property {() => Array<unknown>} getEvents
+ * @property {(predicate: (event: unknown) => boolean, timeoutMs?: number) => Promise<unknown>} waitFor
+ * @property {(predicate: (event: unknown) => boolean, count: number, timeoutMs?: number) => Promise<Array<unknown>>} waitForCount
+ * @property {() => void} close
+ */
+
+/**
+ * Create a test-only Worker URL which patches `fetch` before loading the real
+ * production Worker bundle.
+ *
+ * @param {{
+ *   fetchRules?: Array<TestWorkerFetchRule>;
+ *   collectTelemetry?: boolean;
+ * }} [options]
+ * @returns {TestWorkerHandle}
+ */
+export function createTestWorker({
+  fetchRules = [],
+  collectTelemetry = true,
+} = {}) {
+  const telemetryChannelName = collectTelemetry
+    ? `wasp-hls-test-worker-${Math.random().toString(36).slice(2)}`
+    : null;
+  const config = {
+    workerUrl: EmbeddedWorker,
+    telemetryChannelName,
+    fetchRules,
+  };
+  const blob = new Blob(
+    [`(${runTestWorkerBootstrap.toString()})(${JSON.stringify(config)});\n`],
+    { type: "application/javascript" },
+  );
+  const url = URL.createObjectURL(blob);
+  const telemetry =
+    telemetryChannelName === null
+      ? null
+      : createTelemetryCollector(telemetryChannelName);
+  return {
+    url,
+    telemetry,
+    dispose() {
+      telemetry?.close();
+      URL.revokeObjectURL(url);
+    },
+  };
+}
+
+/**
+ * @param {string} channelName
+ * @returns {WorkerTelemetryCollector}
+ */
+function createTelemetryCollector(channelName) {
+  const channel = new BroadcastChannel(channelName);
+  /** @type {Array<unknown>} */
+  const events = [];
+  /** @type {Set<(event: unknown) => void>} */
+  const listeners = new Set();
+  channel.onmessage = (evt) => {
+    events.push(evt.data);
+    for (const listener of listeners) {
+      listener(evt.data);
+    }
+  };
+  return {
+    getEvents() {
+      return events.slice();
+    },
+    waitFor(predicate, timeoutMs = 10_000) {
+      return new Promise((resolve, reject) => {
+        const existingEvent = events.find(predicate);
+        if (existingEvent !== undefined) {
+          resolve(existingEvent);
+          return;
+        }
+        const timeoutId = setTimeout(() => {
+          listeners.delete(onEvent);
+          cleanup();
+          reject(new Error("Timed out waiting for worker telemetry"));
+        }, timeoutMs);
+        const onEvent = (event) => {
+          if (predicate(event)) {
+            listeners.delete(onEvent);
+            cleanup();
+            resolve(event);
+          }
+        };
+        listeners.add(onEvent);
+        function cleanup() {
+          clearTimeout(timeoutId);
+        }
+      });
+    },
+    waitForCount(predicate, count, timeoutMs = 10_000) {
+      return new Promise((resolve, reject) => {
+        const getMatchingEvents = () => events.filter(predicate);
+        const existingMatches = getMatchingEvents();
+        if (existingMatches.length >= count) {
+          resolve(existingMatches);
+          return;
+        }
+        const timeoutId = setTimeout(() => {
+          listeners.delete(onEvent);
+          cleanup();
+          reject(new Error("Timed out waiting for worker telemetry count"));
+        }, timeoutMs);
+        const onEvent = () => {
+          const matches = getMatchingEvents();
+          if (matches.length >= count) {
+            listeners.delete(onEvent);
+            cleanup();
+            resolve(matches);
+          }
+        };
+        listeners.add(onEvent);
+        function cleanup() {
+          clearTimeout(timeoutId);
+        }
+      });
+    },
+    close() {
+      channel.close();
+    },
+  };
+}

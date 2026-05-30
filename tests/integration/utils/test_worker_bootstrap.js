@@ -1,0 +1,249 @@
+/**
+ * Worker bootstrap used by integration tests.
+ *
+ * This function is stringified and executed in a Worker blob. Keep it
+ * self-contained:
+ * - do not import anything here
+ * - do not rely on variables from the surrounding module scope
+ * - pass every value needed through the `config` argument
+ *
+ * Those constraints are the tradeoff for using a bundler-independent bootstrap
+ * mechanism that is easy to understand: this function body is copied as source
+ * code, then run in the Worker realm.
+ *
+ * @param {{
+ *   workerUrl: string;
+ *   telemetryChannelName: string | null;
+ *   fetchRules: Array<{
+ *     id?: string;
+ *     match?: {
+ *       urlIncludes?: string;
+ *       urlEndsWith?: string;
+ *       urlMatches?: string;
+ *       hasRange?: boolean;
+ *     };
+ *     actions?: Array<{
+ *       type: "passthrough" | "error" | "timeout" | "response";
+ *       delayMs?: number;
+ *       status?: number;
+ *       body?: string;
+ *       headers?: Record<string, string>;
+ *       message?: string;
+ *     }>;
+ *   }>;
+ * }} config
+ */
+export function runTestWorkerBootstrap(config) {
+  const originalFetch = self.fetch.bind(self);
+  const channel =
+    config.telemetryChannelName === null ||
+    typeof BroadcastChannel !== "function"
+      ? null
+      : new BroadcastChannel(config.telemetryChannelName);
+  const ruleHitCounts = new Array(config.fetchRules.length).fill(0);
+  let fetchRequestId = 0;
+
+  function postTelemetry(event) {
+    if (channel === null) {
+      return;
+    }
+    try {
+      channel.postMessage(event);
+    } catch (_) {
+      // Best effort telemetry only.
+    }
+  }
+
+  function createAbortError() {
+    try {
+      return new DOMException("Aborted", "AbortError");
+    } catch (_) {
+      const error = new Error("Aborted");
+      error.name = "AbortError";
+      return error;
+    }
+  }
+
+  function getRangeHeader(headers) {
+    if (headers == null) {
+      return undefined;
+    }
+    if (typeof headers.get === "function") {
+      return headers.get("Range") ?? headers.get("range") ?? undefined;
+    }
+    if (Array.isArray(headers)) {
+      for (const [key, value] of headers) {
+        if (String(key).toLowerCase() === "range") {
+          return String(value);
+        }
+      }
+      return undefined;
+    }
+    for (const key of Object.keys(headers)) {
+      if (key.toLowerCase() === "range") {
+        return String(headers[key]);
+      }
+    }
+    return undefined;
+  }
+
+  function matchesRule(rule, url, init) {
+    const match = rule.match ?? {};
+    if (match.urlIncludes !== undefined && !url.includes(match.urlIncludes)) {
+      return false;
+    }
+    if (match.urlEndsWith !== undefined && !url.endsWith(match.urlEndsWith)) {
+      return false;
+    }
+    if (
+      match.urlMatches !== undefined &&
+      !new RegExp(match.urlMatches).test(url)
+    ) {
+      return false;
+    }
+    if (match.hasRange !== undefined) {
+      const hasRange = getRangeHeader(init?.headers) !== undefined;
+      if (hasRange !== match.hasRange) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function pickAction(rule, ruleIndex) {
+    const actions =
+      Array.isArray(rule.actions) && rule.actions.length > 0
+        ? rule.actions
+        : [{ type: "passthrough" }];
+    const hitCount = ruleHitCounts[ruleIndex];
+    ruleHitCounts[ruleIndex] += 1;
+    return {
+      action: actions[Math.min(hitCount, actions.length - 1)],
+      attempt: hitCount + 1,
+    };
+  }
+
+  function delayWithAbort(delayMs, signal) {
+    if (delayMs === undefined || delayMs <= 0) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        cleanup();
+        resolve();
+      }, delayMs);
+      const onAbort = () => {
+        cleanup();
+        reject(createAbortError());
+      };
+      const cleanup = () => {
+        clearTimeout(timeoutId);
+        signal?.removeEventListener?.("abort", onAbort);
+      };
+      if (signal?.aborted === true) {
+        cleanup();
+        reject(createAbortError());
+        return;
+      }
+      signal?.addEventListener?.("abort", onAbort);
+    });
+  }
+
+  self.fetch = async function patchedFetch(input, init) {
+    const requestId = ++fetchRequestId;
+    const url = typeof input === "string" ? input : input.url;
+    let chosenRuleIndex = -1;
+    let chosenRule;
+    for (let i = 0; i < config.fetchRules.length; i++) {
+      const rule = config.fetchRules[i];
+      if (matchesRule(rule, url, init)) {
+        chosenRuleIndex = i;
+        chosenRule = rule;
+        break;
+      }
+    }
+
+    const { action, attempt } =
+      chosenRuleIndex >= 0
+        ? pickAction(chosenRule, chosenRuleIndex)
+        : { action: { type: "passthrough" }, attempt: 1 };
+
+    postTelemetry({
+      type: "fetch-start",
+      requestId,
+      url,
+      hasRange: getRangeHeader(init?.headers) !== undefined,
+      ruleId: chosenRule?.id ?? null,
+      ruleIndex: chosenRuleIndex >= 0 ? chosenRuleIndex : null,
+      actionType: action.type,
+      attempt,
+    });
+
+    try {
+      await delayWithAbort(action.delayMs, init?.signal);
+      switch (action.type) {
+        case "error":
+          throw new TypeError(action.message ?? "Injected network error");
+        case "timeout":
+          return await new Promise((_, reject) => {
+            const onAbort = () => {
+              init?.signal?.removeEventListener?.("abort", onAbort);
+              reject(createAbortError());
+            };
+            if (init?.signal?.aborted === true) {
+              reject(createAbortError());
+              return;
+            }
+            init?.signal?.addEventListener?.("abort", onAbort);
+          });
+        case "response": {
+          const response = new Response(action.body ?? "", {
+            status: action.status ?? 200,
+            headers: action.headers,
+          });
+          postTelemetry({
+            type: "fetch-resolve",
+            requestId,
+            url,
+            ruleId: chosenRule?.id ?? null,
+            actionType: action.type,
+            attempt,
+            status: response.status,
+          });
+          return response;
+        }
+        case "passthrough":
+        default: {
+          const response = await originalFetch(input, init);
+          postTelemetry({
+            type: "fetch-resolve",
+            requestId,
+            url,
+            ruleId: chosenRule?.id ?? null,
+            actionType: action.type,
+            attempt,
+            status: response.status,
+          });
+          return response;
+        }
+      }
+    } catch (error) {
+      postTelemetry({
+        type:
+          error instanceof Error && error.name === "AbortError"
+            ? "fetch-abort"
+            : "fetch-reject",
+        requestId,
+        url,
+        ruleId: chosenRule?.id ?? null,
+        actionType: action.type,
+        attempt,
+        errorName: error instanceof Error ? error.name : undefined,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  };
+
+  importScripts(config.workerUrl);
+}
