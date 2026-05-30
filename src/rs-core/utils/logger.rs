@@ -49,6 +49,13 @@ macro_rules! log_debug {
             $crate::utils::logger::emit_log($crate::bindings::LogLevel::Debug, &($func)());
         }
     };
+    ($lit:literal) => {
+        if $crate::utils::logger::MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed)
+            >= $crate::utils::logger::LoggerLevel::Debug as u8
+        {
+            $crate::utils::logger::emit_log($crate::bindings::LogLevel::Debug, $lit);
+        }
+    };
     ($($arg:tt)*) => {
         if $crate::utils::logger::MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed)
             >= $crate::utils::logger::LoggerLevel::Debug as u8
@@ -65,6 +72,13 @@ macro_rules! log_info {
             >= $crate::utils::logger::LoggerLevel::Info as u8
         {
             $crate::utils::logger::emit_log($crate::bindings::LogLevel::Info, &($func)());
+        }
+    };
+    ($lit:literal) => {
+        if $crate::utils::logger::MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed)
+            >= $crate::utils::logger::LoggerLevel::Info as u8
+        {
+            $crate::utils::logger::emit_log($crate::bindings::LogLevel::Info, $lit);
         }
     };
     ($($arg:tt)*) => {
@@ -85,6 +99,13 @@ macro_rules! log_warn {
             $crate::utils::logger::emit_log($crate::bindings::LogLevel::Warn, &($func)());
         }
     };
+    ($lit:literal) => {
+        if $crate::utils::logger::MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed)
+            >= $crate::utils::logger::LoggerLevel::Warn as u8
+        {
+            $crate::utils::logger::emit_log($crate::bindings::LogLevel::Warn, $lit);
+        }
+    };
     ($($arg:tt)*) => {
         if $crate::utils::logger::MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed)
             >= $crate::utils::logger::LoggerLevel::Warn as u8
@@ -101,6 +122,13 @@ macro_rules! log_error {
             >= $crate::utils::logger::LoggerLevel::Error as u8
         {
             $crate::utils::logger::emit_log($crate::bindings::LogLevel::Error, &($func)());
+        }
+    };
+    ($lit:literal) => {
+        if $crate::utils::logger::MAX_LOG_LEVEL.load(std::sync::atomic::Ordering::Relaxed)
+            >= $crate::utils::logger::LoggerLevel::Error as u8
+        {
+            $crate::utils::logger::emit_log($crate::bindings::LogLevel::Error, $lit);
         }
     };
     ($($arg:tt)*) => {
