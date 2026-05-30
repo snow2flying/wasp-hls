@@ -411,13 +411,21 @@ export function onAppendBufferMessage(
       sbObject.queuedSourceBuffer
         .push(msg.value.data)
         .then(() => {
-          const buffered = sbObject.queuedSourceBuffer.getBufferedRanges();
+          let buffered = new Float64Array([]);
+          try {
+            buffered = timeRangesToFloat64Array(
+              sbObject.queuedSourceBuffer.getBufferedRanges(),
+            );
+          } catch (_) {
+            // SourceBuffer attachment may already be closing when a queued
+            // operation resolves during teardown or content switching.
+          }
           postMessageToWorker(worker, {
             type: MainMessageType.SourceBufferOperationSuccess,
             value: {
               mediaSourceId,
               sourceBufferId,
-              buffered: timeRangesToFloat64Array(buffered),
+              buffered,
             },
           });
         })
@@ -489,13 +497,21 @@ export function onRemoveBufferMessage(
       sbObject.queuedSourceBuffer
         .removeBuffer(msg.value.start, msg.value.end)
         .then(() => {
-          const buffered = sbObject.queuedSourceBuffer.getBufferedRanges();
+          let buffered = new Float64Array([]);
+          try {
+            buffered = timeRangesToFloat64Array(
+              sbObject.queuedSourceBuffer.getBufferedRanges(),
+            );
+          } catch (_) {
+            // SourceBuffer attachment may already be closing when a queued
+            // operation resolves during teardown or content switching.
+          }
           postMessageToWorker(worker, {
             type: MainMessageType.SourceBufferOperationSuccess,
             value: {
               mediaSourceId,
               sourceBufferId,
-              buffered: timeRangesToFloat64Array(buffered),
+              buffered,
             },
           });
         })
@@ -576,9 +592,17 @@ export function onStartPlaybackObservationMessage(
       > = {};
 
       for (const sourceBuffer of contentMetadata.sourceBuffers) {
-        const ranges = sourceBuffer.queuedSourceBuffer.getBufferedRanges();
-        const toFloat64 = timeRangesToFloat64Array(ranges);
-        sourceBuffersBuffered[sourceBuffer.sourceBufferId] = toFloat64;
+        try {
+          const ranges = sourceBuffer.queuedSourceBuffer.getBufferedRanges();
+          const toFloat64 = timeRangesToFloat64Array(ranges);
+          sourceBuffersBuffered[sourceBuffer.sourceBufferId] = toFloat64;
+        } catch (_) {
+          // SourceBuffer attachment may already be closing when observation
+          // ticks race with teardown or a fast content switch.
+          sourceBuffersBuffered[sourceBuffer.sourceBufferId] = new Float64Array(
+            [],
+          );
+        }
       }
       postMessageToWorker(worker, {
         type: MainMessageType.MediaObservation,

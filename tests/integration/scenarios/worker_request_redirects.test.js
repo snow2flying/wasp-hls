@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { waitForLoadedState } from "../utils/player_test_tools.js";
+import { waitForLoadedState } from "../../utils/player_test_tools.js";
+import { getVodScenarioUrl } from "../../utils/vod_scenarios.js";
 import {
   createPlayerHarness,
   TEST_TIMEOUT_MS,
 } from "../utils/request_integration_test_tools.js";
-import { getVodScenarioUrl } from "../utils/vod_scenarios.js";
 
 describe("Worker request injection - redirects", function () {
   it(

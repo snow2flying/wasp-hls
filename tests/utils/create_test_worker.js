@@ -1,5 +1,5 @@
 import { runTestWorkerBootstrap } from "./test_worker_bootstrap.js";
-import EmbeddedWorker from "../../../build/embedded/worker.js";
+import EmbeddedWorker from "../../build/embedded/worker.js";
 
 /**
  * @typedef {Object} TestWorkerFetchRule
@@ -35,6 +35,7 @@ import EmbeddedWorker from "../../../build/embedded/worker.js";
  * @property {() => Array<unknown>} getEvents
  * @property {(predicate: (event: unknown) => boolean, timeoutMs?: number) => Promise<unknown>} waitFor
  * @property {(predicate: (event: unknown) => boolean, count: number, timeoutMs?: number) => Promise<Array<unknown>>} waitForCount
+ * @property {(timeoutMs?: number) => Promise<unknown>} requestMemorySnapshot
  * @property {() => void} close
  */
 
@@ -89,6 +90,7 @@ function createTelemetryCollector(channelName) {
   const events = [];
   /** @type {Set<(event: unknown) => void>} */
   const listeners = new Set();
+  let requestId = 0;
   channel.onmessage = (evt) => {
     events.push(evt.data);
     for (const listener of listeners) {
@@ -150,6 +152,20 @@ function createTelemetryCollector(channelName) {
           clearTimeout(timeoutId);
         }
       });
+    },
+    requestMemorySnapshot(timeoutMs = 10_000) {
+      const currentRequestId = ++requestId;
+      const memorySnapshotPromise = this.waitFor(
+        (event) =>
+          event?.type === "memory-snapshot" &&
+          event.requestId === currentRequestId,
+        timeoutMs,
+      );
+      channel.postMessage({
+        type: "memory-snapshot-request",
+        requestId: currentRequestId,
+      });
+      return memorySnapshotPromise;
     },
     close() {
       channel.close();

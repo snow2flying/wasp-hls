@@ -1,4 +1,4 @@
-import sleep from "../../utils/sleep.js";
+import sleep from "./sleep.js";
 
 const PACKAGER_READY_TIMEOUT_MS = 120_000;
 const PACKAGER_STOP_TIMEOUT_MS = 10_000;

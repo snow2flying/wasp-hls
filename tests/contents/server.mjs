@@ -394,6 +394,9 @@ function handlePackagedLiveRequest(res, req, basePath) {
         "Access-Control-Allow-Headers": "*",
         "Access-Control-Allow-Credentials": true,
         "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Cross-Origin-Resource-Policy": "cross-origin",
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Cross-Origin-Embedder-Policy": "require-corp",
       });
       stream.on("error", (err) => {
         console.error(
@@ -757,6 +760,9 @@ function answerWithCORS(res, status, body) {
     "Access-Control-Allow-Headers": "*",
     "Access-Control-Allow-Credentials": true,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Cross-Origin-Resource-Policy": "cross-origin",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Embedder-Policy": "require-corp",
   });
   if (body !== undefined) {
     res.end(body);

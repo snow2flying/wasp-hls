@@ -2,8 +2,8 @@
 /**
  * # run_integration_tests.mjs
  *
- * This file allows to run the integration test suite by running the `vitest`
- * dependency on them with the right options.
+ * This file allows to run the browser-based test suites by running the
+ * `vitest` dependency on them with the right options.
  *
  * You can either run it directly as a script (run
  * `node run_integration_tests.mjs -h` to see the different options) or by
@@ -20,7 +20,8 @@ import getFirefoxCmd from "./get_firefox_cmd.mjs";
 
 /** @typedef {"chrome" | "firefox" | "edge"} BrowserName */
 /** @typedef {"trace" | "debug" | "info" | "warn" | "error" | "silent"} WebdriverLogLevel */
-/** @typedef {{ browser: BrowserName; watch: boolean }} RunVitestConfig */
+/** @typedef {"integration" | "memory"} TestSuiteName */
+/** @typedef {{ browser: BrowserName; suite: TestSuiteName; watch: boolean }} RunVitestConfig */
 
 /** If not specified, run only this browser. */
 /** @type {BrowserName} */
@@ -38,6 +39,9 @@ const INTEGRATION_TEST_FILES = [
   "tests/integration/scenarios/**/*.[jt]s?(x)",
   "tests/integration/**/*.test.[jt]s?(x)",
 ];
+
+/** Paths were memory tests are defined. */
+const MEMORY_TEST_FILES = ["tests/memory/**/*.test.[jt]s?(x)"];
 
 const baseGlobals = {
   __TEST_CONTENT_SERVER__: {
@@ -82,6 +86,10 @@ const SYSTEM_GECKODRIVER_BINARY =
   undefined;
 
 const IS_LINUX = process.platform === "linux";
+const CROSS_ORIGIN_ISOLATION_HEADERS = {
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Embedder-Policy": "require-corp",
+};
 
 /**
  * @param {RunVitestConfig} config - The test configuration object.
@@ -89,7 +97,10 @@ const IS_LINUX = process.platform === "linux";
  * only run some tests.
  * @returns {Promise.<Object>} - The vitest object.
  */
-export default function runVitests({ browser, watch }, testFilters = []) {
+export default function runVitests(
+  { browser, suite, watch },
+  testFilters = [],
+) {
   return startVitest(
     "test",
     testFilters,
@@ -97,9 +108,12 @@ export default function runVitests({ browser, watch }, testFilters = []) {
       reporters: "dot",
       watch,
       globalSetup: "tests/globalSetup.mjs",
-      projects: [generateTestConfig({ browser })],
+      projects: [generateTestConfig({ browser, suite })],
     },
     /** @type {import("vitest/config").ViteUserConfig} */ ({
+      server: {
+        headers: CROSS_ORIGIN_ISOLATION_HEADERS,
+      },
       test: {
         browser: {
           connectTimeout: BROWSER_CONNECT_TIMEOUT,
@@ -113,9 +127,12 @@ export default function runVitests({ browser, watch }, testFilters = []) {
  * @param {RunVitestConfig} config
  * @param {string[]} [testFilters]
  */
-async function runVitestsWithManagedExit({ browser, watch }, testFilters = []) {
+async function runVitestsWithManagedExit(
+  { browser, suite, watch },
+  testFilters = [],
+) {
   if (watch) {
-    return runVitests({ browser, watch }, testFilters);
+    return runVitests({ browser, suite, watch }, testFilters);
   }
 
   process.env.TEST = "true";
@@ -128,9 +145,12 @@ async function runVitestsWithManagedExit({ browser, watch }, testFilters = []) {
       reporters: "dot",
       watch: false,
       globalSetup: "tests/globalSetup.mjs",
-      projects: [generateTestConfig({ browser })],
+      projects: [generateTestConfig({ browser, suite })],
     },
     /** @type {import("vitest/config").ViteUserConfig} */ ({
+      server: {
+        headers: CROSS_ORIGIN_ISOLATION_HEADERS,
+      },
       test: {
         browser: {
           connectTimeout: BROWSER_CONNECT_TIMEOUT,
@@ -312,11 +332,16 @@ function sanitizeWebdriverRequest(requestOptions) {
 }
 
 /**
- * @param {{ browser: BrowserName }} config - The test configuration object.
+ * @param {{ browser: BrowserName; suite: TestSuiteName }} config - The test configuration object.
  * @returns {Object} - The corresponding `vitest` config.
  */
-function generateTestConfig({ browser }) {
-  const includedFiles = INTEGRATION_TEST_FILES;
+function generateTestConfig({ browser, suite }) {
+  if (suite === "memory" && browser !== "chrome") {
+    throw new Error('Memory tests are only supported on the "chrome" browser.');
+  }
+
+  const includedFiles =
+    suite === "memory" ? MEMORY_TEST_FILES : INTEGRATION_TEST_FILES;
   return {
     test: {
       name: browser,
@@ -342,6 +367,8 @@ if (
 async function main() {
   const args = process.argv.slice(2);
   let shouldWatch = false;
+  /** @type {TestSuiteName} */
+  let suite = "integration";
   // TODO: multiple browsers?
   /** @type {BrowserName | ""} */
   let browser = "";
@@ -400,6 +427,11 @@ async function main() {
         }
         break;
 
+      case "-m":
+      case "--memory":
+        suite = "memory";
+        break;
+
       case "--":
         argOffset = args.length;
         break;
@@ -413,7 +445,7 @@ async function main() {
   }
 
   console.warn(
-    `~~~ ⚠️ Integration tests have two dependencies: a local Wasp-hls build and ffmpeg.
+    `~~~ ⚠️ Browser tests have two dependencies: a local Wasp-hls build and ffmpeg.
 ~~~ Make sure you:
 ~~~ 1.  Have an ffmpeg executable in your path and,
 ~~~ 2.  You built an up-to-date Wasp-hls bundle through the \`build\` npm script.`,
@@ -431,6 +463,7 @@ async function main() {
       {
         watch: shouldWatch,
         browser,
+        suite,
       },
       filters,
     );
@@ -452,6 +485,8 @@ Usage: node run_integration_tests.mjs [OPTIONS]
 
 Available options:
   -h, --help                          Display this help message.
+  -m, --memory                        Run the memory-leak browser suite instead
+                                      of the standard integration scenarios.
   -f <FILTER>, --filter <FILTER>      A string that will serve as a filter.
                                       Only test files containing this string will run.
                                       This flag can be set multiple times, in which case

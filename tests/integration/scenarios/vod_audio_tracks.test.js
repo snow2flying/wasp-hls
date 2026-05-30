@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import setupPlayer from "../utils/player_setup";
 import {
   eventListener,
   waitForLoadedState,
-} from "../utils/player_test_tools.js";
-import { getVodScenarioUrl } from "../utils/vod_scenarios.js";
+} from "../../utils/player_test_tools.js";
+import { getVodScenarioUrl } from "../../utils/vod_scenarios.js";
+import setupPlayer from "../utils/player_setup";
 
 const VOD_TEST_TIMEOUT_MS = 60_000;
 

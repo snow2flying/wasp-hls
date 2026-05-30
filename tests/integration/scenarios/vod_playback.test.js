@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { waitForLoadedState } from "../../utils/player_test_tools.js";
 import sleep from "../../utils/sleep.js";
+import { getVodScenarioUrl } from "../../utils/vod_scenarios.js";
 import { checkAfterSleepWithBackoff } from "../../utils/checkAfterSleepWithBackoff.js";
 import setupPlayer from "../utils/player_setup";
-import { waitForLoadedState } from "../utils/player_test_tools.js";
-import { getVodScenarioUrl } from "../utils/vod_scenarios.js";
 
 const VOD_TEST_TIMEOUT_MS = 60_000;
 const PLAYBACK_SETTLE_MS = 2_000;

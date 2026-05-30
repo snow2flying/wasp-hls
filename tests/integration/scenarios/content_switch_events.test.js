@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import sleep from "../../utils/sleep.js";
-import setupPlayer from "../utils/player_setup";
 import {
   waitForLoadedState,
   waitForPlayerEvent,
-} from "../utils/player_test_tools.js";
-import { getVodScenarioUrl } from "../utils/vod_scenarios.js";
+} from "../../utils/player_test_tools.js";
+import sleep from "../../utils/sleep.js";
+import { getVodScenarioUrl } from "../../utils/vod_scenarios.js";
+import setupPlayer from "../utils/player_setup";
 
 const TEST_TIMEOUT_MS = 60_000;
 const LEAK_OBSERVATION_WINDOW_MS = 1_000;

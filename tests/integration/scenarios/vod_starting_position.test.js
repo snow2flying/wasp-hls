@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { getVodScenarioUrl } from "../../utils/vod_scenarios.js";
 import setupPlayer from "../utils/player_setup";
 import { assertStartupBehavior } from "../utils/startup_test_tools.js";
-import { getVodScenarioUrl } from "../utils/vod_scenarios.js";
 
 const VOD_TEST_TIMEOUT_MS = 60_000;
 const VOD_START_POSITION_TOLERANCE_S = 0.35;

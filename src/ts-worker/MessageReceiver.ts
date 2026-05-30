@@ -198,8 +198,12 @@ export default function MessageReceiver() {
         if (playerInstance.hasMseInWorker() === true) {
           for (const sourceBufferInfo of contentInfo.mediaSourceObj
             .sourceBuffers) {
-            const timeRange =
-              sourceBufferInfo.sourceBuffer?.getBufferedRanges();
+            let timeRange;
+            try {
+              timeRange = sourceBufferInfo.sourceBuffer?.getBufferedRanges();
+            } catch (_) {
+              timeRange = undefined;
+            }
             if (timeRange !== undefined) {
               const toFloat64 = timeRangesToFloat64Array(timeRange);
               const bufRange = new JsTimeRanges(toFloat64);

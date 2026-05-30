@@ -1,14 +1,14 @@
 import { expect } from "vitest";
 import WaspHlsPlayer from "../../../build/es6/ts-main/index.js";
 import EmbeddedWasm from "../../../build/embedded/wasm.js";
-import sleep from "../../utils/sleep.js";
-import { createTestWorker } from "./create_test_worker.js";
+import { createTestWorker } from "../../utils/create_test_worker.js";
 import {
   eventListener,
   waitForLoadedState,
   waitForPlayerEvent,
-} from "./player_test_tools.js";
-import { getVodScenarioUrl } from "./vod_scenarios.js";
+} from "../../utils/player_test_tools.js";
+import sleep from "../../utils/sleep.js";
+import { getVodScenarioUrl } from "../../utils/vod_scenarios.js";
 
 export const TEST_TIMEOUT_MS = 60_000;
 const CONFIG_PROPAGATION_DELAY_MS = 100;

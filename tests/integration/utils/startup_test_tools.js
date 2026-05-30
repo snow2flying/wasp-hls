@@ -1,9 +1,9 @@
 import { expect } from "vitest";
-import sleep from "../../utils/sleep.js";
 import {
   getPlayerStateSnapshot,
   waitForLoadedState,
-} from "./player_test_tools.js";
+} from "../../utils/player_test_tools.js";
+import sleep from "../../utils/sleep.js";
 
 const DEFAULT_PLAYBACK_SETTLE_MS = 1_500;
 

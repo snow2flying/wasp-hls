@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import sleep from "../../utils/sleep.js";
 import {
   waitForLoadedState,
   waitForPlayerEvent,
-} from "../utils/player_test_tools.js";
+} from "../../utils/player_test_tools.js";
+import sleep from "../../utils/sleep.js";
+import { getVodScenarioUrl } from "../../utils/vod_scenarios.js";
 import {
   createMediaPlaylistFetchRule,
   createPlayerHarness,
@@ -17,7 +18,6 @@ import {
   TEST_TIMEOUT_MS,
   applyConfigUpdate,
 } from "../utils/request_integration_test_tools.js";
-import { getVodScenarioUrl } from "../utils/vod_scenarios.js";
 
 describe("Worker request injection - errors", function () {
   describe("multivariant playlist requests", function () {

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import sleep from "../../utils/sleep.js";
-import { checkAfterSleepWithBackoff } from "../../utils/checkAfterSleepWithBackoff.js";
-import setupPlayer from "../utils/player_setup";
 import {
   eventListener,
   waitForLoadedState,
-} from "../utils/player_test_tools.js";
+} from "../../utils/player_test_tools.js";
+import { checkAfterSleepWithBackoff } from "../../utils/checkAfterSleepWithBackoff.js";
+import setupPlayer from "../utils/player_setup";
 
 const LIVE_ENDLIST_TEST_TIMEOUT_MS = 90_000;
 const EVENT_ENDLIST_SCENARIO_PREFIX = "/live/scenario/event-endlist";

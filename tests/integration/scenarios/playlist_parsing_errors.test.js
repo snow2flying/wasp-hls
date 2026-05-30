@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { waitForPlayerEvent } from "../../utils/player_test_tools.js";
+import { getVodScenarioUrl } from "../../utils/vod_scenarios.js";
 import setupPlayer from "../utils/player_setup";
-import { waitForPlayerEvent } from "../utils/player_test_tools.js";
-import { getVodScenarioUrl } from "../utils/vod_scenarios.js";
 
 const TEST_TIMEOUT_MS = 60_000;
 

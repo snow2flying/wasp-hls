@@ -360,3 +360,91 @@ jobs:
 
       - name: Run integration tests
         run: npm test -- integration --browser ${{ matrix.browser }}
+
+  memory_tests:
+    name: memory tests (${{ matrix.os }}, ${{ matrix.browser }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    continue-on-error: ${{ matrix.allow_failure }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            browser: chrome
+            allow_failure: false
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Rust
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-bin-wasm-bindgen-${{ env.WASM_BINDGEN_CLI_VERSION }}
+
+      - name: Cache Rust target
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-target-memory-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-target-memory-
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_CLI_VERSION }} --locked --force
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install ffmpeg and gpac on Ubuntu
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl ffmpeg
+          sudo install -m 0755 -d /etc/apt/keyrings
+          sudo curl -fsSL https://dist.gpac.io/gpac/linux/gpg.asc -o /etc/apt/keyrings/gpac.asc
+          sudo chmod a+r /etc/apt/keyrings/gpac.asc
+          sudo tee /etc/apt/sources.list.d/gpac.sources >/dev/null <<EOF
+          Types: deb
+          URIs: https://dist.gpac.io/gpac/linux/ubuntu
+          Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+          Components: main
+          Signed-By: /etc/apt/keyrings/gpac.asc
+          EOF
+          sudo apt-get update
+          sudo apt-get install -y gpac
+          echo "WASP_HLS_CHROMEDRIVER_BINARY=${CHROMEWEBDRIVER}/chromedriver" >> "$GITHUB_ENV"
+          echo "WASP_HLS_CHROME_BINARY=/usr/bin/google-chrome" >> "$GITHUB_ENV"
+
+      - name: Print media tool versions
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          ffmpeg -version
+          gpac -h
+
+      - name: Build artifacts for memory tests
+        run: npm run build
+
+      - name: Run memory tests
+        run: npm test -- memory --browser ${{ matrix.browser }}

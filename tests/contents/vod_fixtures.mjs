@@ -67,6 +67,51 @@ const RECIPES = {
     audioFrequency: 880,
     streams: "video",
   },
+  "fmp4-video-only-low": {
+    id: "fmp4-video-only-low",
+    playlistName: "main.m3u8",
+    segmentType: "fmp4",
+    segmentExtension: "m4s",
+    initFileName: "init.mp4",
+    durationSeconds: 12,
+    segmentDurationSeconds: 2,
+    frameRate: 24,
+    videoSize: "640x360",
+    videoBitrate: "800k",
+    audioBitrate: "128k",
+    audioFrequency: 880,
+    streams: "video",
+  },
+  "fmp4-video-only-mid": {
+    id: "fmp4-video-only-mid",
+    playlistName: "main.m3u8",
+    segmentType: "fmp4",
+    segmentExtension: "m4s",
+    initFileName: "init.mp4",
+    durationSeconds: 12,
+    segmentDurationSeconds: 2,
+    frameRate: 24,
+    videoSize: "960x540",
+    videoBitrate: "1600k",
+    audioBitrate: "128k",
+    audioFrequency: 880,
+    streams: "video",
+  },
+  "fmp4-video-only-high": {
+    id: "fmp4-video-only-high",
+    playlistName: "main.m3u8",
+    segmentType: "fmp4",
+    segmentExtension: "m4s",
+    initFileName: "init.mp4",
+    durationSeconds: 12,
+    segmentDurationSeconds: 2,
+    frameRate: 24,
+    videoSize: "1280x720",
+    videoBitrate: "2800k",
+    audioBitrate: "128k",
+    audioFrequency: 880,
+    streams: "video",
+  },
   "fmp4-audio-en": {
     id: "fmp4-audio-en",
     playlistName: "main.m3u8",
@@ -332,6 +377,60 @@ const SCENARIOS = {
         return createMediaPlaylistResponse(
           await readGeneratedMediaPlaylist("fmp4-video-only"),
           context.forRecipe("fmp4-video-only"),
+        );
+      }
+      if (relativePath === "audio-en.m3u8") {
+        return createMediaPlaylistResponse(
+          await readGeneratedMediaPlaylist("fmp4-audio-en"),
+          context.forRecipe("fmp4-audio-en"),
+        );
+      }
+      if (relativePath === "audio-fr.m3u8") {
+        return createMediaPlaylistResponse(
+          await readGeneratedMediaPlaylist("fmp4-audio-fr"),
+          context.forRecipe("fmp4-audio-fr"),
+        );
+      }
+      return null;
+    },
+  },
+  "fmp4-multivariant-alt-audio": {
+    entryPath: "master.m3u8",
+    recipeId: "fmp4-video-only-mid",
+    async getFile(relativePath, context) {
+      if (relativePath === "master.m3u8") {
+        return {
+          body:
+            "#EXTM3U\n" +
+            "#EXT-X-VERSION:7\n" +
+            "#EXT-X-INDEPENDENT-SEGMENTS\n" +
+            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-main",NAME="English",LANGUAGE="en",DEFAULT=YES,AUTOSELECT=YES,URI="audio-en.m3u8"\n' +
+            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-main",NAME="French",LANGUAGE="fr",DEFAULT=NO,AUTOSELECT=YES,URI="audio-fr.m3u8"\n' +
+            '#EXT-X-STREAM-INF:BANDWIDTH=928000,RESOLUTION=640x360,AUDIO="audio-main"\n' +
+            "video-low.m3u8\n" +
+            '#EXT-X-STREAM-INF:BANDWIDTH=1728000,RESOLUTION=960x540,AUDIO="audio-main"\n' +
+            "video-mid.m3u8\n" +
+            '#EXT-X-STREAM-INF:BANDWIDTH=2928000,RESOLUTION=1280x720,AUDIO="audio-main"\n' +
+            "video-high.m3u8\n",
+          contentType: CONTENT_TYPE_M3U8,
+        };
+      }
+      if (relativePath === "video-low.m3u8") {
+        return createMediaPlaylistResponse(
+          await readGeneratedMediaPlaylist("fmp4-video-only-low"),
+          context.forRecipe("fmp4-video-only-low"),
+        );
+      }
+      if (relativePath === "video-mid.m3u8") {
+        return createMediaPlaylistResponse(
+          await readGeneratedMediaPlaylist("fmp4-video-only-mid"),
+          context.forRecipe("fmp4-video-only-mid"),
+        );
+      }
+      if (relativePath === "video-high.m3u8") {
+        return createMediaPlaylistResponse(
+          await readGeneratedMediaPlaylist("fmp4-video-only-high"),
+          context.forRecipe("fmp4-video-only-high"),
         );
       }
       if (relativePath === "audio-en.m3u8") {

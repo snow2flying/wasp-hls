@@ -65,6 +65,7 @@
       "test -- rust": "Run only Rust unit tests.",
       "test -- transmux": "Run only the Node-based transmux tests.",
       "test -- integration": "Run only the browser integration tests.",
+      "test -- memory": "Run only the browser memory-leak tests on Chrome.",
       "test -- integration --browser firefox": "Run browser integration tests in Firefox.",
       "test -- integration --filter dash_live_packaged": "Run only matching browser integration tests."
     },

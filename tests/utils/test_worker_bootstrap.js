@@ -35,6 +35,11 @@
  */
 export function runTestWorkerBootstrap(config) {
   const originalFetch = self.fetch.bind(self);
+  const originalInstantiate = WebAssembly.instantiate.bind(WebAssembly);
+  const originalInstantiateStreaming =
+    typeof WebAssembly.instantiateStreaming === "function"
+      ? WebAssembly.instantiateStreaming.bind(WebAssembly)
+      : null;
   const channel =
     config.telemetryChannelName === null ||
     typeof BroadcastChannel !== "function"
@@ -42,6 +47,7 @@ export function runTestWorkerBootstrap(config) {
       : new BroadcastChannel(config.telemetryChannelName);
   const ruleHitCounts = new Array(config.fetchRules.length).fill(0);
   let fetchRequestId = 0;
+  let latestWasmMemory = null;
 
   function postTelemetry(event) {
     if (channel === null) {
@@ -154,6 +160,70 @@ export function runTestWorkerBootstrap(config) {
       signal?.addEventListener?.("abort", onAbort);
     });
   }
+
+  function maybeCaptureWasmMemory(result) {
+    const instance =
+      result != null && typeof result === "object" && "instance" in result
+        ? result.instance
+        : result;
+    const memory = instance?.exports?.memory;
+    if (memory instanceof WebAssembly.Memory) {
+      latestWasmMemory = memory;
+    }
+  }
+
+  WebAssembly.instantiate = async function patchedInstantiate(source, imports) {
+    const result = await originalInstantiate(source, imports);
+    maybeCaptureWasmMemory(result);
+    return result;
+  };
+
+  if (originalInstantiateStreaming !== null) {
+    WebAssembly.instantiateStreaming =
+      async function patchedInstantiateStreaming(source, imports) {
+        const result = await originalInstantiateStreaming(source, imports);
+        maybeCaptureWasmMemory(result);
+        return result;
+      };
+  }
+
+  async function createMemorySnapshot() {
+    self.gc?.();
+    const perfMemory = self.performance?.memory ?? null;
+    let userAgentSpecificBytes = null;
+    if (
+      self.crossOriginIsolated &&
+      typeof self.performance?.measureUserAgentSpecificMemory === "function"
+    ) {
+      try {
+        const measurement =
+          await self.performance.measureUserAgentSpecificMemory();
+        userAgentSpecificBytes = measurement.bytes;
+      } catch (_) {
+        userAgentSpecificBytes = null;
+      }
+    }
+    return {
+      jsHeapUsedBytes: perfMemory?.usedJSHeapSize ?? null,
+      jsHeapTotalBytes: perfMemory?.totalJSHeapSize ?? null,
+      wasmMemoryBytes: latestWasmMemory?.buffer?.byteLength ?? null,
+      userAgentSpecificBytes,
+    };
+  }
+
+  channel?.addEventListener("message", (evt) => {
+    const data = evt.data;
+    if (data?.type !== "memory-snapshot-request") {
+      return;
+    }
+    createMemorySnapshot().then((snapshot) => {
+      postTelemetry({
+        type: "memory-snapshot",
+        requestId: data.requestId,
+        ...snapshot,
+      });
+    });
+  });
 
   self.fetch = async function patchedFetch(input, init) {
     const requestId = ++fetchRequestId;

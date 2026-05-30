@@ -31,6 +31,7 @@ import launchStaticServer from "../launch_static_server.mjs";
 import {
   testAll,
   testIntegration,
+  testMemory,
   testRust as runRustTests,
   testTransmux,
 } from "./test.mjs";
@@ -187,6 +188,20 @@ async function run() {
             watch: options.watch,
           });
           reportSuccess("Integration tests");
+          return;
+        case "memory":
+          if (options.browser != null && options.browser !== "chrome") {
+            throw new Error(
+              "Memory tests are only supported with `--browser chrome`.",
+            );
+          }
+          assertNoWatchOption(options, "memory");
+          await testMemory(ROOT, {
+            browser: options.browser,
+            filters: options.filters,
+            watch: false,
+          });
+          reportSuccess("Memory tests");
           return;
         case "transmux":
           assertNoBrowserOption(options, "transmux");
@@ -441,9 +456,10 @@ Commands
     rust        Run Rust unit tests
     transmux    Run Node-based transmux tests
     integration Run browser integration tests
+    memory      Run browser memory-leak tests on Chrome
                --filter is repeatable for scoped test runs
                --watch is supported for integration and transmux
-               --browser is supported for integration only
+               --browser is supported for integration and memory
 
   fmt [--check]   Format Rust and JS/TS/Markdown
   generate        Regenerate wasm ABI enums

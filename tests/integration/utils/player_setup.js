@@ -7,7 +7,8 @@ import {
   startLivePackagerWithOptions,
   stopLivePackager,
   waitForPackagerReady,
-} from "./live_packager.js";
+} from "../../utils/live_packager.js";
+import sleep from "../../utils/sleep.js";
 
 /**
  * Registers standard beforeAll/afterAll/beforeEach/afterEach hooks for tests
@@ -44,6 +45,7 @@ export default function setupPlayer(
         }
         const readyInfos = await waitForPackagerReady();
         ctx.liveInfo = { ...readyInfos };
+        await sleep(10000);
       }
     },
     packageLiveContent ? (3600 / 2) * 1000 : undefined,

@@ -1,5 +1,5 @@
-import sleep from "../../utils/sleep.js";
-import { waitForLoadedStateAfterLoad } from "../../utils/waitForPlayerState.js";
+import sleep from "./sleep.js";
+import { waitForLoadedStateAfterLoad } from "./waitForPlayerState.js";
 
 const PLAYER_LOAD_TIMEOUT_MS = 90_000;
 

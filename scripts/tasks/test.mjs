@@ -16,9 +16,10 @@ const NODE = process.execPath;
 export async function testAll(root) {
   await testRust(root, { filters: [] });
   await testTransmux(root, { filters: [], watch: false });
-  await testIntegration(root, {
+  await testBrowserSuite(root, {
     browser: undefined,
     filters: [],
+    suite: "integration",
     watch: false,
   });
 }
@@ -69,14 +70,43 @@ export async function testTransmux(root, { filters, watch }) {
  * @param {{ browser?: string, filters: string[], watch: boolean }} options
  */
 export async function testIntegration(root, { browser, filters, watch }) {
+  await testBrowserSuite(root, {
+    browser,
+    filters,
+    suite: "integration",
+    watch,
+  });
+}
+
+/**
+ * @param {string} root
+ * @param {{ browser?: string, filters: string[], watch: boolean }} options
+ */
+export async function testMemory(root, { browser, filters, watch }) {
+  await testBrowserSuite(root, {
+    browser,
+    filters,
+    suite: "memory",
+    watch,
+  });
+}
+
+/**
+ * @param {string} root
+ * @param {{ browser?: string, filters: string[], suite: "integration" | "memory", watch: boolean }} options
+ */
+async function testBrowserSuite(root, { browser, filters, suite, watch }) {
   reportStep(
     "TEST",
     watch
-      ? "watching browser integration tests..."
-      : "running browser integration tests...",
+      ? `watching browser ${suite} tests...`
+      : `running browser ${suite} tests...`,
   );
 
   const args = ["./scripts/run_integration_tests.mjs"];
+  if (suite === "memory") {
+    args.push("--memory");
+  }
   if (browser != null) {
     args.push("--browser", browser);
   }
