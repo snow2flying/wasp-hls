@@ -12,8 +12,6 @@ mod requester;
 mod segment_selector;
 mod utils;
 
-pub use utils::logger::Logger;
-
 #[unsafe(no_mangle)]
 pub extern "C" fn wasp_malloc(len: usize) -> *mut u8 {
     let mut bytes = Vec::<u8>::with_capacity(len);

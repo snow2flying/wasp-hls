@@ -19,8 +19,7 @@ use super::{
 };
 use crate::{
     bindings::{MediaType, PlaylistNature},
-    utils::url::Url,
-    Logger,
+    utils::{logger::*, url::Url},
 };
 use std::collections::HashSet;
 use std::{error, fmt, io::BufRead};
@@ -213,12 +212,12 @@ impl MediaPlaylist {
                     },
                     "-X-VERSION" => match parse_decimal_integer(&str_line, colon_idx + 1).0 {
                         Ok(v) if v <= (u32::MAX as u64) => version = Some(v as u32),
-                        _ => Logger::warn("Unparsable VERSION value"),
+                        _ => log_warn!("Unparsable VERSION value"),
                     },
                     "-X-TARGETDURATION" => {
                         match parse_decimal_integer(&str_line, colon_idx + 1).0 {
                             Ok(t) if t <= (u32::MAX as u64) => target_duration = Some(t as u32),
-                            _ => Logger::warn("Unparsable TARGETDURATION value"),
+                            _ => log_warn!("Unparsable TARGETDURATION value"),
                         }
                     }
                     "-X-GAP" => {
@@ -231,7 +230,7 @@ impl MediaPlaylist {
                             start = Some(st);
                         }
                         _ => {
-                            Logger::warn("Parser: Failed to parse `EXT-X-START` attribute");
+                            log_warn!("Parser: Failed to parse `EXT-X-START` attribute");
                         }
                     },
                     "INF" => match parse_decimal_floating_point(&str_line, 4 + "INF:".len()).0 {
@@ -252,13 +251,13 @@ impl MediaPlaylist {
                     "-X-MEDIA-SEQUENCE" => {
                         match parse_decimal_integer(&str_line, colon_idx + 1).0 {
                             Ok(s) if s <= (u32::MAX as u64) => media_sequence = s as u32,
-                            _ => Logger::warn("Unparsable MEDIA-SEQUENCE value"),
+                            _ => log_warn!("Unparsable MEDIA-SEQUENCE value"),
                         }
                     }
                     "-X-DISCONTINUITY-SEQUENCE" => {
                         match parse_decimal_integer(&str_line, colon_idx + 1).0 {
                             Ok(s) if s <= (u32::MAX as u64) => discontinuity_sequence = s as u32,
-                            _ => Logger::warn("Unparsable DISCONTINUITY-SEQUENCE value"),
+                            _ => log_warn!("Unparsable DISCONTINUITY-SEQUENCE value"),
                         }
                     }
                     "-X-DISCONTINUITY" => {
@@ -269,7 +268,7 @@ impl MediaPlaylist {
                         "EVENT" => playlist_type = PlaylistNature::Event,
                         "VOD" => playlist_type = PlaylistNature::VoD,
                         x => {
-                            Logger::warn(&format!("Unrecognized playlist type: {}", x));
+                            log_warn!("Unrecognized playlist type: {}", x);
                         }
                     },
                     "-X-PROGRAM-DATE-TIME" => {
@@ -327,7 +326,7 @@ impl MediaPlaylist {
                         }
                     }
                     "M3U" => {}
-                    x => Logger::debug(&format!("Unrecognized tag: \"{}\"", x)),
+                    x => log_debug!("Unrecognized tag: \"{}\"", x),
                 }
             } else if str_line.starts_with('#') {
                 continue;

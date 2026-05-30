@@ -7,8 +7,7 @@ use crate::{
         SourceBufferId, TimerId, TimerReason,
     },
     dispatcher::Dispatcher,
-    utils::url::Url,
-    Logger,
+    utils::{logger::*, url::Url},
 };
 
 /// Methods triggered on JavaScript events by the JavaScript code.
@@ -234,7 +233,7 @@ pub struct JsTimeRanges {
 impl JsTimeRanges {
     pub fn new(buffered: Vec<f64>) -> Self {
         if !buffered.len().is_multiple_of(2) {
-            Logger::error("Incorrect JsTimeRanges object");
+            log_error!("Incorrect JsTimeRanges object");
             Self { buffered: vec![] }
         } else {
             Self { buffered }

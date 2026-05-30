@@ -5,7 +5,7 @@ use super::{
         MediaPlaylistUrlLocation, MultivariantPlaylist, MultivariantPlaylistParsingError,
     },
 };
-use crate::{utils::url::Url, Logger};
+use crate::utils::{logger::*, url::Url};
 use std::{fmt, io};
 
 pub(crate) enum TopLevelPlaylist {
@@ -35,13 +35,13 @@ impl TopLevelPlaylist {
     pub(crate) fn parse(data: &[u8], url: Url) -> Result<Self, TopLevelPlaylistParsingError> {
         match classify_playlist(data) {
             PlaylistKind::Multivariant => {
-                Logger::info("Parser: this is a multivariant playlist, parsing...");
+                log_info!("Parser: this is a multivariant playlist, parsing...");
                 MultivariantPlaylist::parse(io::Cursor::new(data), url)
                     .map(Self::Multivariant)
                     .map_err(TopLevelPlaylistParsingError::Multivariant)
             }
             PlaylistKind::Media => {
-                Logger::info("Parser: this is a top-level media playlist, parsing...");
+                log_info!("Parser: this is a top-level media playlist, parsing...");
                 DirectMediaPlaylist::parse(data, url)
                     .map(Self::DirectMedia)
                     .map_err(TopLevelPlaylistParsingError::Media)

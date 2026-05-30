@@ -10,7 +10,10 @@ use super::{
         parse_substituted_comma_separated_list, parse_substituted_quoted_string,
     },
 };
-use crate::{bindings::MediaType, utils::url::Url, Logger};
+use crate::{
+    bindings::MediaType,
+    utils::{logger::*, url::Url},
+};
 use std::io::BufRead;
 
 /// Stucture representing the HLS concept of a "variant stream".
@@ -355,7 +358,7 @@ impl VariantStream {
                     {
                         average_bandwitdh = Some(val);
                     } else {
-                        Logger::warn("Unparsable AVERAGE-BANDWIDTH value");
+                        log_warn!("Unparsable AVERAGE-BANDWIDTH value");
                     }
                 }
                 "BANDWIDTH" => {
@@ -364,7 +367,7 @@ impl VariantStream {
                     {
                         bandwidth = Some(val);
                     } else {
-                        Logger::warn("Unparsable BANDWIDTH value");
+                        log_warn!("Unparsable BANDWIDTH value");
                     }
                 }
 
@@ -386,7 +389,7 @@ impl VariantStream {
                     {
                         frame_rate = Some(val);
                     } else {
-                        Logger::warn("Unparsable FRAME-RATE value");
+                        log_warn!("Unparsable FRAME-RATE value");
                     }
                 }
 
@@ -406,7 +409,7 @@ impl VariantStream {
                     {
                         program_id = Some(val);
                     } else {
-                        Logger::warn("Unparsable PROGRAM-ID value");
+                        log_warn!("Unparsable PROGRAM-ID value");
                     }
                 }
                 "RESOLUTION" => {
@@ -416,7 +419,7 @@ impl VariantStream {
                             width: res.width,
                         });
                     } else {
-                        Logger::warn("Unparsable RESOLUTION value");
+                        log_warn!("Unparsable RESOLUTION value");
                     }
                 }
                 "SCORE" => {
@@ -425,7 +428,7 @@ impl VariantStream {
                     {
                         score = Some(val);
                     } else {
-                        Logger::warn("Unparsable SCORE value");
+                        log_warn!("Unparsable SCORE value");
                     }
                 }
                 "STABLE-VARIANT-ID" => {

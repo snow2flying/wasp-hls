@@ -5,8 +5,7 @@ use crate::{
     },
     parser::{ByteRange, MediaSegmentInfo, SegmentTimeInfo},
     playlist_store::MediaPlaylistPermanentId,
-    utils::url::Url,
-    Logger,
+    utils::{logger::*, url::Url},
 };
 
 mod configuration;
@@ -409,7 +408,7 @@ impl Requester {
         };
         let url_ref = url.get_ref();
         let host_id = jsFetch(url_ref, None, None, timeout);
-        Logger::info(&format!("Req: Fetching playlist u:{url_ref}, id:{host_id}"));
+        log_info!("Req: Fetching playlist u:{url_ref}, id:{host_id}");
         self.pending_playlist_requests.push(PlaylistRequestInfo {
             host_id,
             url,
@@ -485,18 +484,18 @@ impl Requester {
         seg: &MediaSegmentInfo,
         caller_id: u32,
     ) {
-        Logger::info(&format!(
+        log_info!(
             "Req: Asking to request {} segment: t: {}, d: {}",
             media_type,
             seg.start(),
             seg.duration()
-        ));
+        );
         let lane_tag = RequestLaneTag::from_media_type(media_type);
         let time_info = Some(seg.time_info().clone());
         if self.can_start_request(seg.start()) {
             self.request_segment_now(seg.url(), seg.byte_range(), lane_tag, time_info, caller_id)
         } else {
-            Logger::debug("Req: pushing segment request to queue");
+            log_debug!("Req: pushing segment request to queue");
             self.segment_waiting_queue.push(WaitingSegmentInfo {
                 lane_tag,
                 url: seg.url().clone(),
@@ -594,11 +593,11 @@ impl Requester {
                     ),
                 }
             } else {
-                Logger::info(&format!("Req: Request to retry not found, id:{host_id}"));
+                log_info!("Req: Request to retry not found, id:{host_id}");
                 RetryResult::NotFound
             }
         } else {
-            Logger::info(&format!("Req: Cannot retry request id:{host_id}"));
+            log_info!("Req: Cannot retry request id:{host_id}");
             match self.end_pending_request(host_id) {
                 None => RetryResult::NotFound,
                 Some(req) => RetryResult::Failed {
@@ -763,10 +762,11 @@ impl Requester {
         let req = self.pending_segment_requests.get(pos).unwrap();
         let max_retry = self.config.segment_request_max_retry;
         if max_retry >= 0 && req.attempts_failed >= (max_retry as u32) {
-            Logger::info(&format!(
+            log_info!(
                 "Req: Too much attempts for segment request id:{} a:{}",
-                req.host_id, req.attempts_failed
-            ));
+                req.host_id,
+                req.attempts_failed
+            );
             let seg = self.pending_segment_requests.remove(pos);
             RetryResult::Failed {
                 request_type: FinishedRequestType::Segment(seg),
@@ -782,10 +782,12 @@ impl Requester {
                 self.config.segment_backoff_base,
                 self.config.segment_backoff_max,
             );
-            Logger::info(&format!(
+            log_info!(
                 "Req: Retrying segment request after timer id:{} d:{} a:{}",
-                req.host_id, retry_delay, req.attempts_failed
-            ));
+                req.host_id,
+                retry_delay,
+                req.attempts_failed
+            );
             let timer_id = jsTimer(retry_delay, TimerReason::RetryRequest);
             self.retry_timers.push((timer_id, req.host_id));
             let req = self.pending_segment_requests.get(pos).unwrap();
@@ -806,10 +808,11 @@ impl Requester {
     ) -> RetryResult<'_> {
         let req = self.pending_playlist_requests.get(pos).unwrap();
         if max_retry >= 0 && req.attempts_failed >= (max_retry as u32) {
-            Logger::info(&format!(
+            log_info!(
                 "Req: Too much attempts for playlist request id:{} a:{}",
-                req.host_id, req.attempts_failed
-            ));
+                req.host_id,
+                req.attempts_failed
+            );
             let pl = self.pending_playlist_requests.remove(pos);
             RetryResult::Failed {
                 request_type: FinishedRequestType::Playlist(pl),
@@ -831,10 +834,12 @@ impl Requester {
                 ),
             };
             let retry_delay = get_waiting_delay(req.attempts_failed, base, max);
-            Logger::info(&format!(
+            log_info!(
                 "Req: Retrying playlist request after timer id:{} d:{} a:{}",
-                req.host_id, retry_delay, req.attempts_failed
-            ));
+                req.host_id,
+                retry_delay,
+                req.attempts_failed
+            );
             let timer_id = jsTimer(retry_delay, TimerReason::RetryRequest);
             self.retry_timers.push((timer_id, req.host_id));
 
@@ -978,7 +983,7 @@ impl Requester {
             range_end,
             self.config.segment_request_timeout,
         );
-        Logger::lazy_debug(|| format!("Req: Performing segment request. u:{url_ref} id:{host_id}"));
+        log_debug!("Req: Performing segment request. u:{url_ref} id:{host_id}");
         self.pending_segment_requests.push(SegmentRequestInfo {
             host_id,
             lane_tag,
@@ -1007,7 +1012,7 @@ impl Requester {
 }
 
 fn log_segment_abort(seg: &impl RequesterSegmentInfo) {
-    Logger::lazy_info(|| {
+    log_info!(lazy: || {
         let lane_label = seg.lane_tag().label();
         if let (Some(start), Some(duration)) = (seg.start_time(), seg.duration()) {
             format!("Req: Aborting {lane_label} segment: t: {start}, d: {duration}")

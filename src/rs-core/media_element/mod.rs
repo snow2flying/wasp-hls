@@ -7,7 +7,7 @@ use crate::bindings::{
 };
 use crate::dispatcher::{JsMemoryBlob, JsTimeRanges, MediaObservation, MediaSourceReadyState};
 use crate::parser::SegmentTimeInfo;
-use crate::Logger;
+use crate::utils::logger::*;
 pub(crate) use source_buffers::{PushSegmentError, RemoveDataError};
 
 pub(crate) use self::segment_inventory::{BufferedChunk, SegmentQualityContext};
@@ -403,10 +403,7 @@ impl MediaElementReference {
                 }
                 if let Some(media_start) = response.media_start() {
                     let media_offset = media_start - metadata_start;
-                    Logger::info(&format!(
-                        "Setting media offset: {}",
-                        media_start - metadata_start,
-                    ));
+                    log_info!("Setting media offset: {}", media_start - metadata_start,);
                     self.media_offset = Some(media_offset);
                     jsSetMediaOffset(media_offset);
                     self.check_queued_seek();
@@ -520,7 +517,7 @@ impl MediaElementReference {
                 if !last_observation.ended() {
                     match buffer_gap {
                         None => {
-                            Logger::info("Starting rebuffering period due to no buffer gap");
+                            log_info!("Starting rebuffering period due to no buffer gap");
                             self.is_rebuffering = true;
                             jsStartRebuffering();
                         }
@@ -528,10 +525,7 @@ impl MediaElementReference {
                             let current_time = last_observation.current_time();
                             let duration = last_observation.duration();
                             if current_time + buffer_gap < duration - 0.001 {
-                                Logger::info(&format!(
-                                    "Starting rebuffering period. bg: {}",
-                                    buffer_gap
-                                ));
+                                log_info!("Starting rebuffering period. bg: {}", buffer_gap);
                                 self.is_rebuffering = true;
                                 jsStartRebuffering();
                             }
@@ -543,7 +537,7 @@ impl MediaElementReference {
                 let mut quit_rebuffering = false;
                 if let Some(buffer_gap) = buffer_gap {
                     if buffer_gap > self.min_buffer_time {
-                        Logger::info(&format!("Quitting rebuffering period. bg: {}", buffer_gap));
+                        log_info!("Quitting rebuffering period. bg: {}", buffer_gap);
                         quit_rebuffering = true;
                     } else {
                         let current_time = last_observation.current_time();
@@ -675,10 +669,7 @@ impl MediaElementReference {
     /// has been pushed.
     pub(crate) fn end_buffer(&mut self, media_type: MediaType) {
         match self.buffer_mut_for(media_type) {
-            None => Logger::warn(&format!(
-                "Asked to end a non existent {} buffer",
-                media_type
-            )),
+            None => log_warn!("Asked to end a non existent {} buffer", media_type),
             Some(sb) => {
                 sb.announce_last_segment_pushed();
             }
@@ -770,10 +761,7 @@ impl MediaElementReference {
         {
             if let Some(media_pos) = self.playlist_pos_to_media_pos(queued_seek) {
                 if should_perform_queued_seek(observation, media_pos) {
-                    Logger::info(&format!(
-                        "Perform awaited seek to {} ({})",
-                        queued_seek, media_pos
-                    ));
+                    log_info!("Perform awaited seek to {} ({})", queued_seek, media_pos);
                     jsSeek(media_pos);
                     self.queued_seek = None;
                     return true;

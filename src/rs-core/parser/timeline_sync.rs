@@ -1,5 +1,6 @@
+use crate::utils::logger::*;
+
 use super::MediaSegmentInfo;
-use crate::Logger;
 
 /// Extracted information from a parsed Media Playlist which can be useful for
 /// synchronization when parsing another media playlist.
@@ -141,10 +142,11 @@ impl TimelineReference {
             .iter()
             .find(|seg| seg.discontinuity_sequence == target_cc)?;
         let delta = ref_start - seg.start();
-        Logger::debug(&format!(
+        log_debug!(
             "Parser: aligning playlist using discontinuity sequence {} (diff:{})",
-            target_cc, delta
-        ));
+            target_cc,
+            delta
+        );
         Some(delta)
     }
 
@@ -198,19 +200,16 @@ impl TimelineReference {
             })
             .unwrap_or(0.);
         if date_difference.abs() > f64::max(60., total_duration) {
-            Logger::debug(&format!(
+            log_debug!(
                 "Parser: refusing PDT alignment without overlap ({} > {})",
                 date_difference.abs(),
                 total_duration
-            ));
+            );
             return None;
         }
 
         let delta = date_difference - (seg.start() - ref_anchor.start);
-        Logger::debug(&format!(
-            "Parser: aligning playlist using PDT (diff:{})",
-            delta
-        ));
+        log_debug!("Parser: aligning playlist using PDT (diff:{})", delta);
         Some(delta)
     }
 
@@ -221,19 +220,21 @@ impl TimelineReference {
 
         if let Some(ref_start) = self.start_for_sequence(new_first.sequence) {
             let offset = ref_start - new_first.start();
-            Logger::debug(&format!(
+            log_debug!(
                 "Parser: aligning playlist based on media sequence {} (diff:{})",
-                new_first.sequence, offset
-            ));
+                new_first.sequence,
+                offset
+            );
             return Some(offset);
         }
 
         if ref_last_sequence.wrapping_add(1) == new_first.sequence {
             let offset = ref_last_end - new_first.start();
-            Logger::debug(&format!(
+            log_debug!(
                 "Parser: aligning playlist based on first/last media sequence {} (diff:{})",
-                new_first.sequence, offset
-            ));
+                new_first.sequence,
+                offset
+            );
             return Some(offset);
         }
 

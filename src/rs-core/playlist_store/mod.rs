@@ -5,8 +5,7 @@ use crate::{
         AudioTrack, ExternalMediaInfo, MediaPlaylist, MediaPlaylistUpdateError, SegmentList,
         SegmentTimeInfo, TopLevelPlaylist, VariantStream,
     },
-    utils::url::Url,
-    Logger,
+    utils::{logger::*, url::Url},
 };
 use std::{cmp::Ordering, collections::HashMap, io::BufRead};
 
@@ -75,24 +74,21 @@ impl PlaylistStore {
         playlist: TopLevelPlaylist,
         initial_bandwidth: f64,
     ) -> Result<Self, PlaylistStoreError> {
-        Logger::debug(&format!(
-            "PS: Creating new PlaylistStore (bw: {initial_bandwidth})"
-        ));
+        log_debug!("PS: Creating new PlaylistStore (bw: {initial_bandwidth})");
         let (current_variant_id, current_audio_id, current_video_id) = match &playlist {
             TopLevelPlaylist::Multivariant(playlist) => {
                 let variants = playlist.all_variants();
 
-                let initial_variant = if let Some(variant_id) =
-                    best_variant_id(variants.iter(), initial_bandwidth)
-                {
-                    playlist.variant(variant_id).unwrap()
-                } else if let Some(variant_id) = fallback_variant_id(variants.iter()) {
-                    Logger::info("PS: Found no bandwidth-compatible variant amongst all variants");
-                    playlist.variant(variant_id).unwrap()
-                } else {
-                    Logger::error("PS: Found no variant in the given MultivariantPlaylist");
-                    return Err(PlaylistStoreError::NoInitialVariant);
-                };
+                let initial_variant =
+                    if let Some(variant_id) = best_variant_id(variants.iter(), initial_bandwidth) {
+                        playlist.variant(variant_id).unwrap()
+                    } else if let Some(variant_id) = fallback_variant_id(variants.iter()) {
+                        log_info!("PS: Found no bandwidth-compatible variant amongst all variants");
+                        playlist.variant(variant_id).unwrap()
+                    } else {
+                        log_error!("PS: Found no variant in the given MultivariantPlaylist");
+                        return Err(PlaylistStoreError::NoInitialVariant);
+                    };
 
                 let (current_audio_id, current_video_id) = Self::normalize_current_media_ids(
                     playlist.audio_media_playlist_id_for(initial_variant, None),
@@ -979,9 +975,7 @@ impl PlaylistStore {
             } else if let Some(id) =
                 fallback_variant_id(self.selectable_variants_for_curr_track().into_iter())
             {
-                Logger::info(
-                    "PS: Found no bandwidth-compatible variant amongst selectable variants",
-                );
+                log_info!("PS: Found no bandwidth-compatible variant amongst selectable variants");
                 id
             } else {
                 panic!("No variant to choose from. This should be impossible.");
@@ -1185,7 +1179,7 @@ impl PlaylistStore {
                 self.multivariant_support_resolved = false;
                 return Ok(MultivariantStartupStatus::VariantSwitchNeeded { variant_id });
             } else {
-                Logger::error("PS: No supported variant in the given MultivariantPlaylist");
+                log_error!("PS: No supported variant in the given MultivariantPlaylist");
                 return Err(PlaylistStoreError::NoSupportedVariant);
             }
         }
@@ -1196,9 +1190,9 @@ impl PlaylistStore {
         self.multivariant_support_resolved = is_multivariant_support_resolved;
 
         if is_multivariant_support_resolved {
-            Logger::info("PS: Support has been resolved for the current multivariant startup path");
+            log_info!("PS: Support has been resolved for the current multivariant startup path");
         } else {
-            Logger::info("PS: Current multivariant startup path still needs support resolution");
+            log_info!("PS: Current multivariant startup path still needs support resolution");
         }
         if is_multivariant_support_resolved {
             Ok(MultivariantStartupStatus::Ready)

@@ -8,8 +8,7 @@ use crate::{
     media_element::MediaElementReference,
     requester::{PlaylistFileType, Requester},
     segment_selector::NextSegmentSelectors,
-    utils::{logger, url::Url},
-    Logger,
+    utils::{logger::*, url::Url},
 };
 use std::convert::TryInto;
 use std::slice;
@@ -50,7 +49,7 @@ impl Dispatcher {
         starting_pos: Option<StartingPosition>,
         initial_audio_track_selection: Vec<InitialAudioTrackSelection>,
     ) {
-        Logger::info("load_content called");
+        log_info!("load_content called");
         self.stop();
         self.initial_audio_track_selection = initial_audio_track_selection
             .into_iter()
@@ -63,7 +62,7 @@ impl Dispatcher {
         let content_url = Url::new(content_url);
         self.requester
             .fetch_playlist(content_url, PlaylistFileType::TopLevelPlaylist);
-        Logger::info("Attaching MediaSource");
+        log_info!("Attaching MediaSource");
         if let Err(x) = self.media_element_ref.attach_media_source() {
             jsSendOtherError(
                 true,
@@ -318,7 +317,7 @@ pub extern "C" fn wasp_dispatcher_free(ptr: u32) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn wasp_set_logger_level(level: u32) {
-    Logger::set_logger_level(logger::LoggerLevel::from_u32(level));
+    set_log_level(LoggerLevel::from_u32(level));
 }
 
 #[unsafe(no_mangle)]

@@ -14,7 +14,7 @@ use super::{
     variant_stream::{VariantParsingError, VariantStream},
     AudioTrack, MediaTagType,
 };
-use crate::{utils::url::Url, Logger};
+use crate::utils::{logger::*, url::Url};
 use std::{
     collections::{HashMap, HashSet},
     error, fmt, io,
@@ -173,7 +173,7 @@ impl MultivariantPlaylist {
                             start = Some(st);
                         }
                         _ => {
-                            Logger::warn("Parser: Failed to parse `EXT-X-START` attribute");
+                            log_warn!("Parser: Failed to parse `EXT-X-START` attribute");
                         }
                     },
                     _ => {}

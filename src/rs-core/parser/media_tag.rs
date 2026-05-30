@@ -8,7 +8,7 @@ use super::{
     },
     MediaPlaylist,
 };
-use crate::{utils::url::Url, Logger};
+use crate::utils::{logger::*, url::Url};
 use std::io::BufRead;
 
 /// Structure describing a "Media tag" in the HLS Multivariant Playlist.
@@ -155,7 +155,7 @@ impl MediaTag {
                         "SUBTITLES" => typ = Some(MediaTagType::Subtitles),
                         "CLOSED-CAPTIONS" => typ = Some(MediaTagType::ClosedCaptions),
                         x => {
-                            Logger::warn(&format!("Unrecognized media type: {}", x));
+                            log_warn!("Unrecognized media type: {}", x);
                             typ = Some(MediaTagType::Other);
                         }
                     };
@@ -242,7 +242,7 @@ impl MediaTag {
                     .map_err(|_| MediaTagParsingError::Unknown)?;
                     match val.split('/').next().unwrap_or("").parse::<u32>() {
                         Ok(parsed_channels) => channels = Some(parsed_channels),
-                        Err(_) => Logger::warn("Unparsable CHANNELS value"),
+                        Err(_) => log_warn!("Unparsable CHANNELS value"),
                     }
                 }
                 "CHARACTERISTICS" => {
@@ -262,14 +262,14 @@ impl MediaTag {
                     let (parsed, _) = parse_enumerated_string(media_line, item.value_start_offset);
                     match parsed.parse::<u32>() {
                         Ok(val) => bit_depth = Some(val),
-                        Err(_) => Logger::warn("Unparsable BIT-DEPTH value"),
+                        Err(_) => log_warn!("Unparsable BIT-DEPTH value"),
                     }
                 }
                 "SAMPLE-RATE" => {
                     let (parsed, _) = parse_enumerated_string(media_line, item.value_start_offset);
                     match parsed.parse::<u32>() {
                         Ok(val) => sample_rate = Some(val),
-                        Err(_) => Logger::warn("Unparsable SAMPLE-RATE value"),
+                        Err(_) => log_warn!("Unparsable SAMPLE-RATE value"),
                     }
                 }
                 _ => {}

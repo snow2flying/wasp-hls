@@ -24,8 +24,7 @@ use crate::{
     requester::{
         FinishedRequestType, PlaylistFileType, PlaylistRequestInfo, RetryResult, SegmentRequestInfo,
     },
-    utils::url::Url,
-    Logger,
+    utils::{logger::*, url::Url},
 };
 
 mod startup;
@@ -46,7 +45,7 @@ impl Dispatcher {
     /// Completely stop playback of the current content if one and free all its associated
     /// resources.
     pub(super) fn stop_current_content(&mut self) {
-        Logger::info("Core: Stopping current content (if one) and resetting player");
+        log_info!("Core: Stopping current content (if one) and resetting player");
         self.requester.reset();
         self.segment_request_contexts.clear();
         jsStopObservingPlayback();
@@ -66,7 +65,7 @@ impl Dispatcher {
     pub(super) fn check_best_variant(&mut self) {
         if let Some(pl_store) = self.playlist_store.as_mut() {
             let bandwidth = self.adaptive_selector.get_estimate();
-            Logger::lazy_debug(|| format!("Core: New bandwidth estimate: {}", bandwidth));
+            log_debug!("Core: New bandwidth estimate: {}", bandwidth);
             let speed = self.media_element_ref.wanted_speed();
             let actually_used_bandwidth = if speed.is_finite() && speed > 0.0 {
                 bandwidth / speed
@@ -89,7 +88,7 @@ impl Dispatcher {
             let is_audio_track_distinct = pl_store.current_audio_track_id().is_some();
             match pl_store.lock_variant(variant_id) {
                 LockVariantResponse::NoVariantWithId => {
-                    Logger::warn("Core: Locked variant not found");
+                    log_warn!("Core: Locked variant not found");
                     jsSendOtherError(
                         false,
                         crate::bindings::OtherErrorCode::UnfoundLockedVariant,
@@ -144,7 +143,7 @@ impl Dispatcher {
                 self.requester.fetch_playlist(url.clone(), playlist_type);
             }
         } else {
-            Logger::error("Core: Cannot refresh Media Playlist: id not found");
+            log_error!("Core: Cannot refresh Media Playlist: id not found");
         }
     }
 
@@ -203,7 +202,7 @@ impl Dispatcher {
             Some(FinishedRequestType::Playlist(pl_info)) => {
                 self.on_playlist_fetch_success(pl_info, data.obtain(), final_url)
             }
-            None => Logger::warn("Core: Unknown request finished"),
+            None => log_warn!("Core: Unknown request finished"),
         }
     }
 
@@ -237,7 +236,7 @@ impl Dispatcher {
                         utils::is_stale_segment_request_context(self.playlist_store.as_ref(), ctxt)
                     })
                 {
-                    Logger::info(
+                    log_info!(
                         "Core: Ignoring terminal 404/410 for segment no longer in the live window",
                     );
                     if req_ctxt
@@ -331,7 +330,7 @@ impl Dispatcher {
             },
 
             RetryResult::NotFound => {
-                Logger::warn("Core: Request failed not found on the current Requester")
+                log_warn!("Core: Request failed not found on the current Requester")
             }
         }
     }
@@ -339,7 +338,7 @@ impl Dispatcher {
     /// Method to call when the `readyState` JS attribute of the linked `MediaSource` object
     /// changed, with that new state in argument.
     pub(super) fn on_media_source_state_change_core(&mut self, state: MediaSourceReadyState) {
-        Logger::lazy_info(|| format!("Core: MediaSource state changed: {:?}", state));
+        log_info!("Core: MediaSource state changed: {:?}", state);
         self.media_element_ref
             .update_media_source_ready_state(state);
         self.recheck_player_state();
@@ -397,12 +396,12 @@ impl Dispatcher {
                             x.last_buffered_start() < min_pos || x.last_buffered_end() > max_pos
                         });
                     if has_segments_to_delete {
-                        Logger::lazy_warn(|| {
-                            format!(
-                                "BufferFull error received for {}. Cleaning < {}, > {}.",
-                                mt, min_pos, max_pos
-                            )
-                        });
+                        log_warn!(
+                            "BufferFull error received for {}. Cleaning < {}, > {}.",
+                            mt,
+                            min_pos,
+                            max_pos
+                        );
                         if let (Ok(_), Ok(_)) = (
                             self.media_element_ref.remove_data(mt, 0., min_pos),
                             self.media_element_ref.remove_data(mt, max_pos, f64::MAX),
@@ -462,9 +461,7 @@ impl Dispatcher {
     /// Method to call when a new `MediaObservation` has been received.
     pub(super) fn on_observation(&mut self, observation: MediaObservation) {
         let reason = observation.reason();
-        Logger::lazy_debug(|| {
-            format!("Tick received: {:?} {}", reason, observation.current_time())
-        });
+        log_debug!("Tick received: {:?} {}", reason, observation.current_time());
         self.media_element_ref.on_observation(observation);
         match reason {
             PlaybackTickReason::Seeking => self.on_seek(),
@@ -512,7 +509,7 @@ impl Dispatcher {
         data: JsMemoryBlob,
     ) {
         let Some(playlist_store) = self.playlist_store.as_mut() else {
-            Logger::error("Core: asked to do segment inspection without having a playlist store");
+            log_error!("Core: asked to do segment inspection without having a playlist store",);
             return;
         };
 
@@ -585,10 +582,10 @@ impl Dispatcher {
             }
 
             PlaylistFileType::MediaPlaylist { id, media_type } => {
-                Logger::info(&format!(
+                log_info!(
                     "Media playlist loaded successfully: {}",
-                    final_url.get_ref()
-                ));
+                    final_url.get_ref(),
+                );
                 let refresh_interval = {
                     let Some(playlist_store) = self.playlist_store.as_mut() else {
                         jsSendOtherError(
@@ -622,7 +619,7 @@ impl Dispatcher {
     /// Method called once the top-level Playlist was loaded with success, with its response data
     /// and url as argument.
     fn on_top_level_playlist_loaded(&mut self, data: Vec<u8>, playlist_url: Url) {
-        Logger::info("Core: top-level playlist loaded");
+        log_info!("Core: top-level playlist loaded");
         match TopLevelPlaylist::parse(data.as_ref(), playlist_url) {
             Err(err) => {
                 let message = err.to_string();
@@ -644,7 +641,7 @@ impl Dispatcher {
                 self.stop_current_content();
             }
             Ok(pl) => {
-                Logger::info("Core: top-level playlist parsed successfully");
+                log_info!("Core: top-level playlist parsed successfully");
                 let estimate = self.adaptive_selector.get_estimate();
                 match PlaylistStore::try_new(pl, estimate) {
                     Ok(mut pl_store) => {
@@ -697,7 +694,7 @@ impl Dispatcher {
         if let Some(duration) = playlist_store.segment_target_duration() {
             let mut min_buffer_time = f64::max(3., duration - 1.);
             min_buffer_time = f64::min(8., min_buffer_time);
-            Logger::lazy_debug(|| format!("Core: Updating min_buffer_time: {min_buffer_time}"));
+            log_debug!("Core: Updating min_buffer_time: {min_buffer_time}");
             self.media_element_ref
                 .update_min_buffer_time(min_buffer_time);
         }
@@ -777,12 +774,12 @@ impl Dispatcher {
             if next_range_start - playable_until >= 0.
                 && !self.requester.has_pending_segment_before(next_range_start)
             {
-                Logger::lazy_warn(|| {
-                    format!(
-                        "Core: Jumping over a browser buffer hole (p:{}, e:{}, n:{})",
-                        wanted_pos, playable_until, next_range_start
-                    )
-                });
+                log_warn!(
+                    "Core: Jumping over a browser buffer hole (p:{}, e:{}, n:{})",
+                    wanted_pos,
+                    playable_until,
+                    next_range_start
+                );
                 self.media_element_ref.seek(next_range_start + 0.01);
             }
         }
@@ -830,32 +827,24 @@ impl Dispatcher {
                             .requester
                             .is_requesting_segment(mt, i.url(), i.byte_range())
                         {
-                            Logger::lazy_debug(|| {
-                                format!(
-                                    "Core: {mt} init segment request not needed anymore, abort."
-                                )
-                            });
+                            log_debug!(
+                                "Core: {mt} init segment request not needed anymore, abort."
+                            );
                             self.abort_segment_requests_with_type(mt);
                         } else {
-                            Logger::lazy_debug(|| {
-                                format!("Core: {mt} init segment request still needed.")
-                            });
+                            log_debug!("Core: {mt} init segment request still needed.");
                         }
                     } else if let Some(seg) = needed_segment.media_segment() {
                         if !self
                             .requester
                             .is_requesting_segment(mt, seg.url(), seg.byte_range())
                         {
-                            Logger::lazy_debug(|| {
-                                format!(
-                                    "Core: {mt} media segment request not needed anymore, abort."
-                                )
-                            });
+                            log_debug!(
+                                "Core: {mt} media segment request not needed anymore, abort."
+                            );
                             self.abort_segment_requests_with_type(mt);
                         } else {
-                            Logger::lazy_debug(|| {
-                                format!("Core: {mt} media segment request still needed.")
-                            });
+                            log_debug!("Core: {mt} media segment request still needed.");
                         }
                     } else {
                         self.abort_segment_requests_with_type(mt);
@@ -937,7 +926,7 @@ impl Dispatcher {
         }
 
         for mt in changed_media_types.iter().copied() {
-            Logger::lazy_info(|| format!("Core: {} MediaPlaylist changed", mt));
+            log_info!("Core: {} MediaPlaylist changed", mt);
             self.ready_probe_segments.clear_media_type(mt);
 
             if abort_prev {
@@ -945,9 +934,7 @@ impl Dispatcher {
             }
             if flush {
                 if let Err(e) = self.media_element_ref.flush(mt) {
-                    Logger::lazy_warn(|| {
-                        format!("Could not remove data from the previous {mt} buffer: {}", e)
-                    });
+                    log_warn!("Could not remove data from the previous {mt} buffer: {}", e);
                 }
                 self.segment_selectors
                     .get_mut(mt)
@@ -966,7 +953,7 @@ impl Dispatcher {
 
             if let Some((id, url)) = playlist_to_fetch {
                 use PlaylistFileType::*;
-                Logger::debug("Core: Media changed, requesting its media playlist");
+                log_debug!("Core: Media changed, requesting its media playlist");
                 let playlist_type = MediaPlaylist { id, media_type: mt };
                 if !self.requester.is_requesting_playlist(&url, &playlist_type) {
                     self.requester.fetch_playlist(url, playlist_type);
@@ -988,7 +975,7 @@ impl Dispatcher {
         resource_size: u32,
         duration_ms: f64,
     ) {
-        Logger::lazy_info(|| {
+        log_info!(lazy: || {
             let lane_label = segment_req.lane_tag().label();
             match segment_req.time_info() {
                 None => format!("Loaded {} init segment", lane_label),
@@ -1006,7 +993,7 @@ impl Dispatcher {
 
         let media_type = segment_req.media_type();
         let Some(req_ctxt) = self.segment_request_contexts.take(segment_req.id()) else {
-            Logger::warn("Loaded segment with unknown pending context.");
+            log_warn!("Loaded segment with unknown pending context.");
             return;
         };
 
@@ -1021,7 +1008,7 @@ impl Dispatcher {
                 ..
             } => {
                 if Some(req_media_type) != media_type {
-                    Logger::warn("Loaded media segment with mismatched media type context.");
+                    log_warn!("Loaded media segment with mismatched media type context.");
                 }
                 self.on_media_segment_loaded(SegmentPushMetadata {
                     data: result,
@@ -1038,7 +1025,7 @@ impl Dispatcher {
                 init_segment_id,
             } => {
                 if Some(req_media_type) != media_type {
-                    Logger::warn("Loaded init segment with mismatched media type context.");
+                    log_warn!("Loaded init segment with mismatched media type context.");
                 }
                 self.on_init_segment_loaded(result, req_media_type, init_segment_id);
             }
@@ -1078,24 +1065,23 @@ impl Dispatcher {
             Err(x) => {
                 let media_type = x.media_type();
                 let message = x.to_string();
-                Logger::lazy_warn(|| {
-                    format!(
-                        "Core: {} media segment push failed start:{} end:{} err:{}",
-                        media_type, segment_start, segment_end, message
-                    )
-                });
+                log_warn!(
+                    "Core: {} media segment push failed start:{} end:{} err:{}",
+                    media_type,
+                    segment_start,
+                    segment_end,
+                    message
+                );
                 jsSendSegmentParsingError(true, x.into(), Some(media_type), &message);
                 self.stop_current_content();
             }
             Ok(()) => {
                 if utils::was_last_segment(self.playlist_store.as_ref(), media_type, segment_start)
                 {
-                    Logger::lazy_info(|| {
-                        format!(
-                            "Last {} segment request finished, declaring its buffer's end",
-                            media_type
-                        )
-                    });
+                    log_info!(
+                        "Last {} segment request finished, declaring its buffer's end",
+                        media_type
+                    );
                     self.media_element_ref.end_buffer(media_type);
                 }
             }
@@ -1107,12 +1093,12 @@ impl Dispatcher {
             Err(x) => {
                 let media_type = x.media_type();
                 let message = x.to_string();
-                Logger::lazy_warn(|| {
-                    format!(
-                        "Core: {} init segment push failed id:{} err:{}",
-                        media_type, init_id, message
-                    )
-                });
+                log_warn!(
+                    "Core: {} init segment push failed id:{} err:{}",
+                    media_type,
+                    init_id,
+                    message
+                );
                 jsSendSegmentParsingError(true, x.into(), Some(media_type), &message);
                 self.stop_current_content();
             }
@@ -1156,7 +1142,7 @@ fn sync_media_source_duration(playlist_store: &PlaylistStore) {
         if let Some(duration) = playlist_store.current_estimated_duration() {
             let _ = jsSetMediaSourceDuration(duration);
         } else {
-            Logger::warn("Core: Unknown finalized content duration");
+            log_warn!("Core: Unknown finalized content duration");
         }
     } else {
         let _ = jsSetMediaSourceDuration(u32::MAX as f64);

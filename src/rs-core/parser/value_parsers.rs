@@ -1,7 +1,8 @@
+use crate::utils::logger::log_warn;
+
 use super::attribute_list::{
     find_attribute_end, parse_enumerated_string, skip_attribute_list_value,
 };
-use crate::Logger;
 use std::num::{ParseFloatError, ParseIntError};
 
 /// Parse decimal integer value as defined by the HLS specification:
@@ -297,7 +298,7 @@ pub(super) fn parse_start_attribute(
         }
         match start_line[offset..].find('=') {
             None => {
-                Logger::warn("Attribute Name not followed by equal sign");
+                log_warn!("Attribute Name not followed by equal sign");
                 break;
             }
             Some(idx) => match &start_line[offset..offset + idx] {

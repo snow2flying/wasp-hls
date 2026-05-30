@@ -7,7 +7,7 @@ use crate::bindings::{
 };
 use crate::dispatcher::JsMemoryBlob;
 use crate::parser::SegmentTimeInfo;
-use crate::Logger;
+use crate::utils::logger::*;
 
 /// Abstraction over the Media Source Extension's `SourceBuffer` concept.
 ///
@@ -85,7 +85,7 @@ impl SourceBuffer {
     ///
     /// * `mime_type` - Mime-type to use when creating this `SourceBuffer` on the JavaScript-side.
     pub(super) fn new(media_type: MediaType, typ: String) -> Result<Self, AddSourceBufferError> {
-        Logger::info(&format!("Creating new {} SourceBuffer", media_type));
+        log_info!("Creating new {} SourceBuffer", media_type);
         match jsAddSourceBuffer(media_type, &typ) {
             Ok(x) => Ok(Self {
                 id: x,
@@ -140,12 +140,11 @@ impl SourceBuffer {
         self.reset_transmuxer_on_next_segment = true;
         self.queue
             .push_back(SourceBufferQueueElement::PushInit(segment_data.id()));
-        Logger::lazy_debug(|| {
-            format!(
-                "Buffer {} ({}): Pushing initialization segment",
-                self.id, self.typ
-            )
-        });
+        log_debug!(
+            "Buffer {} ({}): Pushing initialization segment",
+            self.id,
+            self.typ
+        );
         match jsAppendBuffer(self.id, segment_data.id(), &SegmentHints::new(0, 1, true)) {
             Err(err) => Err(PushSegmentError::from_js_append_buffer_error(
                 self.media_type,
@@ -202,12 +201,12 @@ impl SourceBuffer {
         self.reset_transmuxer_on_next_segment = false;
 
         let id = data.id;
-        Logger::lazy_debug(|| {
-            format!(
-                "Buffer {} ({}): Pushing seq {}",
-                self.id, self.typ, data.sequence_number
-            )
-        });
+        log_debug!(
+            "Buffer {} ({}): Pushing seq {}",
+            self.id,
+            self.typ,
+            data.sequence_number
+        );
         self.queue
             .push_back(SourceBufferQueueElement::PushMedia { data, id });
         let parsed = match jsAppendBuffer(self.id, segment_data, &segment_hints) {
@@ -245,12 +244,13 @@ impl SourceBuffer {
         self.was_used = true;
         self.queue
             .push_back(SourceBufferQueueElement::Remove { start, end });
-        Logger::lazy_debug(|| {
-            format!(
-                "Buffer {} ({}): Removing {} {}",
-                self.id, self.typ, start, end
-            )
-        });
+        log_debug!(
+            "Buffer {} ({}): Removing {} {}",
+            self.id,
+            self.typ,
+            start,
+            end
+        );
         let _ = jsRemoveBuffer(self.id, start, end);
     }
 
@@ -263,7 +263,7 @@ impl SourceBuffer {
         self.last_pushed_segment_info = None;
         self.reset_transmuxer_on_next_segment = true;
         self.queue.push_back(SourceBufferQueueElement::Emptying);
-        Logger::lazy_debug(|| format!("Buffer {} ({}): emptying", self.id, self.typ));
+        log_debug!("Buffer {} ({}): emptying", self.id, self.typ);
         let _ = jsRemoveBuffer(self.id, 0., f64::INFINITY);
     }
 
@@ -274,7 +274,7 @@ impl SourceBuffer {
     /// operations are cancelled, such as when one of them fails.
     /// This method allows to empty that SourceBuffer's queue in such situations.
     pub(super) fn clear_queue(&mut self) {
-        Logger::lazy_info(|| format!("Buffer {} ({}): clearing queue.", self.id, self.typ));
+        log_info!("Buffer {} ({}): clearing queue.", self.id, self.typ);
         self.queue.clear();
     }
 
@@ -635,25 +635,25 @@ fn build_segment_hints(
 
     let (start_dts, start_dts_timescale) = if reset_transmuxer {
         if let Some(base_dts_hint) = base_dts_hint {
-            Logger::debug("Buffer: using base dts hint");
+            log_debug!("Buffer: using base dts hint");
             (base_dts_hint.value(), base_dts_hint.timescale())
         } else {
-            Logger::debug("Buffer: determine dts hint from playlist time");
+            log_debug!("Buffer: determine dts hint from playlist time");
             (playlist_start, TIMESCALE)
         }
     } else {
         // just assume continuity
         match prev_segment_end {
             Some(last_end) => {
-                Logger::debug("Buffer: determine dts hint as last segment end dts");
+                log_debug!("Buffer: determine dts hint as last segment end dts");
                 (last_end.value(), last_end.timescale())
             }
             None => {
                 if let Some(base_dts_hint) = base_dts_hint {
-                    Logger::debug("Buffer: using base dts hint");
+                    log_debug!("Buffer: using base dts hint");
                     (base_dts_hint.value(), base_dts_hint.timescale())
                 } else {
-                    Logger::debug("Buffer: determine dts hint from playlist time");
+                    log_debug!("Buffer: determine dts hint from playlist time");
                     (playlist_start, TIMESCALE)
                 }
             }
