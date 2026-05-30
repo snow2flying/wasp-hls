@@ -48,7 +48,13 @@ export function runTestWorkerBootstrap(config) {
       return;
     }
     try {
-      channel.postMessage(event);
+      channel.postMessage({
+        ...event,
+        timestampMs:
+          typeof performance?.now === "function"
+            ? performance.now()
+            : Date.now(),
+      });
     } catch (_) {
       // Best effort telemetry only.
     }
@@ -209,6 +215,8 @@ export function runTestWorkerBootstrap(config) {
             actionType: action.type,
             attempt,
             status: response.status,
+            finalUrl: response.url || url,
+            redirected: response.redirected,
           });
           return response;
         }
@@ -223,6 +231,8 @@ export function runTestWorkerBootstrap(config) {
             actionType: action.type,
             attempt,
             status: response.status,
+            finalUrl: response.url || url,
+            redirected: response.redirected,
           });
           return response;
         }

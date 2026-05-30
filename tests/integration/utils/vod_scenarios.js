@@ -6,8 +6,10 @@ function getBaseUrl() {
 
 const SCENARIO_ENTRY_FILES = {
   "fmp4-direct-media": "playlist.m3u8",
+  "fmp4-direct-media-redirect": "playlist.m3u8",
   "mpegts-direct-media": "playlist.m3u8",
   "fmp4-multivariant-no-codecs": "master.m3u8",
+  "fmp4-multivariant-master-redirect": "master.m3u8",
   "mpegts-multivariant-no-codecs": "master.m3u8",
   "fmp4-player-api": "playlist.m3u8",
   "fmp4-direct-media-endlist-without-playlist-type": "playlist.m3u8",

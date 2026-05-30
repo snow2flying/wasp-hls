@@ -582,7 +582,14 @@ function handleVodScenarioRequest(
       if (typeof response.contentType === "string") {
         res.setHeader("Content-Type", response.contentType);
       }
-      answerWithCORS(res, 200, response.body);
+      if (response.headers !== undefined) {
+        for (const [headerName, headerValue] of Object.entries(
+          response.headers,
+        )) {
+          res.setHeader(headerName, headerValue);
+        }
+      }
+      answerWithCORS(res, response.status ?? 200, response.body);
     },
     (err) => {
       console.error(

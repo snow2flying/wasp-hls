@@ -113,6 +113,24 @@ const SCENARIOS = {
       );
     },
   },
+  "fmp4-direct-media-redirect": {
+    entryPath: "playlist.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath) {
+      if (relativePath === "playlist.m3u8") {
+        return createRedirectResponse("redirected/playlist.m3u8");
+      }
+      if (relativePath === "redirected/playlist.m3u8") {
+        return createRelativeMediaPlaylistResponse(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+        );
+      }
+      return await readGeneratedRecipeAssetResponse(
+        "fmp4-muxed-av",
+        stripPrefix(relativePath, "redirected/"),
+      );
+    },
+  },
   "mpegts-direct-media": {
     entryPath: "playlist.m3u8",
     recipeId: "mpegts-muxed-av",
@@ -148,6 +166,35 @@ const SCENARIOS = {
         );
       }
       return null;
+    },
+  },
+  "fmp4-multivariant-master-redirect": {
+    entryPath: "master.m3u8",
+    recipeId: "fmp4-muxed-av",
+    async getFile(relativePath) {
+      if (relativePath === "master.m3u8") {
+        return createRedirectResponse("redirected/master.m3u8");
+      }
+      if (relativePath === "redirected/master.m3u8") {
+        return {
+          body:
+            "#EXTM3U\n" +
+            "#EXT-X-VERSION:7\n" +
+            "#EXT-X-INDEPENDENT-SEGMENTS\n" +
+            "#EXT-X-STREAM-INF:BANDWIDTH=1900000,RESOLUTION=960x540\n" +
+            "variant.m3u8\n",
+          contentType: CONTENT_TYPE_M3U8,
+        };
+      }
+      if (relativePath === "redirected/variant.m3u8") {
+        return createRelativeMediaPlaylistResponse(
+          await readGeneratedMediaPlaylist("fmp4-muxed-av"),
+        );
+      }
+      return await readGeneratedRecipeAssetResponse(
+        "fmp4-muxed-av",
+        stripPrefix(relativePath, "redirected/"),
+      );
     },
   },
   "mpegts-multivariant-no-codecs": {
@@ -964,12 +1011,69 @@ function createMediaPlaylistResponse(playlistText, context) {
   };
 }
 
+function createRelativeMediaPlaylistResponse(playlistText) {
+  return {
+    body: playlistText,
+    contentType: CONTENT_TYPE_M3U8,
+  };
+}
+
+function createRedirectResponse(location) {
+  return {
+    status: 302,
+    headers: {
+      Location: location,
+    },
+    body: "",
+  };
+}
+
+async function readGeneratedRecipeAssetResponse(recipeId, relativePath) {
+  if (relativePath === null) {
+    return null;
+  }
+  const outputDir = getVodRecipeOutputDir(recipeId);
+  if (outputDir === null) {
+    return null;
+  }
+  const filePath = path.join(outputDir, relativePath);
+  if (!filePath.startsWith(outputDir + path.sep) && filePath !== outputDir) {
+    return null;
+  }
+  try {
+    const body = await fs.promises.readFile(filePath);
+    return {
+      body,
+      contentType: getMimeTypeForFilePath(filePath),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function injectExtXStart(playlistText, startTagLine) {
   const lines = playlistText.split("\n");
   if (lines[0]?.trim() !== "#EXTM3U") {
     throw new Error("Unexpected playlist format: missing #EXTM3U header");
   }
   return [lines[0], startTagLine, ...lines.slice(1)].join("\n");
+}
+
+function getMimeTypeForFilePath(filePath) {
+  switch (path.extname(filePath).slice(1)) {
+    case "m3u8":
+      return CONTENT_TYPE_M3U8;
+    case "mp4":
+      return "video/mp4";
+    case "m4s":
+      return "video/iso.segment";
+    case "ts":
+      return "video/mp2t";
+    case "aac":
+      return "audio/aac";
+    default:
+      return "application/octet-stream";
+  }
 }
 
 function injectProgramDateTime(playlistText, iso8601DateTime) {
@@ -1165,4 +1269,8 @@ function normalizeScenarioRelativePath(relativePath) {
     return null;
   }
   return normalizedPath;
+}
+
+function stripPrefix(value, prefix) {
+  return value.startsWith(prefix) ? value.substring(prefix.length) : null;
 }
