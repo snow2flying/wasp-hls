@@ -13,33 +13,13 @@
  *
  * - orchestrating tests (how/when tests run)
  *
- * It was born out of frustration of `vitest` and its dependencies breaking
- * at every new version on my machine, when what we want to do is relatively
- * simple and understood by us.
- *
- * So even if `vitest`-compatibility for those tests is still maintained, this
- * library acts as a simpler alternative that's much easier to hack around, and
- * allow me to just run my tests locally without too much maintainance. It is
- * basically a backup runner in the (frequent) occurence where vitest fails.
- *
  * One of the other focus of this lib is simplicity: no JS magic, no mocking
  * utils, we just implement what we need (`describe` / `it` / `beforeEach` etc.)
  * in the expected manner.
  *
  * ## How to use it
  *
- * First, the tests that are run needs to rely on `./simple-test-lib.mjs`
- * instead of `vitest`.
- * This has been written to be a drop-in so you should theoretically just be
- * able to rewrite:
- * ```js
- * import { describe, afterEach, it, expect } from "vitest";
- * ````
- * into:
- * ```js
- * import { describe, afterEach, it, expect } from "../simple-test-lib.js";
- * ````
- * (so just replacing the path) in most cases.
+ * First, the tests that are run needs to rely on `./simple-test-lib.mjs`.
  *
  * Then you can run this script to run those tests on a local browser.
  * See --help flag to see usage.
@@ -48,13 +28,12 @@
 /* eslint-env node */
 
 import { ChildProcess } from "child_process";
-import { spawn } from "child_process";
 import { createServer } from "http";
 import * as path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import { build as esbuild } from "esbuild";
-import getChromeCmd from "../../scripts/get_chrome_cmd.mjs";
-import getFirefoxCmd from "../../scripts/get_firefox_cmd.mjs";
+import runChrome from "../../scripts/run_chrome.mjs";
+import runFirefox from "../../scripts/run_firefox.mjs";
 import launchStaticServer from "../../scripts/launch_static_server.mjs";
 import createContentServer from "../contents/server.mjs";
 
@@ -544,73 +523,6 @@ async function createTestBundle(inputFile, contentServerPort, options) {
   } catch (err) {
     throw new Error(`Build failed: ${err}`);
   }
-}
-
-async function runChrome(
-  url,
-  { headless = true, enableAutoPlay = true, memoryTools = false } = {},
-) {
-  const chromePath =
-    process.env.WASP_HLS_CHROME_BINARY ??
-    process.env.CHROME_PATH ??
-    (await getChromeCmd());
-  if (chromePath == null) {
-    throw new Error("Could not find a Chrome/Chromium executable.");
-  }
-  const args = [
-    ...(headless ? ["--headless=new"] : []),
-    ...(enableAutoPlay ? ["--autoplay-policy=no-user-gesture-required"] : []),
-    ...(memoryTools
-      ? ["--enable-precise-memory-info", "--js-flags=--expose-gc"]
-      : []),
-    "--disable-background-networking",
-    "--disable-breakpad",
-    "--disable-component-update",
-    "--disable-dev-shm-usage",
-    "--disable-renderer-backgrounding",
-    "--mute-audio",
-    "--no-first-run",
-    "--no-default-browser-check",
-    ...(process.platform === "linux" ? ["--no-sandbox"] : []),
-    url,
-  ];
-  return spawnBrowser(chromePath, args);
-}
-
-async function runFirefox(
-  url,
-  { headless = true, enableAutoPlay = true } = {},
-) {
-  const firefoxPath =
-    process.env.WASP_HLS_FIREFOX_BINARY ??
-    process.env.FIREFOX_PATH ??
-    (await getFirefoxCmd());
-  if (firefoxPath == null) {
-    throw new Error("Could not find a Firefox executable.");
-  }
-  const args = [
-    ...(headless ? ["-headless"] : []),
-    ...(enableAutoPlay
-      ? [
-          "--setpref",
-          "media.autoplay.default=0",
-          "--setpref",
-          "media.autoplay.block-webaudio=false",
-        ]
-      : []),
-    url,
-  ];
-  return spawnBrowser(firefoxPath, args);
-}
-
-function spawnBrowser(binary, args) {
-  const browserProcess = spawn(binary, args, {
-    stdio: "ignore",
-  });
-  browserProcess.once("error", () => {
-    browserProcess.kill("SIGKILL");
-  });
-  return browserProcess;
 }
 
 /**
