@@ -36,6 +36,7 @@ import runChrome from "../../scripts/run_chrome.mjs";
 import runFirefox from "../../scripts/run_firefox.mjs";
 import launchStaticServer from "../../scripts/launch_static_server.mjs";
 import createContentServer from "../contents/server.mjs";
+import { ensureDefaultVodFixtures } from "../contents/vod_fixtures.mjs";
 
 /**
  * Path to the directory this script is currently in.
@@ -209,6 +210,7 @@ async function initializeServers({
       onError,
     });
     await Promise.all([
+      ensureDefaultVodFixtures(),
       contentServer.listeningPromise,
       staticServer.listeningPromise,
       resultServer.listeningPromise,
