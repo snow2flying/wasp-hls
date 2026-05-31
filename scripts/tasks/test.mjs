@@ -83,12 +83,24 @@ export async function testIntegration(root, { browser, filters, watch }) {
  * @param {{ browser?: string, filters: string[], watch: boolean }} options
  */
 export async function testMemory(root, { browser, filters, watch }) {
-  await testBrowserSuite(root, {
-    browser,
-    filters,
-    suite: "memory",
-    watch,
-  });
+  if (watch) {
+    throw new Error("Memory tests do not support watch mode.");
+  }
+  const memoryTestFile = "tests/memory/index.test.js";
+  if (
+    filters.length > 0 &&
+    !filters.some((filter) => memoryTestFile.includes(filter))
+  ) {
+    throw new Error("No memory test files matched the requested filters.");
+  }
+
+  reportStep("TEST", "running browser memory tests...");
+  const args = ["tests/testing-lib/simple-test-runner.mjs"];
+  if (browser != null) {
+    args.push("--browser", browser);
+  }
+  args.push(memoryTestFile);
+  await exec(NODE, args, { cwd: root });
 }
 
 /**

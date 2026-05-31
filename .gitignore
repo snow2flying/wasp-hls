@@ -8,6 +8,8 @@
 !/build/logo-white.png
 !/build/favicon.png
 
+/tests/testing-lib/simple-test-bundle.js
+
 /localhost.crt
 /localhost.key
 

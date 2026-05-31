@@ -6,7 +6,7 @@ import {
   describe,
   expect,
   it,
-} from "vitest";
+} from "../testing-lib/simple-test-lib.js";
 import WaspHlsPlayer from "../../build/es6/ts-main/index.js";
 import EmbeddedWasm from "../../build/embedded/wasm.js";
 import {
@@ -19,15 +19,13 @@ import {
   stopLivePackager,
   waitForPackagerReady,
 } from "../utils/live_packager.js";
-import {
-  waitForLoadedState,
-  waitForPlayerEvent,
-} from "../utils/player_test_tools.js";
+import { waitForLoadedState } from "../utils/player_test_tools.js";
 import sleep from "../utils/sleep.js";
 import { getVodScenarioUrl } from "../utils/vod_scenarios.js";
 
 const MEMORY_VOD_SCENARIO = "fmp4-multivariant-alt-audio";
 const MEASUREMENT_SETTLE_MS = 4000;
+const PLAYBACK_PROGRESS_TIMEOUT_MS = 90_000;
 const LOAD_PLATEAU_CONFIG = {
   totalIterations: 120,
   batchSize: 12,
@@ -48,6 +46,8 @@ describe("Memory tests", () => {
   let lastPlayerError = null;
 
   beforeAll(() => {
+    videoElement.muted = true;
+    videoElement.playsInline = true;
     document.body.appendChild(videoElement);
   });
 
@@ -81,10 +81,7 @@ describe("Memory tests", () => {
 
   it(
     "should not have a sensible memory leak after playing a content",
-    {
-      timeout: 22.5 * 60 * 1000,
-      retry: 2,
-    },
+    { timeout: 22.5 * 60 * 1000, retry: 2 },
     async function () {
       await assertMemoryApisAvailable(workerHandle.telemetry);
       const initialMemory = await takeMemoryMeasurement(workerHandle.telemetry);
@@ -92,12 +89,16 @@ describe("Memory tests", () => {
       await loadAndWaitUntilPlayable(
         player,
         videoElement,
-        MEMORY_VOD_SCENARIO,
+        getVodScenarioUrl(MEMORY_VOD_SCENARIO),
         () => lastPlayerError,
       );
       player.setSpeed(4);
       await player.resume();
-      await waitForPlayerEvent(player, "ended");
+      await waitForPlaybackProgress(
+        videoElement,
+        8,
+        PLAYBACK_PROGRESS_TIMEOUT_MS,
+      );
 
       player.stop();
       await sleep(MEASUREMENT_SETTLE_MS);
@@ -113,10 +114,7 @@ describe("Memory tests", () => {
 
   it(
     "should not have a sensible memory leak after 1000 LOADED states and adaptive streaming",
-    {
-      timeout: 15 * 60 * 1000,
-      retry: 2,
-    },
+    { timeout: 15 * 60 * 1000, retry: 2 },
     async function () {
       await assertMemoryApisAvailable(workerHandle.telemetry);
       const initialMemory = await takeMemoryMeasurement(workerHandle.telemetry);
@@ -125,7 +123,7 @@ describe("Memory tests", () => {
         await loadAndWaitUntilPlayable(
           player,
           videoElement,
-          MEMORY_VOD_SCENARIO,
+          getVodScenarioUrl(MEMORY_VOD_SCENARIO),
           () => lastPlayerError,
         );
         player.stop();
@@ -144,10 +142,7 @@ describe("Memory tests", () => {
 
   it(
     "should stabilize after repeated LOADED states and adaptive streaming",
-    {
-      timeout: 22.5 * 60 * 1000,
-      retry: 2,
-    },
+    { timeout: 22.5 * 60 * 1000, retry: 2 },
     async function () {
       await assertMemoryApisAvailable(workerHandle.telemetry);
       const initialMemory = await takeMemoryMeasurement(workerHandle.telemetry);
@@ -160,7 +155,7 @@ describe("Memory tests", () => {
           await loadAndWaitUntilPlayable(
             player,
             videoElement,
-            MEMORY_VOD_SCENARIO,
+            getVodScenarioUrl(MEMORY_VOD_SCENARIO),
             () => lastPlayerError,
           );
           player.stop();
@@ -171,10 +166,7 @@ describe("Memory tests", () => {
 
   it(
     "should not have a sensible memory leak after 500 player instances",
-    {
-      timeout: 45 * 60 * 1000,
-      retry: 2,
-    },
+    { timeout: 45 * 60 * 1000, retry: 2 },
     async function () {
       await assertMemoryApisAvailable(workerHandle.telemetry);
       const initialMemory = await takeMemoryMeasurement(workerHandle.telemetry);
@@ -198,7 +190,7 @@ describe("Memory tests", () => {
         await loadAndWaitUntilPlayable(
           iterationPlayer,
           videoElement,
-          MEMORY_VOD_SCENARIO,
+          getVodScenarioUrl(MEMORY_VOD_SCENARIO),
           () => lastPlayerError,
         );
         iterationPlayer.dispose();
@@ -224,10 +216,7 @@ describe("Memory tests", () => {
 
   it(
     "should stabilize after repeated player instance disposal",
-    {
-      timeout: 45 * 60 * 1000,
-      retry: 2,
-    },
+    { timeout: 45 * 60 * 1000, retry: 2 },
     async function () {
       await assertMemoryApisAvailable(workerHandle.telemetry);
       const initialMemory = await takeMemoryMeasurement(workerHandle.telemetry);
@@ -270,7 +259,7 @@ describe("Memory tests", () => {
           await loadAndWaitUntilPlayable(
             iterationPlayer,
             videoElement,
-            MEMORY_VOD_SCENARIO,
+            getVodScenarioUrl(MEMORY_VOD_SCENARIO),
             () => lastPlayerError,
           );
           iterationPlayer.dispose();
@@ -289,10 +278,7 @@ describe("Memory tests", () => {
 
   it(
     "should not have a sensible memory leak after many video quality switches",
-    {
-      timeout: 45 * 60 * 1000,
-      retry: 2,
-    },
+    { timeout: 45 * 60 * 1000, retry: 2 },
     async function () {
       await assertMemoryApisAvailable(workerHandle.telemetry);
       const maxIterations = 1000;
@@ -301,7 +287,7 @@ describe("Memory tests", () => {
       await loadAndWaitUntilPlayable(
         player,
         videoElement,
-        MEMORY_VOD_SCENARIO,
+        getVodScenarioUrl(MEMORY_VOD_SCENARIO),
         () => lastPlayerError,
       );
       await player.resume();
@@ -315,7 +301,6 @@ describe("Memory tests", () => {
 
       for (let iterationIdx = 0; iterationIdx < maxIterations; iterationIdx++) {
         player.seek(0);
-
         const idx = iterationIdx % variantList.length;
         const variantId = variantList[idx].id;
         player.lockVariant(variantId);
@@ -335,10 +320,7 @@ describe("Memory tests", () => {
 
   it(
     "should not have a sensible memory leak after playing a live content for 5 minutes",
-    {
-      timeout: 22.5 * 60 * 1000,
-      retry: 2,
-    },
+    { timeout: 22.5 * 60 * 1000, retry: 2 },
     async function () {
       await assertMemoryApisAvailable(workerHandle.telemetry);
       await startLivePackager();
@@ -370,39 +352,13 @@ describe("Memory tests", () => {
 async function loadAndWaitUntilPlayable(
   player,
   videoElement,
-  scenarioOrUrl,
+  url,
   lastPlayerErrorRef,
 ) {
-  const url = scenarioOrUrl.includes("://")
-    ? scenarioOrUrl
-    : getVodScenarioUrl(scenarioOrUrl);
   player.load(url);
   await waitForLoadedState(player, videoElement, lastPlayerErrorRef);
 }
 
-/**
- * Display memory usage information in stdout and check that the difference
- * between the new usage and the initial one is below the given thresholds.
- * @param {Object} param0
- * @param {number} param0.maxTotalMemoryUsage
- * @param {number} param0.maxWasmMemoryUsage
- * @param {{
- *   totalMemoryBytes: number;
- *   pageUserAgentSpecificBytes: number | null;
- *   pageJsHeapUsedBytes: number | null;
- *   workerWasmMemoryBytes: number | null;
- *   breakdownEntryCount: number | null;
- *   measurementSource: "user-agent-specific" | "performance-memory";
- * }} param0.initialMemory
- * @param {{
- *   totalMemoryBytes: number;
- *   pageUserAgentSpecificBytes: number | null;
- *   pageJsHeapUsedBytes: number | null;
- *   workerWasmMemoryBytes: number | null;
- *   breakdownEntryCount: number | null;
- *   measurementSource: "user-agent-specific" | "performance-memory";
- * }} param0.newMemory
- */
 function displayResultAndCheckLimit({
   maxTotalMemoryUsage,
   maxWasmMemoryUsage,
@@ -417,10 +373,8 @@ function displayResultAndCheckLimit({
       ? null
       : newMemory.workerWasmMemoryBytes - initialMemory.workerWasmMemoryBytes;
 
-  // eslint-disable-next-line no-console
   console.log(`
       ===========================================================
-      | Measurement source      | ${newMemory.measurementSource}
       | Current total memory (B)  | ${newMemory.totalMemoryBytes}
       | Initial total memory (B)  | ${initialMemory.totalMemoryBytes}
       | Total difference (B)      | ${totalDifference}
@@ -492,4 +446,21 @@ function waitForVariant(player, variantId) {
     player.addEventListener("variantUpdate", reCheck);
     player.addEventListener("playerStateChange", reCheck);
   });
+}
+
+async function waitForPlaybackProgress(
+  videoElement,
+  minimumSeconds,
+  timeoutMs,
+) {
+  const startTime = performance.now();
+  while (performance.now() - startTime < timeoutMs) {
+    if (videoElement.currentTime >= minimumSeconds) {
+      return;
+    }
+    await sleep(250);
+  }
+  throw new Error(
+    `Timed out waiting for playback progress: currentTime=${videoElement.currentTime}`,
+  );
 }

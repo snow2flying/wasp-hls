@@ -9,8 +9,8 @@ export async function assertMemoryApisAvailable(workerTelemetry) {
     throw new Error("Required GC API not available for memory tests.");
   }
   if (
-    typeof window.performance?.measureUserAgentSpecificMemory !== "function" &&
-    window.performance?.memory == null
+    !window.crossOriginIsolated ||
+    typeof window.performance?.measureUserAgentSpecificMemory !== "function"
   ) {
     throw new Error("Required browser memory measurement API not available.");
   }
@@ -46,7 +46,6 @@ export async function takeMemoryMeasurement(workerTelemetry) {
  * @property {number|null} pageJsHeapUsedBytes
  * @property {number|null} workerWasmMemoryBytes
  * @property {number|null} breakdownEntryCount
- * @property {"user-agent-specific"|"performance-memory"} measurementSource
  */
 
 /**
@@ -54,7 +53,6 @@ export async function takeMemoryMeasurement(workerTelemetry) {
  *   bytes: number;
  *   usedJSHeapSize?: number | null;
  *   breakdown?: Array<unknown>;
- *   source: "user-agent-specific" | "performance-memory";
  * }} pageMemory
  * @param {{
  *   jsHeapUsedBytes?: number | null;
@@ -64,11 +62,8 @@ export async function takeMemoryMeasurement(workerTelemetry) {
  * @returns {MemoryMeasurement}
  */
 function formatMeasurement(pageMemory, workerSnapshot) {
-  const pageUserAgentSpecificBytes =
-    pageMemory.source === "user-agent-specific" ? pageMemory.bytes : null;
-  const pageJsHeapUsedBytes =
-    pageMemory.usedJSHeapSize ??
-    (pageMemory.source === "performance-memory" ? pageMemory.bytes : null);
+  const pageUserAgentSpecificBytes = pageMemory.bytes;
+  const pageJsHeapUsedBytes = pageMemory.usedJSHeapSize ?? null;
   const workerUserAgentSpecificBytes =
     workerSnapshot.userAgentSpecificBytes ?? null;
   const workerJsHeapUsedBytes = workerSnapshot.jsHeapUsedBytes ?? null;
@@ -79,10 +74,7 @@ function formatMeasurement(pageMemory, workerSnapshot) {
   const workerTrackedBytes =
     workerUserAgentSpecificBytes ??
     (workerJsHeapUsedBytes ?? 0) + (workerWasmMemoryBytes ?? 0);
-  const totalMemoryBytes =
-    pageMemory.source === "user-agent-specific"
-      ? pageMemory.bytes
-      : pageMemory.bytes + workerTrackedBytes;
+  const totalMemoryBytes = pageMemory.bytes + workerTrackedBytes;
 
   return {
     totalMemoryBytes,
@@ -90,33 +82,13 @@ function formatMeasurement(pageMemory, workerSnapshot) {
     pageJsHeapUsedBytes,
     workerWasmMemoryBytes,
     breakdownEntryCount,
-    measurementSource: pageMemory.source,
   };
 }
 
 async function getPageMemoryMeasurement() {
-  if (
-    typeof window.performance?.measureUserAgentSpecificMemory === "function"
-  ) {
-    try {
-      const measurement =
-        await window.performance.measureUserAgentSpecificMemory();
-      return {
-        bytes: measurement.bytes,
-        breakdown: measurement.breakdown,
-        source: "user-agent-specific",
-      };
-    } catch (_) {}
-  }
-
-  const perfMemory = window.performance?.memory;
-  if (perfMemory != null) {
-    return {
-      bytes: perfMemory.usedJSHeapSize,
-      usedJSHeapSize: perfMemory.usedJSHeapSize,
-      source: "performance-memory",
-    };
-  }
-
-  throw new Error("No usable browser memory measurement API available.");
+  const measurement = await window.performance.measureUserAgentSpecificMemory();
+  return {
+    bytes: measurement.bytes,
+    breakdown: measurement.breakdown,
+  };
 }
