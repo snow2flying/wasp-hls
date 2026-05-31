@@ -86,7 +86,7 @@ async function waitForPackagerStop() {
 }
 
 async function waitForStableLiveOutput(playlistUrl) {
-  for (let attempt = 0; attempt < 6; attempt++) {
+  for (let attempt = 0; attempt < 20; attempt++) {
     const master = await fetchText(playlistUrl);
     if (!master.ok) {
       await sleep(1000);
