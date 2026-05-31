@@ -443,8 +443,8 @@ jobs:
           ffmpeg -version
           gpac -h
 
-      - name: Build artifacts for memory tests
-        run: npm run build
+      - name: Build release artifacts for memory tests
+        run: npm run build -- --release
 
       - name: Run memory tests
         run: npm test -- memory --browser ${{ matrix.browser }}
