@@ -83,8 +83,8 @@ describe("Worker request injection - retries", function () {
           playerConfig: {
             multiVariantPlaylistMaxRetry: 3,
             multiVariantPlaylistRequestTimeout: 50,
-            multiVariantPlaylistBackoffBase: 250,
-            multiVariantPlaylistBackoffMax: 600,
+            multiVariantPlaylistBackoffBase: 500,
+            multiVariantPlaylistBackoffMax: 1200,
           },
           fetchRules: [
             createTopLevelFetchRule([
@@ -95,7 +95,7 @@ describe("Worker request injection - retries", function () {
             ]),
           ],
           ruleId: "master-playlist",
-          expectedNominalDelaysMs: [250, 500, 600],
+          expectedNominalDelaysMs: [500, 1000, 1200],
         });
       },
     );
@@ -118,10 +118,10 @@ describe("Worker request injection - retries", function () {
           configUpdate: {
             mediaPlaylistMaxRetry: 3,
             mediaPlaylistRequestTimeout: 50,
-            mediaPlaylistBackoffBase: 250,
-            mediaPlaylistBackoffMax: 600,
+            mediaPlaylistBackoffBase: 500,
+            mediaPlaylistBackoffMax: 1200,
           },
-          expectedNominalDelaysMs: [250, 500, 600],
+          expectedNominalDelaysMs: [500, 1000, 1200],
         });
       },
     );
@@ -144,10 +144,10 @@ describe("Worker request injection - retries", function () {
           configUpdate: {
             segmentMaxRetry: 3,
             segmentRequestTimeout: 50,
-            segmentBackoffBase: 250,
-            segmentBackoffMax: 600,
+            segmentBackoffBase: 500,
+            segmentBackoffMax: 1200,
           },
-          expectedNominalDelaysMs: [250, 500, 600],
+          expectedNominalDelaysMs: [500, 1000, 1200],
         });
       },
     );

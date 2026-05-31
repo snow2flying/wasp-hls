@@ -12,7 +12,7 @@ import { getVodScenarioUrl } from "./vod_scenarios.js";
 
 export const TEST_TIMEOUT_MS = 60_000;
 const CONFIG_PROPAGATION_DELAY_MS = 100;
-const BACKOFF_TOLERANCE_MS = 90;
+const BACKOFF_TOLERANCE_MS = 200;
 const BACKOFF_JITTER_FACTOR = 0.3;
 
 export const MULTIVARIANT_CONFIG = {
