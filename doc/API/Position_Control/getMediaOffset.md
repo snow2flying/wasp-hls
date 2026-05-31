@@ -16,11 +16,9 @@ If no content is currently loaded, `getMediaOffset` will return `undefined`.
 ## Playlist time and media time
 
 What I call the "playlist time" here is the time extrapolated from the
-MediaPlaylist (for example for a live content, it might be the unix
-timestamp corresponding to the time at which the corresponding media was
-broadcasted), which might be different from the "media time" actually associated
-to the HTML media element (such as the `currentTime` attribute from an
-`HTMLMediaElement`).
+MediaPlaylist, which might be different from the "media time" actually
+associated to the HTML media element (such as the `currentTime` attribute from
+an `HTMLMediaElement`).
 
 In the `WaspHlsPlayer`, we always rely on the playlist time to facilitate usage
 of the API.
