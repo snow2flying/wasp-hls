@@ -46,12 +46,14 @@ import EmbeddedWorker from "../../build/embedded/worker.js";
  * @param {{
  *   fetchRules?: Array<TestWorkerFetchRule>;
  *   collectTelemetry?: boolean;
+ *   storeTelemetryHistory?: boolean;
  * }} [options]
  * @returns {TestWorkerHandle}
  */
 export function createTestWorker({
   fetchRules = [],
   collectTelemetry = true,
+  storeTelemetryHistory = true,
 } = {}) {
   const telemetryChannelName = collectTelemetry
     ? `wasp-hls-test-worker-${Math.random().toString(36).slice(2)}`
@@ -69,7 +71,9 @@ export function createTestWorker({
   const telemetry =
     telemetryChannelName === null
       ? null
-      : createTelemetryCollector(telemetryChannelName);
+      : createTelemetryCollector(telemetryChannelName, {
+          storeHistory: storeTelemetryHistory,
+        });
   return {
     url,
     telemetry,
@@ -82,9 +86,10 @@ export function createTestWorker({
 
 /**
  * @param {string} channelName
+ * @param {{ storeHistory?: boolean }} [options]
  * @returns {WorkerTelemetryCollector}
  */
-function createTelemetryCollector(channelName) {
+function createTelemetryCollector(channelName, { storeHistory = true } = {}) {
   const channel = new BroadcastChannel(channelName);
   /** @type {Array<unknown>} */
   const events = [];
@@ -92,7 +97,9 @@ function createTelemetryCollector(channelName) {
   const listeners = new Set();
   let requestId = 0;
   channel.onmessage = (evt) => {
-    events.push(evt.data);
+    if (storeHistory) {
+      events.push(evt.data);
+    }
     for (const listener of listeners) {
       listener(evt.data);
     }

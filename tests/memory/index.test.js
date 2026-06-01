@@ -38,6 +38,10 @@ const INSTANCE_PLATEAU_CONFIG = {
   maxCheckpointTotalMemoryUsage: 12e6,
   maxCheckpointWasmMemoryUsage: 9e6,
 };
+const MEMORY_TELEMETRY_OPTIONS = {
+  collectTelemetry: true,
+  storeTelemetryHistory: false,
+};
 
 describe("Memory tests", () => {
   let player = /** @type {WaspHlsPlayer} */ (null);
@@ -57,7 +61,7 @@ describe("Memory tests", () => {
 
   beforeEach(async () => {
     lastPlayerError = null;
-    workerHandle = createTestWorker({ collectTelemetry: true });
+    workerHandle = createTestWorker(MEMORY_TELEMETRY_OPTIONS);
     player = new WaspHlsPlayer(videoElement, {});
     await player.initialize({
       workerUrl: workerHandle.url,
@@ -177,7 +181,7 @@ describe("Memory tests", () => {
 
       for (let i = 0; i < 500; i++) {
         const iterationWorkerHandle = createTestWorker({
-          collectTelemetry: true,
+          ...MEMORY_TELEMETRY_OPTIONS,
         });
         const iterationPlayer = new WaspHlsPlayer(videoElement, {});
         iterationPlayer.addEventListener("error", (error) => {
@@ -198,7 +202,7 @@ describe("Memory tests", () => {
       }
 
       await sleep(MEASUREMENT_SETTLE_MS);
-      workerHandle = createTestWorker({ collectTelemetry: true });
+      workerHandle = createTestWorker(MEMORY_TELEMETRY_OPTIONS);
       player = new WaspHlsPlayer(videoElement, {});
       await player.initialize({
         workerUrl: workerHandle.url,
@@ -229,7 +233,7 @@ describe("Memory tests", () => {
         initialMemory,
         ...INSTANCE_PLATEAU_CONFIG,
         measure: async () => {
-          workerHandle = createTestWorker({ collectTelemetry: true });
+          workerHandle = createTestWorker(MEMORY_TELEMETRY_OPTIONS);
           player = new WaspHlsPlayer(videoElement, {});
           await player.initialize({
             workerUrl: workerHandle.url,
@@ -246,7 +250,7 @@ describe("Memory tests", () => {
         },
         iterate: async () => {
           const iterationWorkerHandle = createTestWorker({
-            collectTelemetry: true,
+            ...MEMORY_TELEMETRY_OPTIONS,
           });
           const iterationPlayer = new WaspHlsPlayer(videoElement, {});
           iterationPlayer.addEventListener("error", (error) => {
@@ -267,7 +271,7 @@ describe("Memory tests", () => {
         },
       });
 
-      workerHandle = createTestWorker({ collectTelemetry: true });
+      workerHandle = createTestWorker(MEMORY_TELEMETRY_OPTIONS);
       player = new WaspHlsPlayer(videoElement, {});
       await player.initialize({
         workerUrl: workerHandle.url,
