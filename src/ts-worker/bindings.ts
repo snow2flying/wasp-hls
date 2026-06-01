@@ -730,25 +730,21 @@ export function removeMediaSource(): RemoveMediaSourceResult {
       };
       for (let i = sourceBuffers.length - 1; i >= 0; i--) {
         const sourceBuffer = sourceBuffers[i];
-
-        // TODO what if not? Is the current code useful at all?
-        if (!sourceBuffer.updating) {
-          try {
-            if (readyState === "open") {
-              sourceBuffer.abort();
-            }
-            mediaSource.removeSourceBuffer(sourceBuffer);
-          } catch (e) {
-            const msg = formatErrMessage(
-              e,
-              "Unknown error while removing SourceBuffer",
-            );
-            logger.error("Could not remove SourceBuffer: " + msg);
-            return RemoveMediaSourceResult.error(
-              RemoveMediaSourceErrorCode.UnknownError,
-              msg,
-            );
+        try {
+          if (readyState === "open") {
+            sourceBuffer.abort();
           }
+          mediaSource.removeSourceBuffer(sourceBuffer);
+        } catch (e) {
+          const msg = formatErrMessage(
+            e,
+            "Unknown error while removing SourceBuffer",
+          );
+          logger.error("Could not remove SourceBuffer: " + msg);
+          return RemoveMediaSourceResult.error(
+            RemoveMediaSourceErrorCode.UnknownError,
+            msg,
+          );
         }
       }
     }

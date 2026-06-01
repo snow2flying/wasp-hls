@@ -213,14 +213,14 @@ export default class QueuedSourceBuffer {
       }
     }
 
-    // try {
-    //   this._sourceBuffer.abort();
-    // } catch (e) {
-    //   logger.warn(
-    //     `QSB: Failed to abort a SourceBuffer:`,
-    //     e instanceof Error ? e : "Unknown error"
-    //   );
-    // }
+    try {
+      this._sourceBuffer.abort();
+    } catch (e) {
+      logger.debug(
+        "QSB: Failed to abort a SourceBuffer during disposal",
+        e instanceof Error ? e : null,
+      );
+    }
   }
 
   /**

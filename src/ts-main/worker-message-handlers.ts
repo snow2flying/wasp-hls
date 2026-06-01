@@ -1145,22 +1145,17 @@ function bindMediaSource(
     URL.revokeObjectURL(objectURL);
 
     if (mediaSource.readyState !== "closed") {
-      // TODO should probably wait until updates finish and whatnot
       const { readyState, sourceBuffers } = mediaSource;
       for (let i = sourceBuffers.length - 1; i >= 0; i--) {
         const sourceBuffer = sourceBuffers[i];
-
-        // TODO what if not? Is the current code useful at all?
-        if (!sourceBuffer.updating) {
-          try {
-            if (readyState === "open") {
-              sourceBuffer.abort();
-            }
-            mediaSource.removeSourceBuffer(sourceBuffer);
-          } catch (e) {
-            const error = e instanceof Error ? e : "Unknown Error";
-            logger.warn("Could not remove SourceBuffer", error);
+        try {
+          if (readyState === "open") {
+            sourceBuffer.abort();
           }
+          mediaSource.removeSourceBuffer(sourceBuffer);
+        } catch (e) {
+          const error = e instanceof Error ? e : "Unknown Error";
+          logger.warn("Could not remove SourceBuffer", error);
         }
       }
     }
